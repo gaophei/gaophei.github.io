@@ -1,11 +1,11 @@
-* [linux](?id=linux)
+* [linux](centos/centos6升级openssh.md)
 
-* [数据库](?id=数据库)
+* [数据库](db/mysql8安装.md)
 
-* [Rancher](?id=rancher)
+* [Rancher](rancher/安装前预检查.md)
 
 * [K8S](?id=k8s)
 
-* [Docker](?id=docker)
+* [Docker](docker/docker安装.md)
 
   
