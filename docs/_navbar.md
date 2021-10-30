@@ -1,4 +1,4 @@
-* [linux](centos/centos6升级openssh.md)
+* [linux](centos/centos7基本操作.md)
 
 * [数据库](db/mysql8安装.md)
 
