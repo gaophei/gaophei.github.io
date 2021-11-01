@@ -1,6 +1,6 @@
 su - oracle
 
-###登录
+###as sysdba
 
 ```bash
 sqlplus / as sysdba
