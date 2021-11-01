@@ -1,10 +1,16 @@
 su - oracle
 
+###登录
+
+```bash
 sqlplus / as sysdba
+```
 
+###查看PDBs
+
+```oracle
 show pdbs;
-
-
+```
 
 ##创建PDB
 
@@ -15,8 +21,6 @@ alter pluggable database urpdb open;
 
 alter session set container=urpdb;
 ```
-
-
 
 ##创建tablespace
 
@@ -32,8 +36,6 @@ alter tablespace urpdb add datafile '+DATA' size 1G autoextend on next 1G maxsiz
 alter tablespace urpdb add datafile '+DATA' size 1G autoextend on next 1G maxsize 31G;
 ```
 
-
-
 ##创建用户
 
 ```oracle
@@ -43,10 +45,6 @@ grant dba to urpuser;
 
 grant select any table to urpuser;
 ```
-
-
-
-
 
 ##创建service
 
@@ -58,15 +56,67 @@ srvctl start service -d xydb -s s_urpdb
 lsnrctl status 
 ```
 
-
-
-
-
 ##连接方式
 
 ```oracle
 sqlplus urpuser/L333xnneJJ6EYn@10.8.14.15:1521/s_urpdb
 ```
+
+##rman备份
+
+- crontab -l
+
+```bash
+30 0 * * * /home/oracle/rmanbak/rmanbak.sh
+```
+
+
+
+- rmanbak.sh
+
+```bash
+#!/bin/bash
+
+time=$(date +"%Y%m%d")
+rman_dir=/home/oracle/rmanbak
+
+if [ -f $HOME/.bash_profile ]; then
+    . $HOME/.bash_profile
+elif [ -f $HOME/.profile ]; then
+        . $HOME/.profile
+fi
+
+echo `date` > $rman_dir/rmanrun.log
+  
+rman target / log=$rman_dir/rmanfullbak_$time.log append <<EOF
+run{
+   CONFIGURE CONTROLFILE AUTOBACKUP ON;
+   CONFIGURE BACKUP OPTIMIZATION ON;
+   allocate channel c1 type disk;
+   allocate channel c2 type disk;
+   allocate channel c3 type disk;
+   allocate channel c4 type disk;
+   alter system archive log current;
+   backup as compressed backupset database plus archivelog delete all input; 
+   alter system archive log current;
+   backup archivelog all;
+   crosscheck backup;
+   delete noprompt obsolete;
+   delete noprompt expired backup;
+   release channel c1;
+   release channel c2;
+   release channel c3;
+   release channel c4;
+}
+exit;
+EOF
+ >> $rman_dir/rmanrun.log
+#delete 7days before log 
+find $rman_dir -name 'rmanfullbak_*.log' -mtime +7 -exec rm {} \;
+echo `date ` >> $rman_dir/rmanrun.log
+```
+
+
 
 
 

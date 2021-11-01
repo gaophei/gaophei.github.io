@@ -1,4 +1,4 @@
-#  技术探讨 #
+#  技术探讨 
 ##  Linux 
 
    ### Centos7
@@ -36,11 +36,11 @@
   [安装前预检查](rancher/安装前预检查.md)
 
   [centos7优化](rancher/centos7优化.md)
-  
+
   [4层代理配Ingress全局默认证书](rancher/4layer-ingress.md)
-  
+
   [rancher/system/ingress-nginx配置](rancher/ingress-nginx.md)
-  
+
 
 
 
