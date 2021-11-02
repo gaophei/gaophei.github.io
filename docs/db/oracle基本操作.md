@@ -26,6 +26,16 @@ archive log list;
 show parameter recovery
 ```
 
+###删除归档
+
+```oracle
+rman target /
+delete noprompt archivelog all;
+
+###删除三天前归档
+delete noprompt archivelog until time 'sysdate-3';
+```
+
 
 
 <br>
@@ -100,4 +110,33 @@ alter procedure REPAIR_DORM_DATA compile;
 <br>
 
 ##imp/exp
+
+
+
+</br>
+
+###process耗尽
+
+```bash
+###linux 查看
+ps -x|grep LOCAL=NO|grep –v |wc –l
+```
+
+```oracle
+###sqlplus 查看
+select * from v$resource_limit where resource_name in ('processes','sessinos');
+select username,count(username) from v$session where username is not null group by username;
+
+###将异常用户锁定
+alter user user1 account lock; 
+```
+
+```bash
+###快速关闭连接
+ps -ef|grep LOCAL=NO|grep -v grep|cut –c 9-15|xargs kill -9 
+```
+
+###
+
+
 

@@ -15,7 +15,7 @@ show pdbs;
 ##创建PDB
 
 ```oracle
-create pluggable database urpdb admin user urpdb identified by J38xmmAqbc12ed roles=(dba);
+create pluggable database urpdb admin user urpdb identified by J3jj33xl4c12ed roles=(dba);
 
 alter pluggable database urpdb open;
 
@@ -61,6 +61,10 @@ lsnrctl status
 ```oracle
 sqlplus urpuser/L333xnneJJ6EYn@10.8.14.15:1521/s_urpdb
 ```
+
+
+
+</br>
 
 ##rman备份
 
@@ -117,6 +121,78 @@ echo `date ` >> $rman_dir/rmanrun.log
 ```
 
 
+
+</br>
+
+###其他操作
+
+- 修改用户密码
+
+```oracle
+alter user urpuser identified by Newpassword account unlock;
+```
+
+- 删除用户
+
+```oracle
+drop user urpuser cascade;
+```
+
+- 用户赋权和回收权限
+
+```oracle
+grant select any table to urpuser;
+revoke select any table from urpuser;
+
+grant dba to urpuser;
+revoke dba from urpuser;
+
+grant connection,resource to urpuser;
+revoke  connection,resource from urpuser;
+```
+
+- 数据泵
+
+```oracle
+##创建directory
+create directory expdir as '/home/oracle';
+grant read,write on directory expdir to public;
+
+##expdp
+expdp urpuser/L333xnneJJ6EYn@10.8.14.11:1521/s_urpdb schemas=urpuser directory=expdir dumpfile=urpuser_20211101.dmp logfile=urpuser_20211101.log cluster=n
+
+##impdp
+impdp urpuser/L333xnneJJ6EYn@10.8.14.11:1521/s_urpdb schemas=urpuser directory=expdir dumpfile=urpuser_20211101.dmp logfile=urpuser_20211101.log cluster=n
+
+##impdp--remap
+impdp  urpuser/L333xnneJJ6EYn@10.8.14.11:1521/s_urpdb directory=expdir dumpfile=GXYS_ORACLE11201_20200921.DMP   remap_schema=gxys:urpuser remap_tablespace=ykspace:urpuser  logfile=urpuser1101.log cluster=n
+```
+
+
+
+</br>
+
+###集群操作
+
+- 查看集群状态
+
+```bash
+su - root
+
+/u01/app/19.0.0/grid/bin/crsctl status resource -t
+```
+
+- 重启集群
+
+```
+su - root
+export ORACLE_SID=+ASM1
+export ORACLE_HOME=/u01/app/19.0.0/grid
+
+/u01/app/19.0.0/grid/bin/crsctl stop crs
+#/u01/app/19.0.0/grid/bin/crsctl stop cluster -all
+/u01/app/19.0.0/grid/bin/crsctl start crs
+```
 
 
 

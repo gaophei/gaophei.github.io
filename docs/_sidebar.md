@@ -15,7 +15,7 @@
   ### oracle
   [oracle基本操作](db/oracle基本操作.md)
 
-  [oracle12c基本操作](db/oracle12c基本操作.md)
+  [oracle19cRAC基本操作](db/oracle19cRAC基本操作.md)
 
   ### mysql
 
