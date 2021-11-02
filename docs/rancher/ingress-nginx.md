@@ -41,4 +41,4 @@ disable-access-log: true
 enable-brotli: true
 ```
 
-参考文档：[NGINX Ingress Controller - ConfigMap](
+参考文档：[NGINX Ingress Controller - ConfigMap](https://kubernetes.github.io/ingress-nginx/user-guide/nginx-configuration/configmap/)
