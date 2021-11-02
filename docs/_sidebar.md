@@ -13,9 +13,9 @@
 
 ## 数据库 
   ### oracle
-  [oracle基本操作](db/oracle基本操作.md)
+  [oracle常用操作](db/oracle常用操作.md)
 
-  [oracle19cRAC基本操作](db/oracle19cRAC基本操作.md)
+  [oracle19cRAC常用操作](db/oracle19cRAC常用操作.md)
 
   ### mysql
 
