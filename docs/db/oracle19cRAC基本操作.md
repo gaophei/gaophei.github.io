@@ -1,3 +1,5 @@
+** 生产环境注意操作安全！！！**
+
 su - oracle
 
 ###as sysdba
@@ -151,6 +153,13 @@ grant connection,resource to urpuser;
 revoke  connection,resource from urpuser;
 ```
 
+- 删除pdb
+
+```oracle
+alter pluggable database urpdb close instances=all;
+drop pluggable database urpdb including datafiles;
+```
+
 - 数据泵
 
 ```oracle
@@ -177,17 +186,15 @@ impdp  urpuser/L333xnneJJ6EYn@10.8.14.11:1521/s_urpdb directory=expdir dumpfile=
 - 查看集群状态
 
 ```bash
-su - root
+su - grid
 
-/u01/app/19.0.0/grid/bin/crsctl status resource -t
+crsctl status resource -t
 ```
 
 - 重启集群
 
 ```
 su - root
-export ORACLE_SID=+ASM1
-export ORACLE_HOME=/u01/app/19.0.0/grid
 
 /u01/app/19.0.0/grid/bin/crsctl stop crs
 #/u01/app/19.0.0/grid/bin/crsctl stop cluster -all
