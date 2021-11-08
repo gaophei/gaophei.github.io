@@ -1,122 +1,45 @@
-##POA升级，一般安装应用商店最新稳定版
-
-###假设前期为yaml文件部署，版本较旧为0.1.0-SNAPSHOT
+**注意：本文指南讲的是非商店部署 迁移到 商店部署的方案**
 
 ****
 
-**升级步骤如下：**
+## 升级步骤
 
-1、首先做好以下备份：
+第一步：导出旧POA的Client信息
 
-   (1)rancher方面：
+以域名为例：https://poa-sa.xxx.edu.cn/
 
-- 工作负载
+网页打开`https://poa-sa.xxx.edun.cn/v1/clients/dump`，并保存内容
 
-- 负载均衡
+第二步：删除旧POA的Ingress
 
-- 服务发现
+先最好备份，然后记住旧POA的域名。
 
-- pvc
+第三步：商店安装
 
-- 密文
+商店安装最新稳定版POA（版本号里不带alpha的都是稳定版）
 
-- 配置映射
+注意：
 
-   (2)保存poa-sa的clients/secrets，以域名为例：https://poa-sa.xxx.edu.cn/
+* 新的POA的Ingress的域名设置为第二步中提到的域名
+* 新的POA和旧的POA不在同一个Namespace
+* 安装完新POA之后，所有指向旧POA K8S集群内部地址的服务，都要修改
+* 新POA依然使用旧POA的MySQL数据库
 
-   网页打开`https://poa-sa.xxx.edun.cn/v1/clients/dump`，并保存内容
+第四步：导入旧POA的Client信息
 
-```yaml
-{
-  "items": [
-    {
-      "clientId": "0jIAbV3KSfliKlGjTzM36K9F2fs=",
-      "clientName": "消息服务",
-      "scopes": [
-        "authz:v1:readRole",
-        "messagecenter:v1:readMessage",
-        "messagecenter:v1:sendMessage",
-        "messagecenter:v1:writeMessage",
-        "user:v1:readGroup",
-        "user:v1:readLabel",
-        "user:v1:readOrganization",
-        "user:v1:readPost",
-        "user:v1:readUser",
-        "user:v1:readUserSecret"
-      ],
-      "clientSecretHash": "SRF-eEYflkxGG4-veutLxB9WgLtJDpQt8TYUkVb-aDY="
-    },
-    {
-      "clientId": "UJrCCoYjssBnGvWKI46lzAVOqQM=",
-      "clientName": "formflow",
-      "scopes": [
-        "authz:v1:readRole",
-        "messagecenter:v1:sendMessage",
-        "user:v1:readGroup",
-        "user:v1:readLabel",
-        "user:v1:readOrganization",
-        "user:v1:readUser"
-      ],
-      "clientSecretHash": "hKza6ULjkT2S-8GvjGGtHyZqvcQP4AhTtAhwTnRoclI="
-    },
-    {
-      "clientId": "17xlMHqHJPQoXwDVhh8PYttKoBM=",
-      "clientName": "ttc",
-      "scopes": [
-        "authz:v1:readRole",
-        "messagecenter:v1:sendMessage",
-        "user:v1:readGroup",
-        "user:v1:readLabel",
-        "user:v1:readOrganization",
-        "user:v1:readUser"
-      ],
-      "clientSecretHash": "g87xM8hfk8PpN1TA3JpYyJK3iM6VJUxuOF6Ms5rusyA="
-    },
-    {
-      "clientId": "fXeA4BxB43k4xn1kjxSoBAaplZU=",
-      "clientName": "portal-service",
-      "scopes": [
-        "admincenter:v1:readMenu",
-        "authz:v1:readRole",
-        "communicate:v1:communicationCheck",
-        "communicate:v1:communicationSend",
-        "messagecenter:v1:readMessage",
-        "messagecenter:v1:sendMessage",
-        "messagecenter:v1:writeMessage",
-        "user:v1:readGroup",
-        "user:v1:readLabel",
-        "user:v1:readOrganization",
-        "user:v1:readPost",
-        "user:v1:readUser"
-      ],
-      "clientSecretHash": "QkPt73w_jq9t3CdZlgV_2Xn5m5J6rEhUHB87eNSLrNU="
-    },
-    {
-      "clientId": "fe9LXzGkgfzX8RUzxrXHrgoS6gQ=",
-      "clientName": "数据资产",
-      "scopes": [
-        "admincenter:v1:readMenu",
-        "authz:v1:readRole",
-        "user:v1:readGroup",
-        "user:v1:readLabel",
-        "user:v1:readOrganization",
-        "user:v1:readUser",
-        "user:v1:readUserSecret"
-      ],
-      "clientSecretHash": "Dsc1Qbdub23R3yYq_RSG_1NRGujtK8vdIasfMYfZrV4="
-    }
-  ]
-}
+将第一步得到的Client信息，导入到新POA中
+
+```bash
+curl -i -s -X POST -H 'Content-Type: application/json' -d '<CLIENT信息JSON>' 'https://poa-sa.xxx.edu.cn/v1/clients/import'
 ```
-2、将第一步中rancher方面的内容全部删除
 
-3、点击应用商店安装最新稳定版
+### 已知问题
 
-​       应用商店搜索platform-openapi，当前版本为1.4.1，填写相关内容，重新生成poa的相关内容，如果缺少poa-sa的ingress，需要自己手动加一下。
+如果MySQL版本过低，比如8.0.11，pod `db-initializer`会报错：
 
-​       注意：如果mysql版本为8.0.11，pod`db-initializer`可能会报错，需要：
+解决办法：
 
-​       (1)在数据库platform-openapi下单独执行以下sql：
+1）手动到POA数据库执行以下SQL：
 
 ```mysql
 CREATE TABLE API_FIELD_MOD_RULES
@@ -141,97 +64,20 @@ CREATE TABLE CLIENT_BACKUP
     
 ```
 
-​         (2)将platform-openapi库下的`schema_version`表中的最后一项内容seccess列改为`1`
+2）修改数据库`schema_version`表中的最后一行的`success`列改为`1`
 
- 4、将原poa-sa的clients/secrets导入，需在docker服务器上执行，将第一步中保存的内容放到`-d ''`中，比如：
+## 部署后检查
 
- ```yaml
- curl -i -s -X POST -H 'Content-Type: application/json' -d '{
-   "items": [
-     {
-       "clientId": "0jIAbV3KSfliKlGjTzM36K9F2fs=",
-       "clientName": "消息服务",
-       "scopes": [
-         "authz:v1:readRole",
-         "messagecenter:v1:readMessage",
-         "messagecenter:v1:sendMessage",
-         "messagecenter:v1:writeMessage",
-         "user:v1:readGroup",
-         "user:v1:readLabel",
-         "user:v1:readOrganization",
-         "user:v1:readPost",
-         "user:v1:readUser",
-         "user:v1:readUserSecret"
-       ],
-       "clientSecretHash": "SRF-eEYflkxGG4-veutLxB9WgLtJDpQt8TYUkVb-aDY="
-     },
-     {
-       "clientId": "UJrCCoYjssBnGvWKI46lzAVOqQM=",
-       "clientName": "formflow",
-       "scopes": [
-         "authz:v1:readRole",
-         "messagecenter:v1:sendMessage",
-         "user:v1:readGroup",
-         "user:v1:readLabel",
-         "user:v1:readOrganization",
-         "user:v1:readUser"
-       ],
-       "clientSecretHash": "hKza6ULjkT2S-8GvjGGtHyZqvcQP4AhTtAhwTnRoclI="
-     },
-     {
-       "clientId": "17xlMHqHJPQoXwDVhh8PYttKoBM=",
-       "clientName": "ttc",
-       "scopes": [
-         "authz:v1:readRole",
-         "messagecenter:v1:sendMessage",
-         "user:v1:readGroup",
-         "user:v1:readLabel",
-         "user:v1:readOrganization",
-         "user:v1:readUser"
-       ],
-       "clientSecretHash": "g87xM8hfk8PpN1TA3JpYyJK3iM6VJUxuOF6Ms5rusyA="
-     },
-     {
-       "clientId": "fXeA4BxB43k4xn1kjxSoBAaplZU=",
-       "clientName": "portal-service",
-       "scopes": [
-         "admincenter:v1:readMenu",
-         "authz:v1:readRole",
-         "communicate:v1:communicationCheck",
-         "communicate:v1:communicationSend",
-         "messagecenter:v1:readMessage",
-         "messagecenter:v1:sendMessage",
-         "messagecenter:v1:writeMessage",
-         "user:v1:readGroup",
-         "user:v1:readLabel",
-         "user:v1:readOrganization",
-         "user:v1:readPost",
-         "user:v1:readUser"
-       ],
-       "clientSecretHash": "QkPt73w_jq9t3CdZlgV_2Xn5m5J6rEhUHB87eNSLrNU="
-     },
-     {
-       "clientId": "fe9LXzGkgfzX8RUzxrXHrgoS6gQ=",
-       "clientName": "数据资产",
-       "scopes": [
-         "admincenter:v1:readMenu",
-         "authz:v1:readRole",
-         "user:v1:readGroup",
-         "user:v1:readLabel",
-         "user:v1:readOrganization",
-         "user:v1:readUser",
-         "user:v1:readUserSecret"
-       ],
-       "clientSecretHash": "Dsc1Qbdub23R3yYq_RSG_1NRGujtK8vdIasfMYfZrV4="
-     }
-   ]
- }' 'https://poa-sa.xxx.edu.cn/v1/clients/import'
- ```
+部署完成后的检查：
 
-如果服务器返回`HTTP/1.1 200 OK`，则表示导入成功
+1. 打开`https://poa-sa.xxx.edu.cn/v1/clients`，查看是否与原内容相符；
+2. 把旧POA的Pod数量都改为0。
+3. 打开门户、流程等需要调用poa的应用，是否正常。
 
-5、部署完成后的检查：
+如果一切检查正常，建议保留一周，如果现场没有发生问题，再把旧POA完全删除。
 
-(1)打开`https://poa-sa.xxx.edu.cn/v1/clients`，查看是否与原内容相符；
+## 回退步骤
 
-(2)打开门户、流程等需要调用poa的应用，是否正常。
+1）在应用商店里把新POA删除。
+
+2）恢复旧POA的Ingress。
