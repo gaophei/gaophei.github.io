@@ -11,14 +11,18 @@
    (1)rancher方面：
 
 - 工作负载
+
 - 负载均衡
+
 - 服务发现
-- 服务发现
+
 - pvc
+
 - 密文
+
 - 配置映射
 
-   (2)poa-sa的clients/secrets，以域名为例：https://poa-sa.xxx.edu.cn/
+   (2)保存poa-sa的clients/secrets，以域名为例：https://poa-sa.xxx.edu.cn/
 
    网页打开`https://poa-sa.xxx.edun.cn/v1/clients/dump`，并保存内容
 
@@ -110,33 +114,34 @@
 
 ​       应用商店搜索platform-openapi，当前版本为1.4.1，填写相关内容，重新生成poa的相关内容，如果缺少poa-sa的ingress，需要自己手动加一下。
 
-​       注意：如果mysql版本为8.0.11，pod`db-initializer`可能会报错，需要
+​       注意：如果mysql版本为8.0.11，pod`db-initializer`可能会报错，需要：
 
 ​       (1)在数据库platform-openapi下单独执行以下sql：
 
-       ```mysql
-       CREATE TABLE API_FIELD_MOD_RULES
-       (
-           SERVICE_ID     VARCHAR(100) NOT NULL COMMENT '所属Service',
-           API_VERSION    VARCHAR(100) NOT NULL COMMENT '所属ApiVersion',
-           OPERATION_ID   VARCHAR(100) NOT NULL COMMENT 'OperationId',
-           JSONPATH_RULES LONGTEXT     NOT NULL  COMMENT '字段jsonpath->规则',
-       
-           CONSTRAINT API_FIELD_MOD_RULES$UK UNIQUE (SERVICE_ID, API_VERSION, OPERATION_ID)
-       )
-           COMMENT 'API响应字段值修改规则';
-       
-       CREATE TABLE CLIENT_BACKUP
-       (
-           TIMESTAMP CHAR(19) NOT NULL,
-           REMARK    TEXT,
-           DATA      MEDIUMTEXT,
-           CONSTRAINT PK PRIMARY KEY (TIMESTAMP)
-       )
-           COMMENT 'Client数据备份';
-       ```
+```mysql
+CREATE TABLE API_FIELD_MOD_RULES
+(
+    SERVICE_ID     VARCHAR(100) NOT NULL COMMENT '所属Service',
+    API_VERSION    VARCHAR(100) NOT NULL COMMENT '所属ApiVersion',
+    OPERATION_ID   VARCHAR(100) NOT NULL COMMENT 'OperationId',
+    JSONPATH_RULES LONGTEXT     NOT NULL  COMMENT '字段jsonpath->规则',
 
-​     (2)将platform-openapi库下的`schema_version`表中的最后一项内容seccess列改为`1`
+    CONSTRAINT API_FIELD_MOD_RULES$UK UNIQUE (SERVICE_ID, API_VERSION, OPERATION_ID)
+)
+    COMMENT 'API响应字段值修改规则';
+
+CREATE TABLE CLIENT_BACKUP
+(
+    TIMESTAMP CHAR(19) NOT NULL,
+    REMARK    TEXT,
+    DATA      MEDIUMTEXT,
+    CONSTRAINT PK PRIMARY KEY (TIMESTAMP)
+)
+    COMMENT 'Client数据备份';
+    
+```
+
+​         (2)将platform-openapi库下的`schema_version`表中的最后一项内容seccess列改为`1`
 
  4、将原poa-sa的clients/secrets导入，需在docker服务器上执行，将第一步中保存的内容放到`-d ''`中，比如：
 
