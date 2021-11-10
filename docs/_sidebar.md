@@ -11,6 +11,8 @@
 
    ###  RedHat
 
+  [RedHat基本操作](redhat/redhat-basic.md)
+
 ## 数据库 
   ### oracle
   [oracle常用操作](db/oracle常用操作.md)
@@ -26,7 +28,15 @@
   [mysql优化](db/mysql优化.md)
 
   ### mongo
+
+  [mongo安装](db/mongo安装.md)
+
+  [mongo基本操作](db/mongo基本操作.md)
+
   ### redis
+
+  [redis基本操作](db/redis基本操作.md)
+
   ### PG
   ### 其他
 
@@ -40,10 +50,6 @@
   [4层代理配Ingress全局默认证书](rancher/4layer-ingress.md)
 
   [rancher/system/ingress-nginx配置](rancher/ingress-nginx.md)
-
-
-
-
 
 - ### 2.6.x
 
@@ -78,7 +84,7 @@
 
  ### 基础镜像
 
-- ddd 
+ 
 
 ## 智慧校园平台 ## 
 
@@ -91,5 +97,3 @@
   [云平台部署](zhxy/云平台部署.md)
 
  [POA升级](zhxy/POA升级.md)
-
-# 人生感悟 #
