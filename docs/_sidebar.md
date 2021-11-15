@@ -7,7 +7,7 @@
    ### Centos6
   [Centos6基本操作](centos/centos6基本操作.md)
 
-  [Centos6升级openssh](centos/centos6升级openssh.md)
+[Centos6升级openssh](centos/centos6升级openssh.md)
 
    ###  RedHat
 
