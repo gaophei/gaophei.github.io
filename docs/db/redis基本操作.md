@@ -4,7 +4,7 @@
 redis-cli -a redis_password
 ```
 
-##查看内容
+##获取所有键
 
 ```redis
 keys *
