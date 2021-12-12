@@ -66,7 +66,8 @@
 
 ## K8s ## 
 - ### 安装部署
-  - [kubeadm安装单master节点集群](k8s/kubeadm部署k8s-单master节点.md)
+   [kubeadm安装单master节点集群](k8s/kubeadm部署k8s-单master节点.md)
+   
 - ### 基本操作
 - ### 疑难排查
 - ### yaml范例

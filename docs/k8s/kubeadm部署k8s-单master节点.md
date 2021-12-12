@@ -46,6 +46,20 @@ yum install -y ntpd
 systemctl start ntpd
 system enable ntpd
 
+vi /etc/ntp.conf
+#注释下面4行
+#server 0.centos.pool.ntp.org iburst
+#server 1.centos.pool.ntp.org iburst
+#server 2.centos.pool.ntp.org iburst
+#server 3.centos.pool.ntp.org iburst
+
+#替换成中国时间服务器
+#http://www.pool.ntp.org/zone/cn
+server 0.cn.pool.ntp.org
+server 1.cn.pool.ntp.org
+server 2.cn.pool.ntp.org
+server 3.cn.pool.ntp.org
+
 date -R
 ln -sf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime
 ```
