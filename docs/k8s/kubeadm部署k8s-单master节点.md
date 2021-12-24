@@ -42,7 +42,7 @@ yum install net-tools  vim git  wget netstat -y
 ```
 #### 4、开始时间同步及修改东8区
 ```bash
-yum install -y ntpd
+yum install -y ntp
 systemctl start ntpd
 system enable ntpd
 
