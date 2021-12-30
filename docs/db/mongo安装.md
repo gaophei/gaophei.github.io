@@ -102,6 +102,6 @@ db.createUser({user:"dataassets",pwd:"Xyz123",roles:["dbOwner"]});
 (5)访问方式
 
 ```bash
-mongo mongodb://dataassets:Xyz123@192.168.1.201:27017/dataassets
+mongo mongodb://dataassets:Xyz123@192.168.0.10:27017/dataassets
 ```
 

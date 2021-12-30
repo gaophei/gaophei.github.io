@@ -7,6 +7,9 @@ docker: 19.03.15
 
 ks8: 1.21.7
 
+master01: 192.168.1.225
+node01: 192.168.1.226
+
 ## 部署过程
 ### 一、系统优化
 #### 0、各个节点的mac地址和product_uuid不能相同
@@ -672,7 +675,7 @@ etcd-0               Healthy   {"health":"true"}
 ```
 #在/etc/docker/daemon.json中添加一项
 ```
-exec-opts": ["native.cgroupdriver=cgroupfs"]
+exec-opts": ["native.cgroupdriver=systemd"]
 ```
 #重启docker
 ```bash

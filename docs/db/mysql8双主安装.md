@@ -1,12 +1,14 @@
-****此文档提供安装mysql8(最新版8.0.2x)的单机版安装****
+****此文档提供安装mysql8(最新版8.0.2x)双主高可用模式的安装****
 
 ****
+
 #安装开始前，请注意OS系统的优化、服务器内存大小、磁盘分区大小，mysql安装到最大分区里
 #20211228补充OS优化部分，安装版本为8.0.27
 
 ## 服务器资源
 
 #建议
+
 ```
 vm: 16核/32G 
 
@@ -20,14 +22,25 @@ OS: centos7.9(3.10.0-1127)
 ### 一、系统优化
 
 #### 1、Hostname修改
-#hostname命名建议规范
+
+#hostname命名建议规范，以实际IP为准
+
 ```bash
-echo "192.168.1.225 mysql01" >> /etc/hosts
+cat >> /etc/hosts <<EOF
+192.168.1.225 mysql01
+192.168.1.226 mysql02
+EOF
+
+#mysql01
 hostnamectl set-hostname mysql01
+#mysql02
+hostnamectl set-hostname mysql02
 
 hostnamectl status
 ```
+
 #### 2、关闭防火墙和selinux
+
 ```bash
 systemctl stop firewalld
 systemctl disable firewalld
@@ -35,13 +48,17 @@ systemctl disable firewalld
 setenforce 0
 sudo sed -i 's/SELINUX=enforcing/SELINUX=disabled/g' /etc/selinux/config
 ```
+
 #### 3、修改centos源文件
+
 ```bash
 wget -O /etc/yum.repos.d/CentOS-Base.repo https://mirrors.aliyun.com/repo/Centos-7.repo
 
 yum clean all && yum makecache all
 ```
+
 #### 4、开始时间同步及修改东8区
+
 ```bash
 yum install -y ntp
 systemctl start ntpd
@@ -64,12 +81,17 @@ server 3.cn.pool.ntp.org
 date -R
 ln -sf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime
 ```
+
 #### 5、语言修改为utf8
+
 ```bash
 sudo echo 'LANG="en_US.UTF-8"' >> /etc/profile;source /etc/profile
 ```
+
 #### 6、内核模块调优
+
 ##### 1）内核模块
+
 ```bash
 echo "
 net.bridge.bridge-nf-call-ip6tables=1
@@ -146,7 +168,9 @@ kernel.sysrq=1
 
 sysctl -p
 ```
+
 ##### 2)open-files
+
 ```bash
 sudo sed -i 's/4096/90000/g' /etc/security/limits.d/20-nproc.conf
 
@@ -167,11 +191,14 @@ EOF
 ### 二、在线安装mysql
 
 #### 1、卸载mariadb
+
 ```bash
 rpm -qa |grep -i mariadb
 yum remove -y mariadb-libs.x86_64
 ```
+
 #### 2、安装mysql
+
 ```bash
 yum install -y wget net-tools
 
@@ -182,9 +209,11 @@ yum localinstall -y mysql80-community-release-el7-3.noarch.rpm
 yum search mysql-community-server
 yum install -y mysql-community-server
 ```
+
 #### 3、优化mysql
 
 ##### 1) /etc/my.cnf
+
 ```bash
 cp /etc/my.cnf /etc/my.cnf.bak
 
@@ -243,10 +272,13 @@ no-auto-rehash
 default-character-set=utf8mb4
 EOF
 ```
+
 ##### 2) mysqld.server
+
 ```bash
 sed -i 's/LimitNOFILE = 10000/LimitNOFILE = 65500/g' /usr/lib/systemd/system/mysqld.service
 ```
+
 #### 4、启动mysql
 
 ```bash
@@ -256,6 +288,7 @@ systemctl start mysqld
 systemctl status mysqld
 systemctl enable mysqld
 ```
+
 #### 5、修改密码
 
 ```bash
@@ -271,6 +304,7 @@ exit;
 mysql -u root -p
 ==>Abc123!@#
 ```
+
 #### 6、设置远程访问
 
 ```mysql
@@ -287,11 +321,15 @@ flush privileges;
 #仅与在线安装mysql中的安装部分不同，其他步骤相同
 
 #### 离线安装mysql
+
 #找台外网开通的服务器
+
 ```bash
 wget https://mirrors.aliyun.com/mysql/MySQL-8.0/mysql-8.0.27-1.el7.x86_64.rpm-bundle.tar
 ```
+
 #将mysql-8.0.27-1.el7.x86_64.rpm-bundle.tar拷贝至mysql服务器
+
 ```bash
 tar -xvf mysql-8.0.27-1.el7.x86_64.rpm-bundle.tar
 
@@ -308,7 +346,9 @@ rpm -ivh mysql-community-client-8.0.27-1.el7.x86_64.rpm
 rpm -ivh mysql-community-server-8.0.27-1.el7.x86_64.rpm
 
 ```
+
 #注意离线部署可能会缺少依赖包，比如perl，那么需要光盘制作个本地yum源进行安装
+
 ```bash
 yum install -y perl
 ```
