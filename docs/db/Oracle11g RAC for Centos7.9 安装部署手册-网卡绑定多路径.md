@@ -1,41 +1,62 @@
 **oracle011g RAC for Centos7.9 安装手册**
 
 ## 目录
-1 环境..............................................................................................................................................2
-1.1. 系统版本： ..............................................................................................................................2
-1.2. ASM 磁盘组规划 ....................................................................................................................2
-1.3. 主机网络规划..........................................................................................................................2
-1.4. 操作系统配置部分.................................................................................................................2
-2 准备工作（oracle01 与 oracle02 同时配置） ............................................................................................3
-2.1. 配置本地 yum 源： ................................................................................................................3
-2.2. 安装 rpm 依赖包 ....................................................................................................................4
-2.3. 创建用户...................................................................................................................................5
-2.4. 配置 host 表.............................................................................................................................6
-2.5. 禁用 NTP ..................................................................................................................................6
-2.6. 创建所需要目录 .....................................................................................................................6
-2.7. 其它配置： ..............................................................................................................................6
-2.8. 配置环境变量..........................................................................................................................8
-2.9. 配置共享磁盘权限.................................................................................................................9
-2.10. 配置互信........................................................................................................................... 11
-2.11. 在 grid 安装文件中安装 cvuqdisk.............................................................................. 12
-3 开始安装 grid ................................................................................................................................... 12
-3.1. 上传集群软件包 .................................................................................................................. 12
-3.2. 解压 grid 安装包.................................................................................................................. 12
-3.3. 进入 grid 集群软件目录执行安装................................................................................... 12
-3.4. GUI 安装步骤........................................................................................................................ 13
-3.5. 查看状态................................................................................................................................ 25
-4 以 Oracle 用户登录图形化界面................................................................................................... 26
-4.1. 执行安装................................................................................................................................ 27
-4.2. 执行 root 脚本...................................................................................................................... 32
-5 创建 ASM 数据磁盘........................................................................................................................ 32
-5.1. grid 账户登录图形化界面，执行 asmca....................................................................... 33
-6 建立数据库 ........................................................................................................................................ 35
-6.1. 执行建库 dbca ..................................................................................................................... 36
-6.2. 查看集群状态....................................................................................................................... 45
-6.3. 查看数据库版本 .................................................................................................................. 471 
+#内容目录
+```
+1.系统环境
+1.1. 系统版本
+1.2. ASM 磁盘组规划
+1.3. 主机网络规划
+1.3.1.IP规划
+1.3.2.网卡配置
+1.3.2.1.网卡eno1/eno2做网卡绑定(IP10.119.5.65)，连接存储
+1.3.2.2.网卡eno3走业务网
+1.3.2.3.网卡eno4两台服务器直连，做私有网络
+1.3.2.4.最后网络配置信息
+1.3.2.5.网卡绑定方法二
+1.3.2.6.华为存储光纤跳线直连配置
+1.4. 操作系统配置部分
+2.准备工作（oracle01 与 oracle02 同时配置）
+2.1. 配置本地 yum 源--可选
+2.2. 安装 rpm 依赖包
+2.3. 创建用户
+2.4. 配置 host 表
+2.5. 禁用 NTP
+2.6. 创建所需要目录
+2.7. 其它优化配置：
+2.8. 配置环境变量
+2.9. 配置共享磁盘权限
+2.9.1.无多路径模式
+2.9.2.多路径模式
+2.10. 配置互信
+2.11. 安装vnc
+2.11.1.安装图形化组件并重启
+2.11.2.安装vnc
+3 开始安装 GI
+3.1. 上传oracle rac软件安装包并解压缩
+3.2. 安装 cvuqdisk并做安装前检查
+3.3. 开始安装GI
+3.4.错误处理
+3.4.1.错误处理执行root.sh时报错缺少libcap.so.1
+3.4.2.执行root.sh报错ohasd failed to start
+3.4.3.asm及crsd报错CRS-4535: Cannot communicate with Cluster Ready Services
+3.4.4.添加listener
+3.5. 查看状态
+4 创建ASM磁盘组：DATA/FRA
+5 安装oracle软件
+6 建立数据库实例
+7 检查修改部分数据库配置参数
+7.1.密码过期时间
+7.2.归档、redo、undo、datafile等检查
+7.3.查看集群状态
+7.4.创建表空间、用户、表等测试
+8 备份
+8.1.rman备份
+8.2.expdp备份.
+```
 
 ## 1.系统环境
-### 1.1. 系统版本：
+### 1.1. 系统版本
 ```
 [root@oracle01 Packages]# cat /etc/redhat-release
 CentOS Linux release 7.9.2009 (Core)
@@ -268,7 +289,7 @@ sfdisk -s
 ```
 [root@oracle01 ~]# ip route list
 default via 10.119.5.254 dev eno3 
-10.119.5.0/24 dev bond0 proto kernel scope link src 10.119.5.65 
+#10.119.5.0/24 dev bond0 proto kernel scope link src 10.119.5.65 
 10.119.5.0/24 dev eno3 proto kernel scope link src 10.119.5.60 
 10.119.8.3 via 10.119.5.254 dev bond0 src 10.119.5.65 
 10.119.8.4 via 10.119.5.254 dev bond0 src 10.119.5.65 
@@ -645,6 +666,55 @@ yum install -y python-six
 yum install -y targetcli
 yum install -y smartmontools
 ```
+#检查是否安装全
+```bash
+rpm -qa|grep  binutils
+rpm -qa|grep  compat-libcap1
+rpm -qa|grep  compat-libstdc++-33
+rpm -qa|grep  gcc
+rpm -qa|grep  gcc-c++
+rpm -qa|grep  glibc
+rpm -qa|grep  glibc-devel
+rpm -qa|grep  ksh
+rpm -qa|grep  libgcc
+rpm -qa|grep  libstdc++
+rpm -qa|grep  libstdc++-devel
+rpm -qa|grep  libaio
+rpm -qa|grep  libaio-devel
+rpm -qa|grep  libXext
+rpm -qa|grep  libXtst
+rpm -qa|grep  libX11
+rpm -qa|grep  libXau
+rpm -qa|grep  libxcb
+rpm -qa|grep  libXi
+rpm -qa|grep  make
+rpm -qa|grep  sysstat
+rpm -qa|grep  unixODBC
+rpm -qa|grep  unixODBC-devel
+rpm -qa|grep  readline
+rpm -qa|grep  libtermcap-devel
+rpm -qa|grep  bc
+rpm -qa|grep  compat-libstdc++
+rpm -qa|grep  elfutils-libelf
+rpm -qa|grep  elfutils-libelf-devel
+rpm -qa|grep  fontconfig-devel
+rpm -qa|grep  libXi
+rpm -qa|grep  libXtst
+rpm -qa|grep  libXrender
+rpm -qa|grep  libXrender-devel
+rpm -qa|grep  libgcc
+rpm -qa|grep  librdmacm-devel
+rpm -qa|grep  libstdc++
+rpm -qa|grep  libstdc++-devel
+rpm -qa|grep  net-tools
+rpm -qa|grep  nfs-utils
+rpm -qa|grep  python
+rpm -qa|grep  python-configshell
+rpm -qa|grep  python-rtslib
+rpm -qa|grep  python-six
+rpm -qa|grep  targetcli
+rpm -qa|grep  smartmontools
+```
 ### 2.3. 创建用户
 
 ```bash
@@ -894,6 +964,7 @@ EOF
 ### 2.9. 配置共享磁盘权限
 
 #### 2.9.1.无多路径模式
+#前面通过华为的软件已经设置好多路径，此处无需设置
 
 #适用于vsphere平台直接共享存储磁盘
 
@@ -935,11 +1006,13 @@ total: 8746160128 blocks
 #99-oracle-asmdevices.rules
 ```bash
 cat >> /etc/udev/rules.d/99-oracle-asmdevices.rules <<'EOF'
-KERNEL=="sdb", SUBSYSTEM=="block", PROGRAM=="/usr/lib/udev/scsi_id -g -u -d /dev/$name",RESULT=="36000c29cab9f05183d3af0fc44e8022f", OWNER="grid",GROUP="asmadmin", MODE="0660"
-KERNEL=="sdc", SUBSYSTEM=="block", PROGRAM=="/usr/lib/udev/scsi_id -g -u -d /dev/$name",RESULT=="36000c29aa1f89b4a2054f787a381ec5f", OWNER="grid",GROUP="asmadmin", MODE="0660"
-KERNEL=="sdd", SUBSYSTEM=="block", PROGRAM=="/usr/lib/udev/scsi_id -g -u -d /dev/$name",RESULT=="36000c293eb6bd488a57530ba68d59381", OWNER="grid",GROUP="asmadmin", MODE="0660"
-KERNEL=="sde", SUBSYSTEM=="block", PROGRAM=="/usr/lib/udev/scsi_id -g -u -d /dev/$name",RESULT=="36000c29e32ff47627698b21515cc5682", OWNER="grid",GROUP="asmadmin", MODE="0660"
-KERNEL=="sdf", SUBSYSTEM=="block", PROGRAM=="/usr/lib/udev/scsi_id -g -u -d /dev/$name",RESULT=="36000c29b4a664efab3f02294bb39f75c", OWNER="grid",GROUP="asmadmin", MODE="0660"
+KERNEL=="sdb", SUBSYSTEM=="block", PROGRAM=="/usr/lib/udev/scsi_id -g -u -d /dev/$name",RESULT=="36903fea1003f8b2fab27363200000010", OWNER="grid",GROUP="asmadmin", MODE="0660"
+KERNEL=="sdc", SUBSYSTEM=="block", PROGRAM=="/usr/lib/udev/scsi_id -g -u -d /dev/$name",RESULT=="36903fea1003f8b2fab27364600000011", OWNER="grid",GROUP="asmadmin", MODE="0660"
+KERNEL=="sdd", SUBSYSTEM=="block", PROGRAM=="/usr/lib/udev/scsi_id -g -u -d /dev/$name",RESULT=="36903fea1003f8b2fab27367400000012", OWNER="grid",GROUP="asmadmin", MODE="0660"
+KERNEL=="sde", SUBSYSTEM=="block", PROGRAM=="/usr/lib/udev/scsi_id -g -u -d /dev/$name",RESULT=="36903fea1003f8b2fab27be9300000013", OWNER="grid",GROUP="asmadmin", MODE="0660"
+KERNEL=="sdf", SUBSYSTEM=="block", PROGRAM=="/usr/lib/udev/scsi_id -g -u -d /dev/$name",RESULT=="36903fea1003f8b2fab27beac00000014", OWNER="grid",GROUP="asmadmin", MODE="0660"
+KERNEL=="sdg", SUBSYSTEM=="block", PROGRAM=="/usr/lib/udev/scsi_id -g -u -d /dev/$name",RESULT=="36903fea1003f8b2fab27bed800000015", OWNER="grid",GROUP="asmadmin", MODE="0660"
+KERNEL=="sdh", SUBSYSTEM=="block", PROGRAM=="/usr/lib/udev/scsi_id -g -u -d /dev/$name",RESULT=="36903fea1003f8b2fab28923c00000016", OWNER="grid",GROUP="asmadmin", MODE="0660"
 EOF
 
 ```
@@ -1288,14 +1361,56 @@ ssh oracle01 date;ssh oracle02 date;ssh oracle01-prv date;ssh oracle02-prv date
 
 #服务器远程操作，安装vnc，便于图形安装
 
-#安装图形化组件并重启
+#### 2.11.1.安装图形化组件并重启
 ```bash
 yum grouplist
 yum groupinstall -y "Server with GUI"
 
 reboot
 ```
-#安装vnc并编辑设置
+#装完这个重启后，可能会引起NetworkManager的启动，需重新关闭下
+```bash
+systemctl stop NetworkManager.service
+systemctl disable NetworkManager.service
+```
+#装完这个重启后，可能会生成virbr0，需关闭，如果不关闭，那么安装前预检查会报错
+```
+#ifconfig
+virbr0: flags=4099<UP,BROADCAST,MULTICAST>  mtu 1500
+        inet 192.168.122.1  netmask 255.255.255.0  broadcast 192.168.122.255
+        ether 52:54:00:0d:80:29  txqueuelen 1000  (Ethernet)
+        RX packets 0  bytes 0 (0.0 B)
+        RX errors 0  dropped 0  overruns 0  frame 0
+        TX packets 0  bytes 0 (0.0 B)
+        TX errors 0  dropped 0 overruns 0  carrier 0  collisions 0
+        
+#precheck-error
+Check: Node connectivity of subnet "192.168.122.0"
+  Source                          Destination                     Connected?      
+  ------------------------------  ------------------------------  ----------------
+  oracle02[192.168.122.1]         oracle01[192.168.122.1]         yes             
+Result: Node connectivity passed for subnet "192.168.122.0" with node(s) oracle02,oracle01
+
+
+Check: TCP connectivity of subnet "192.168.122.0"
+  Source                          Destination                     Connected?      
+  ------------------------------  ------------------------------  ----------------
+  oracle01:192.168.122.1          oracle02:192.168.122.1          failed          
+
+ERROR: 
+PRVF-7617 : Node connectivity between "oracle01 : 192.168.122.1" and "oracle02 : 192.168.122.1" failed
+Result: TCP connectivity check failed for subnet "192.168.122.0"
+```
+#关闭并
+```bash
+brctl show
+
+ifconfig virbr0 down
+brctl delbr virbr0
+
+systemctl disable libvirtd.service 
+```
+#### 2.11.2.安装vnc
 ```bash
 yum -y install vnc *vnc-server*
 
@@ -1304,14 +1419,15 @@ cp /lib/systemd/system/vncserver@.service /etc/systemd/system/vncserver@.service
 vi /etc/sysconfig/vncservers
 #填入以下内容
 VNCSERVERS="1:grid"
-VNCSERVERS="1:oracle"
+VNCSERVERS="2:oracle"
 VNCSERVERARGS[1]="-geometry 800x600 -nolisten tcp -localhost -alwaysshared -depth 24"
 ```
 #进入grid测试
 ```bash
 su - grid
 vncserver
---->password:vncserver
+--->password: vncserver
+--->a view-only password: no
 ```
 #此时windows打开vnc客户端连接grid用户界面：
 ```
@@ -1360,13 +1476,19 @@ Available Groups:
    System Administration Tools
    System Management
 Done
-[root@oracle01 ~]#
+[root@oracle01 ~]#yum groupinstall -y "Server with GUI"
 
 [root@oracle01 ~]# ps -ef|grep vnc
 grid      2998     1  0 14:23 pts/0    00:00:00 /bin/Xvnc :1 -auth /home/grid/.Xauthority -desktop oracle01:1 (grid) -fp catalogue:/etc/X11/fontpath.d -geometry 1024x768 -httpd /usr/share/vnc/classes -pn -rfbauth /home/grid/.vnc/passwd -rfbport 5901 -rfbwait 30000
 grid      3017     1  0 14:23 pts/0    00:00:00 /bin/sh /home/grid/.vnc/xstartup
 root      4508  2099  0 14:26 pts/0    00:00:00 grep --color=auto vnc
 
+[grid@oracle01 ~]$ vncserver -list
+
+TigerVNC server sessions:
+
+X DISPLAY #	PROCESS ID
+:1		14370
 ```
 
 ## 3 开始安装 GI
@@ -1498,12 +1620,12 @@ cd /u01/Storage/grid/
 --->English/Simplified Chinese
 --->cluster name:rac-scan/scan name:rac-scan/scan port:1521,去掉configure GNS前面的勾
 --->add:oracle02/oracle02-vip,SSHconnectivity,test
---->ens160:192.168.97.0:private,ens32:210.46.97.0:public,virbr0:192.168.122.0:Do Not Use
+--->en03:10.119.5.0:Public,eno4:192.168.5.0:Private,bond0:10.119.5.0:Do Not Use
 --->oracle ASM
 DiskGroupName:OCR,normal,AUSize:1M,Candidate Disks:sdb/sdc/sdd--->
 --->use same passwords for these accounts:Ora543Cle---Do Not Use IPMI
 --->asmadmin/asmdba/asmoper
---->Oracle Base:/u01/app/grid,Oracle_Home:/u01/app/11.2.0/grid
+--->Oracle Base:/u01/app/grid,Oracle Home:/u01/app/11.2.0/grid
 --->Inventory Directory:/u01/app/oraInventory
 --->缺少pdksh,可以忽略
 --->install
@@ -1512,8 +1634,8 @@ DiskGroupName:OCR,normal,AUSize:1M,Candidate Disks:sdb/sdc/sdd--->
 ---->INS-32091，忽略，如果弹框看不到内容，也无法用鼠标拖动，可以按4次Tab键后回车即可
 ---->close
 ```
-#错误处理
-##执行root.sh时报错缺少libcap.so.1
+#### 3.4.错误处理
+##### 3.4.1.错误处理执行root.sh时报错缺少libcap.so.1
 ```
 Installing Trace File Analyzer
 Failed to create keys in the OLR, rc = 127, Message:
@@ -1534,7 +1656,7 @@ ll|grep libcap
 ```bash
 /u01/app/11.2.0/grid/root.sh
 ```
-##执行root.sh报错ohasd failed to start
+##### 3.4.2.执行root.sh报错ohasd failed to start
 ```
 ohasd failed to start
 Failed to start the Clusterware. Last 20 lines of the alert log follow:
@@ -1575,258 +1697,585 @@ systemctl start ohas.service
 
 #查看运行状态：
 
-[root@rac1 system]# systemctl status ohas.service
+[root@oracle01 init.d]# systemctl status ohas.service
 ● ohas.service - Oracle High Availability Services
-Loaded: loaded (/usr/lib/systemd/system/ohas.service; enabled; vendor preset: disabled)
-Active: active (running) since Thu 2018-04-19 14:10:19 CST; 1h 16min ago
-Main PID: 1210 (init.ohasd)
-CGroup: /system.slice/ohasd.service
-└─1210 /bin/sh /etc/init.d/init.ohasd run >/dev/null 2>&1 Type=simple
+   Loaded: loaded (/usr/lib/systemd/system/ohas.service; enabled; vendor preset: disabled)
+   Active: active (running) since Tue 2022-01-04 11:45:14 CST; 8s ago
+ Main PID: 42231 (init.ohasd)
+   CGroup: /system.slice/ohas.service
+           └─42231 /bin/sh /etc/init.d/init.ohasd run >/dev/null 2>&1 Type=simple
 
-Apr 19 14:10:19 bms-75c8 systemd[1]: Started Oracle High Availability Services.
-Apr 19 14:10:19 bms-75c8 systemd[1]: Starting Oracle High Availability Services...
+Jan 04 11:45:14 oracle01 systemd[1]: Started Oracle High Availability Services.
+
 
 #此时oracle01的root.sh会继续安装下去，无需重新执行root.sh脚本
 
 #注意： 为了避免其余节点遇到这种报错，可以在root.sh执行过程中，待/etc/init.d/目录下生成了init.ohasd 文件后，执行systemctl start ohas.service 启动ohas服务即可。若没有/etc/init.d/init.ohasd文件 systemctl start ohas.service 则会启动失败。
 ```
-
-#部署过程日志
+##### 3.4.3.asm及crsd报错CRS-4535: Cannot communicate with Cluster Ready Services
+#如果是光纤直连服务器和SAN存储，因OCR检查时间是15s，但是服务器与存储间检查时间是30s，导致asm报错，从而crs整体报错
+```bash
+[root@oracle01 ~]# cat /sys/block/sdb/device/timeout 
+30
+[root@oracle01 ~]# sqlplus / as sysasm
 ```
-[root@oracle01 ~]# cd /lib64
-[root@oracle01 lib64]# ll|grep libcap
-lrwxrwxrwx.  1 root root       18 Dec 10 14:11 libcap-ng.so.0 -> libcap-ng.so.0.0.0
--rwxr-xr-x.  1 root root    23968 Nov 20  2015 libcap-ng.so.0.0.0
-lrwxrwxrwx.  1 root root       14 Dec 10 14:11 libcap.so.2 -> libcap.so.2.22
--rwxr-xr-x.  1 root root    20048 Apr  1  2020 libcap.so.2.22
-[root@oracle01 lib64]# ln -s libcap.so.2.22 libcap.so.1
-[root@oracle01 lib64]# ll|grep libcap
-lrwxrwxrwx.  1 root root       18 Dec 10 14:11 libcap-ng.so.0 -> libcap-ng.so.0.0.0
--rwxr-xr-x.  1 root root    23968 Nov 20  2015 libcap-ng.so.0.0.0
-lrwxrwxrwx   1 root root       14 Dec 22 16:20 libcap.so.1 -> libcap.so.2.22
-lrwxrwxrwx.  1 root root       14 Dec 10 14:11 libcap.so.2 -> libcap.so.2.22
--rwxr-xr-x.  1 root root    20048 Apr  1  2020 libcap.so.2.22
+```oracle
+SQL> select name, state from v$asm_diskgroup;
 
+NAME			       STATE
+------------------------------ -----------
+OCR			       DISMOUNTED
 
-[root@oracle02 ~]# cd /lib64
-[root@oracle02 lib64]# ll|grep libcap
-lrwxrwxrwx.  1 root root      18 Dec 10 14:11 libcap-ng.so.0 -> libcap-ng.so.0.0.0
--rwxr-xr-x.  1 root root   23968 Nov 20  2015 libcap-ng.so.0.0.0
-lrwxrwxrwx.  1 root root      14 Dec 10 14:11 libcap.so.2 -> libcap.so.2.22
--rwxr-xr-x.  1 root root   20048 Apr  1  2020 libcap.so.2.22
-[root@oracle02 lib64]# ln -s libcap.so.2.22 libcap.so.1
-[root@oracle02 lib64]# ll|grep libcap
-lrwxrwxrwx.  1 root root      18 Dec 10 14:11 libcap-ng.so.0 -> libcap-ng.so.0.0.0
--rwxr-xr-x.  1 root root   23968 Nov 20  2015 libcap-ng.so.0.0.0
-lrwxrwxrwx   1 root root      14 Dec 22 16:22 libcap.so.1 -> libcap.so.2.22
-lrwxrwxrwx.  1 root root      14 Dec 10 14:11 libcap.so.2 -> libcap.so.2.22
--rwxr-xr-x.  1 root root   20048 Apr  1  2020 libcap.so.2.22
+SQL> SELECT   ksppinm, ksppstvl, ksppdesc
+   FROM   x$ksppi x, x$ksppcv y
+  WHERE   x.indx = y.indx AND  ksppinm = '_asm_hbeatiowait' ;
 
-[root@oracle01 ~]# /u01/app/11.2.0/grid/root.sh
-Performing root user operation for Oracle 11g
-
-The following environment variables are set as:
-    ORACLE_OWNER= grid
-    ORACLE_HOME=  /u01/app/11.2.0/grid
-
-Enter the full pathname of the local bin directory: [/usr/local/bin]:
-The contents of "dbhome" have not changed. No need to overwrite.
-The contents of "oraenv" have not changed. No need to overwrite.
-The contents of "coraenv" have not changed. No need to overwrite.
-
-Entries will be added to the /etc/oratab file as needed by
-Database Configuration Assistant when a database is created
-Finished running generic part of root script.
-Now product-specific root actions will be performed.
-Using configuration parameter file: /u01/app/11.2.0/grid/crs/install/crsconfig_params
-User ignored Prerequisites during installation
-Installing Trace File Analyzer
-OLR initialization - successful
-  root wallet
-  root wallet cert
-  root cert export
-  peer wallet
-  profile reader wallet
-  pa wallet
-  peer wallet keys
-  pa wallet keys
-  peer cert request
-  pa cert request
-  peer cert
-  pa cert
-  peer root cert TP
-  profile reader root cert TP
-  pa root cert TP
-  peer pa cert TP
-  pa peer cert TP
-  profile reader pa cert TP
-  profile reader peer cert TP
-  peer user cert
-  pa user cert
-Adding Clusterware entries to inittab
-
-ohasd failed to start
-Failed to start the Clusterware. Last 20 lines of the alert log follow:
-2021-12-22 16:16:16.536:
-[client(23029)]CRS-2101:The OLR was formatted using version 3.
-2021-12-22 16:26:16.232:
-[client(24751)]CRS-2101:The OLR was formatted using version 3.
-
-CRS-2672: Attempting to start 'ora.mdnsd' on 'oracle01'
-CRS-2676: Start of 'ora.mdnsd' on 'oracle01' succeeded
-CRS-2672: Attempting to start 'ora.gpnpd' on 'oracle01'
-CRS-2676: Start of 'ora.gpnpd' on 'oracle01' succeeded
-CRS-2672: Attempting to start 'ora.cssdmonitor' on 'oracle01'
-CRS-2672: Attempting to start 'ora.gipcd' on 'oracle01'
-CRS-2676: Start of 'ora.cssdmonitor' on 'oracle01' succeeded
-CRS-2676: Start of 'ora.gipcd' on 'oracle01' succeeded
-CRS-2672: Attempting to start 'ora.cssd' on 'oracle01'
-CRS-2672: Attempting to start 'ora.diskmon' on 'oracle01'
-CRS-2676: Start of 'ora.diskmon' on 'oracle01' succeeded
-CRS-2676: Start of 'ora.cssd' on 'oracle01' succeeded
-
-ASM created and started successfully.
-
-Disk Group ORC created successfully.
-
-clscfg: -install mode specified
-Successfully accumulated necessary OCR keys.
-Creating OCR keys for user 'root', privgrp 'root'..
-Operation successful.
-CRS-4256: Updating the profile
-Successful addition of voting disk ab7ca7ea5aa34f62bfc562f2ad83cda1.
-Successful addition of voting disk 6a09805cd4c94f87bf712ba5181b9941.
-Successful addition of voting disk 90fb8bac64a84f19bf4599e793a7de08.
-Successfully replaced voting disk group with +ORC.
-CRS-4256: Updating the profile
-CRS-4266: Voting file(s) successfully replaced
-##  STATE    File Universal Id                File Name Disk group
---  -----    -----------------                --------- ---------
- 1. ONLINE   ab7ca7ea5aa34f62bfc562f2ad83cda1 (/dev/sdb) [ORC]
- 2. ONLINE   6a09805cd4c94f87bf712ba5181b9941 (/dev/sdc) [ORC]
- 3. ONLINE   90fb8bac64a84f19bf4599e793a7de08 (/dev/sdd) [ORC]
-Located 3 voting disk(s).
-CRS-2672: Attempting to start 'ora.asm' on 'oracle01'
-CRS-2676: Start of 'ora.asm' on 'oracle01' succeeded
-CRS-2672: Attempting to start 'ora.ORC.dg' on 'oracle01'
-CRS-2676: Start of 'ora.ORC.dg' on 'oracle01' succeeded
-Configure Oracle Grid Infrastructure for a Cluster ... succeeded
-
-[root@oracle01 ~]# crsctl status resource -t
+KSPPINM
 --------------------------------------------------------------------------------
-NAME           TARGET  STATE        SERVER                   STATE_DETAILS
+KSPPSTVL
+--------------------------------------------------------------------------------
+KSPPDESC
+--------------------------------------------------------------------------------
+_asm_hbeatiowait
+15
+number of secs to wait for PST Async Hbeat IO return
+```
+#解决办法
+#oracle01/oracle02都要修改
+```oracle
+SQL> select name, state from v$asm_diskgroup;
+
+NAME			       STATE
+------------------------------ -----------
+OCR			       DISMOUNTED
+
+SQL> alter diskgroup ocr mount;
+
+Diskgroup altered.
+
+SQL> alter system set "_asm_hbeatiowait"=120 scope=spfile sid='*';
+
+System altered.
+```
+#oracle01/oracle02都要重启crs生效
+```bash
+crsctl stop crs -f 
+crsctl start crs
+crsctl enable crs
+```
+#重启集群后，查看下参数
+```oracle
+SQL> SELECT   ksppinm, ksppstvl, ksppdesc
+   FROM   x$ksppi x, x$ksppcv y
+  WHERE   x.indx = y.indx AND  ksppinm = '_asm_hbeatiowait' ;  2    3  
+
+KSPPINM
+--------------------------------------------------------------------------------
+KSPPSTVL
+--------------------------------------------------------------------------------
+KSPPDESC
+--------------------------------------------------------------------------------
+_asm_hbeatiowait
+120
+number of secs to wait for PST Async Hbeat IO return
+```
+#报错日志
+```
+#/u01/app/grid/diag/asm/+asm/+ASM2/trace/alert_+ASM2.log
+ue Jan 04 12:57:51 2022
+ASM Health Checker found 1 new failures
+Tue Jan 04 12:58:03 2022
+SUCCESS: diskgroup OCR was dismounted
+SUCCESS: alter diskgroup OCR dismount force /* ASM SERVER:238559154 */
+SUCCESS: ASM-initiated MANDATORY DISMOUNT of group OCR
+Tue Jan 04 12:58:03 2022
+NOTE: diskgroup resource ora.OCR.dg is offline
+Tue Jan 04 12:58:03 2022
+Errors in file /u01/app/grid/diag/asm/+asm/+ASM2/trace/+ASM2_ora_12804.trc:
+ORA-15078: ASM diskgroup was forcibly dismounted
+Errors in file /u01/app/grid/diag/asm/+asm/+ASM2/trace/+ASM2_ora_12804.trc:
+ORA-15078: ASM diskgroup was forcibly dismounted
+Errors in file /u01/app/grid/diag/asm/+asm/+ASM2/trace/+ASM2_ora_12804.trc:
+ORA-15078: ASM diskgroup was forcibly dismounted
+WARNING: requested mirror side 1 of virtual extent 5 logical extent 0 offset 704512 is not allocated; I/O request failed
+WARNING: requested mirror side 2 of virtual extent 5 logical extent 1 offset 704512 is not allocated; I/O request failed
+Errors in file /u01/app/grid/diag/asm/+asm/+ASM2/trace/+ASM2_ora_12804.trc:
+ORA-15078: ASM diskgroup was forcibly dismounted
+ORA-15078: ASM diskgroup was forcibly dismounted
+Tue Jan 04 12:58:03 2022
+SQL> alter diskgroup OCR check /* proxy */ 
+ORA-15032: not all alterations performed
+ORA-15001: diskgroup "OCR" does not exist or is not mounted
+ERROR: alter diskgroup OCR check /* proxy */
+
+#/u01/app/grid/diag/asm/+asm/+ASM2/trace/+ASM2_ora_12804.trc
+*** 2022-01-04 14:09:06.969
+WARNING:failed xlate 1 
+ORA-15078: ASM diskgroup was forcibly dismounted
+WARNING:failed xlate 1 
+ORA-15078: ASM diskgroup was forcibly dismounted
+WARNING:failed xlate 1 
+ORA-15078: ASM diskgroup was forcibly dismounted
+WARNING:failed xlate 1 
+ORA-15078: ASM diskgroup was forcibly dismounted
+WARNING:failed xlate 1 
+ORA-15078: ASM diskgroup was forcibly dismounted
+ksfdrfms:Mirror Read file=+OCR.255.4294967295 fob=0x90c03648 bufp=0x7f5878cb2a00 blkno=1125 nbytes=4096
+WARNING:failed xlate 1 
+WARNING: requested mirror side 1 of virtual extent 4 logical extent 0 offset 413696 is not allocated; I/O request failed
+ksfdrfms:Read failed from mirror side=1 logical extent number=0 dskno=65535
+WARNING:failed xlate 1 
+WARNING: requested mirror side 2 of virtual extent 4 logical extent 1 offset 413696 is not allocated; I/O request failed
+ksfdrfms:Read failed from mirror side=2 logical extent number=1 dskno=65535
+ORA-15078: ASM diskgroup was forcibly dismounted
+ORA-15078: ASM diskgroup was forcibly dismounted
+
+#/u01/app/11.2.0/grid/log/oracle02/crsd/crsd.log
+2022-01-04 12:58:15.154: [ CRSMAIN][859629376] Initializing OCR
+[   CLWAL][859629376]clsw_Initialize: OLR initlevel [70000]
+2022-01-04 12:58:15.480: [  OCRASM][859629376]proprasmo: Error in open/create file in dg [OCR]
+[  OCRASM][859629376]SLOS : SLOS: cat=8, opn=kgfoOpen01, dep=15056, loc=kgfokge
+
+2022-01-04 12:58:15.480: [  OCRASM][859629376]ASM Error Stack :
+2022-01-04 12:58:15.512: [  OCRASM][859629376]proprasmo: kgfoCheckMount returned [6]
+2022-01-04 12:58:15.512: [  OCRASM][859629376]proprasmo: The ASM disk group OCR is not found or not mounted
+2022-01-04 12:58:15.513: [  OCRRAW][859629376]proprioo: Failed to open [+OCR]. Returned proprasmo() with [26]. Marking location as UNAVAILABLE.
+2022-01-04 12:58:15.513: [  OCRRAW][859629376]proprioo: No OCR/OLR devices are usable
+2022-01-04 12:58:15.513: [  OCRASM][859629376]proprasmcl: asmhandle is NULL
+2022-01-04 12:58:15.513: [    GIPC][859629376] gipcCheckInitialization: possible incompatible non-threaded init from [prom.c : 690], original from [clsss.c : 5343]
+2022-01-04 12:58:15.514: [ default][859629376]clsvactversion:4: Retrieving Active Version from local storage.
+2022-01-04 12:58:15.516: [ CSSCLNT][859629376]clssgsgrppubdata: group (ocr_rac-scan) not found
+
+2022-01-04 12:58:15.516: [  OCRRAW][859629376]proprio_repairconf: Failed to retrieve the group public data. CSS ret code [20]
+2022-01-04 12:58:15.517: [  OCRRAW][859629376]proprioo: Failed to auto repair the OCR configuration.
+2022-01-04 12:58:15.517: [  OCRRAW][859629376]proprinit: Could not open raw device
+2022-01-04 12:58:15.517: [  OCRASM][859629376]proprasmcl: asmhandle is NULL
+2022-01-04 12:58:15.519: [  OCRAPI][859629376]a_init:16!: Backend init unsuccessful : [26]
+2022-01-04 12:58:15.519: [  CRSOCR][859629376] OCR context init failure.  Error: PROC-26: Error while accessing the physical storage
+
+2022-01-04 12:58:15.519: [    CRSD][859629376] Created alert : (:CRSD00111:) :  Could not init OCR, error: PROC-26: Error while accessing the physical storage
+
+2022-01-04 12:58:15.519: [    CRSD][859629376][PANIC] CRSD exiting: Could not init OCR, code: 26
+2022-01-04 12:58:15.519: [    CRSD][859629376] Done.
+```
+##### 3.4.4.添加listener
+#上面错误解决后，发现集群缺少listener
+```
+[grid@oracle01 ~]$ crsctl status resource -t
+--------------------------------------------------------------------------------
+NAME           TARGET  STATE        SERVER                   STATE_DETAILS       
 --------------------------------------------------------------------------------
 Local Resources
 --------------------------------------------------------------------------------
-ora.ORC.dg
-               ONLINE  ONLINE       oracle01
+ora.OCR.dg
+               ONLINE  ONLINE       oracle01                                     
+               ONLINE  ONLINE       oracle02                                     
 ora.asm
-               ONLINE  ONLINE       oracle01                  Started
+               ONLINE  ONLINE       oracle01                 Started             
+               ONLINE  ONLINE       oracle02                 Started             
 ora.gsd
-               OFFLINE OFFLINE      oracle01
+               OFFLINE OFFLINE      oracle01                                     
+               OFFLINE OFFLINE      oracle02                                     
 ora.net1.network
-               ONLINE  ONLINE       oracle01
+               ONLINE  ONLINE       oracle01                                     
+               ONLINE  ONLINE       oracle02                                     
 ora.ons
-               ONLINE  ONLINE       oracle01
+               ONLINE  ONLINE       oracle01                                     
+               ONLINE  ONLINE       oracle02                                     
 --------------------------------------------------------------------------------
 Cluster Resources
 --------------------------------------------------------------------------------
 ora.LISTENER_SCAN1.lsnr
-      1        ONLINE  ONLINE       oracle01
+      1        ONLINE  ONLINE       oracle02                                     
 ora.cvu
-      1        ONLINE  ONLINE       oracle01
+      1        ONLINE  ONLINE       oracle02                                     
 ora.oc4j
-      1        ONLINE  ONLINE       oracle01
+      1        ONLINE  ONLINE       oracle01                                     
 ora.oracle01.vip
-      1        ONLINE  ONLINE       oracle01
+      1        ONLINE  ONLINE       oracle01                                     
+ora.oracle02.vip
+      1        ONLINE  ONLINE       oracle02                                     
 ora.scan1.vip
-      1        ONLINE  ONLINE       oracle01
+      1        ONLINE  ONLINE       oracle02                             
+      
+[root@oracle02 ~]# lsnrctl status
 
-[root@oracle02 ~]# /u01/app/oraInventory/orainstRoot.sh
+LSNRCTL for Linux: Version 11.2.0.4.0 - Production on 04-JAN-2022 16:54:49
 
-[root@oracle02 ~]# /u01/app/11.2.0/grid/root.sh
+Copyright (c) 1991, 2013, Oracle.  All rights reserved.
 
-[root@oracle02 ~]# cd /etc/init.d
-[root@oracle02 init.d]# ls
-functions  netconsole  network  README
-
-[root@oracle02 init.d]# ls
-functions  init.ohasd  netconsole  network  ohasd  README
-
-[root@oracle02 init.d]# systemctl start ohas
-
-[root@oracle02 init.d]# /u01/app/11.2.0/grid/root.sh
-Performing root user operation for Oracle 11g
-
-The following environment variables are set as:
-    ORACLE_OWNER= grid
-    ORACLE_HOME=  /u01/app/11.2.0/grid
-
-Enter the full pathname of the local bin directory: [/usr/local/bin]:
-   Copying dbhome to /usr/local/bin ...
-   Copying oraenv to /usr/local/bin ...
-   Copying coraenv to /usr/local/bin ...
-
-
-Creating /etc/oratab file...
-Entries will be added to the /etc/oratab file as needed by
-Database Configuration Assistant when a database is created
-Finished running generic part of root script.
-Now product-specific root actions will be performed.
-Using configuration parameter file: /u01/app/11.2.0/grid/crs/install/crsconfig_params
-Creating trace directory
-User ignored Prerequisites during installation
-Installing Trace File Analyzer
-OLR initialization - successful
-Adding Clusterware entries to inittab
-CRS-4402: The CSS daemon was started in exclusive mode but found an active CSS daemon on node oracle01, number 1, and is terminating
-An active cluster was found during exclusive startup, restarting to join the cluster
-Configure Oracle Grid Infrastructure for a Cluster ... succeeded
+Connecting to (ADDRESS=(PROTOCOL=tcp)(HOST=)(PORT=1521))
+TNS-12541: TNS:no listener
+ TNS-12560: TNS:protocol adapter error
+  TNS-00511: No listener
+   Linux Error: 111: Connection refused
+[root@oracle02 ~]# su - grid
+Last login: Tue Jan  4 14:06:57 CST 2022 on pts/0
+[grid@oracle02 ~]$ srvctl config listener
+PRCN-2044 : No listener exists
 ```
+#尝试添加
+```bash
+[grid@oracle02 ~]$ srvctl add listener -l listener -p 1521 
+PRCN-2061 : Failed to add listener ora.LISTENER.lsnr
+PRCN-2065 : Port(s) 1521 are not available on the nodes given
+PRCN-2067 : Port 1521 is not available across node(s) "oracle01-vip"
 
+#先停止oracle01-vip和oracle02-vip
+crsctl stop resource ora.oracle01.vip
+crsctl stop resource ora.oracle01.vip
+#检查是否有listener的残留进程
+ps -ef|grep tns
+#如果有以下类似进程，需kill掉，不然会存在Not All Endpoints Registered的问题
+grid     17769     1  0 18:53 ?        00:00:00 /u01/app/11.2.0/grid/bin/tnslsnr LISTENER -inherit
+
+kill -9 17769
+
+#开始添加监听
+srvctl add listener -l listener
+srvctl config listener
+srvctl start listener -l listener
+
+crsctl status resource -t
+```
+#如果还存在问题，可以尝试重启集群解决
+```bash
+crsctl stop cluster -all
+
+crsctl start cluster -all
+```
+#日志
+```
+[grid@oracle02 admin]$ srvctl stop scan_listener
+
+[grid@oracle02 admin]$ srvctl add listener -l listener
+PRCN-2061 : Failed to add listener ora.LISTENER.lsnr
+PRCN-2065 : Port(s) 1521 are not available on the nodes given
+PRCN-2067 : Port 1521 is not available across node(s) "oracle01-vip"
+
+[grid@oracle02 admin]$ crsctl stop resource ora.oracle01.vip
+CRS-2673: Attempting to stop 'ora.oracle01.vip' on 'oracle01'
+CRS-2677: Stop of 'ora.oracle01.vip' on 'oracle01' succeeded
+
+[grid@oracle02 admin]$ crsctl stop resource ora.oracle02.vip
+CRS-2673: Attempting to stop 'ora.oracle02.vip' on 'oracle02'
+CRS-2677: Stop of 'ora.oracle02.vip' on 'oracle02' succeeded
+
+[grid@oracle02 admin]$ srvctl add listener -l listener
+
+[grid@oracle02 admin]$ srvctl config listener
+Name: LISTENER
+Network: 1, Owner: grid
+Home: <CRS home>
+End points: TCP:1521
+
+[grid@oracle02 admin]$ crsctl status resource -t
+--------------------------------------------------------------------------------
+NAME           TARGET  STATE        SERVER                   STATE_DETAILS       
+--------------------------------------------------------------------------------
+Local Resources
+--------------------------------------------------------------------------------                              
+ora.LISTENER.lsnr
+               OFFLINE OFFLINE      oracle01                                     
+               OFFLINE OFFLINE      oracle02                                     
+ora.OCR.dg
+               ONLINE  ONLINE       oracle01                                     
+               ONLINE  ONLINE       oracle02                                     
+ora.asm
+               ONLINE  ONLINE       oracle01                 Started             
+               ONLINE  ONLINE       oracle02                 Started             
+ora.gsd
+               OFFLINE OFFLINE      oracle01                                     
+               OFFLINE OFFLINE      oracle02                                     
+ora.net1.network
+               ONLINE  ONLINE       oracle01                                     
+               ONLINE  ONLINE       oracle02                                     
+ora.ons
+               ONLINE  ONLINE       oracle01                                     
+               ONLINE  ONLINE       oracle02                                     
+--------------------------------------------------------------------------------
+Cluster Resources
+--------------------------------------------------------------------------------
+ora.LISTENER_SCAN1.lsnr
+      1        OFFLINE OFFLINE                                                   
+ora.cvu
+      1        ONLINE  ONLINE       oracle02                                     
+ora.oc4j
+      1        ONLINE  ONLINE       oracle01                                     
+ora.oracle01.vip
+      1        OFFLINE OFFLINE                                                   
+ora.oracle02.vip
+      1        OFFLINE OFFLINE                                                   
+ora.scan1.vip
+      1        ONLINE  ONLINE       oracle02                                     
+[grid@oracle02 admin]$ srvctl start listener -l listener
+
+[grid@oracle02 admin]$ crsctl start resource ora.oracle02.vip
+CRS-5702: Resource 'ora.oracle02.vip' is already running on 'oracle02'
+CRS-4000: Command Start failed, or completed with errors.
+
+[grid@oracle02 admin]$ crsctl status resource -t
+--------------------------------------------------------------------------------
+NAME           TARGET  STATE        SERVER                   STATE_DETAILS       
+--------------------------------------------------------------------------------
+Local Resources
+--------------------------------------------------------------------------------
+ora.LISTENER.lsnr
+               ONLINE  INTERMEDIATE oracle01                 Not All Endpoints Registered           
+               ONLINE  ONLINE       oracle02                                     
+ora.OCR.dg
+               ONLINE  ONLINE       oracle01                                     
+               ONLINE  ONLINE       oracle02                                     
+ora.asm
+               ONLINE  ONLINE       oracle01                 Started             
+               ONLINE  ONLINE       oracle02                 Started             
+ora.gsd
+               OFFLINE OFFLINE      oracle01                                     
+               OFFLINE OFFLINE      oracle02                                     
+ora.net1.network
+               ONLINE  ONLINE       oracle01                                     
+               ONLINE  ONLINE       oracle02                                     
+ora.ons
+               ONLINE  ONLINE       oracle01                                     
+               ONLINE  ONLINE       oracle02                                     
+--------------------------------------------------------------------------------
+Cluster Resources
+--------------------------------------------------------------------------------
+ora.LISTENER_SCAN1.lsnr
+      1        OFFLINE OFFLINE                                                   
+ora.cvu
+      1        ONLINE  ONLINE       oracle02                                     
+ora.oc4j
+      1        ONLINE  ONLINE       oracle01                                     
+ora.oracle01.vip
+      1        ONLINE  ONLINE       oracle01                                     
+ora.oracle02.vip
+      1        ONLINE  ONLINE       oracle02                                     
+ora.scan1.vip
+      1        ONLINE  ONLINE       oracle02                                     
+[grid@oracle02 admin]$ crsctl status resource ora.LISTENER_SCAN1.lsnr
+NAME=ora.LISTENER_SCAN1.lsnr
+TYPE=ora.scan_listener.type
+TARGET=OFFLINE
+STATE=OFFLINE
+
+[grid@oracle02 admin]$ srvctl start scan_listener
+
+[grid@oracle02 admin]$ crsctl status resource -t
+--------------------------------------------------------------------------------
+NAME           TARGET  STATE        SERVER                   STATE_DETAILS       
+--------------------------------------------------------------------------------
+Local Resources
+--------------------------------------------------------------------------------
+ora.LISTENER.lsnr
+               ONLINE  INTERMEDIATE oracle01                 Not All Endpoints Registered           
+               ONLINE  ONLINE       oracle02                                     
+ora.OCR.dg
+               ONLINE  ONLINE       oracle01                                     
+               ONLINE  ONLINE       oracle02                                     
+ora.asm
+               ONLINE  ONLINE       oracle01                 Started             
+               ONLINE  ONLINE       oracle02                 Started             
+ora.gsd
+               OFFLINE OFFLINE      oracle01                                     
+               OFFLINE OFFLINE      oracle02                                     
+ora.net1.network
+               ONLINE  ONLINE       oracle01                                     
+               ONLINE  ONLINE       oracle02                                     
+ora.ons
+               ONLINE  ONLINE       oracle01                                     
+               ONLINE  ONLINE       oracle02                                     
+--------------------------------------------------------------------------------
+Cluster Resources
+--------------------------------------------------------------------------------
+ora.LISTENER_SCAN1.lsnr
+      1        ONLINE  INTERMEDIATE oracle01                 Not All Endpoints R 
+                                                             egistered           
+ora.cvu
+      1        ONLINE  ONLINE       oracle02                                     
+ora.oc4j
+      1        ONLINE  ONLINE       oracle01                                     
+ora.oracle01.vip
+      1        ONLINE  ONLINE       oracle01                                     
+ora.oracle02.vip
+      1        ONLINE  ONLINE       oracle02                                     
+ora.scan1.vip
+      1        ONLINE  ONLINE       oracle01                                     
+[grid@oracle02 admin]$ srvctl start scan_listener
+PRCC-1014 : LISTENER_SCAN1 was already running
+PRCR-1004 : Resource ora.LISTENER_SCAN1.lsnr is already running
+PRCR-1079 : Failed to start resource ora.LISTENER_SCAN1.lsnr
+CRS-5702: Resource 'ora.LISTENER_SCAN1.lsnr' is already running on 'oracle01'
+
+[grid@oracle02 admin]$ crsctl status resource -t
+--------------------------------------------------------------------------------
+NAME           TARGET  STATE        SERVER                   STATE_DETAILS       
+--------------------------------------------------------------------------------
+Local Resources
+--------------------------------------------------------------------------------
+ora.LISTENER.lsnr
+               ONLINE  INTERMEDIATE oracle01                 Not All Endpoints R 
+                                                             egistered           
+               ONLINE  ONLINE       oracle02                                     
+ora.OCR.dg
+               ONLINE  ONLINE       oracle01                                     
+               ONLINE  ONLINE       oracle02                                     
+ora.asm
+               ONLINE  ONLINE       oracle01                 Started             
+               ONLINE  ONLINE       oracle02                 Started             
+ora.gsd
+               OFFLINE OFFLINE      oracle01                                     
+               OFFLINE OFFLINE      oracle02                                     
+ora.net1.network
+               ONLINE  ONLINE       oracle01                                     
+               ONLINE  ONLINE       oracle02                                     
+ora.ons
+               ONLINE  ONLINE       oracle01                                     
+               ONLINE  ONLINE       oracle02                                     
+--------------------------------------------------------------------------------
+Cluster Resources
+--------------------------------------------------------------------------------
+ora.LISTENER_SCAN1.lsnr
+      1        ONLINE  INTERMEDIATE oracle01                 Not All Endpoints R 
+                                                             egistered           
+ora.cvu
+      1        ONLINE  ONLINE       oracle02                                     
+ora.oc4j
+      1        ONLINE  ONLINE       oracle01                                     
+ora.oracle01.vip
+      1        ONLINE  ONLINE       oracle01                                     
+ora.oracle02.vip
+      1        ONLINE  ONLINE       oracle02                                     
+ora.scan1.vip
+      1        ONLINE  ONLINE       oracle01                                     
+
+[root@oracle02 ~]# . oraenv
+ORACLE_SID = [+ASM2] ? 
+The Oracle base remains unchanged with value /u01/app/grid
+[root@oracle02 ~]# crsctl stop cluster -all
+CRS-2673: Attempting to stop 'ora.crsd' on 'oracle02'
+CRS-2673: Attempting to stop 'ora.crsd' on 'oracle01'
+CRS-2790: Starting shutdown of Cluster Ready Services-managed resources on 'oracle01'
+CRS-2673: Attempting to stop 'ora.oc4j' on 'oracle01'
+CRS-2673: Attempting to stop 'ora.LISTENER.lsnr' on 'oracle01'
+CRS-2673: Attempting to stop 'ora.LISTENER_SCAN1.lsnr' on 'oracle01'
+CRS-2673: Attempting to stop 'ora.DATA.dg' on 'oracle01'
+CRS-2673: Attempting to stop 'ora.FRA.dg' on 'oracle01'
+CRS-2673: Attempting to stop 'ora.OCR.dg' on 'oracle01'
+CRS-2790: Starting shutdown of Cluster Ready Services-managed resources on 'oracle02'
+CRS-2673: Attempting to stop 'ora.DATA.dg' on 'oracle02'
+CRS-2673: Attempting to stop 'ora.FRA.dg' on 'oracle02'
+CRS-2673: Attempting to stop 'ora.OCR.dg' on 'oracle02'
+CRS-2673: Attempting to stop 'ora.LISTENER.lsnr' on 'oracle02'
+CRS-2673: Attempting to stop 'ora.cvu' on 'oracle02'
+CRS-2677: Stop of 'ora.cvu' on 'oracle02' succeeded
+CRS-2677: Stop of 'ora.LISTENER.lsnr' on 'oracle01' succeeded
+CRS-2673: Attempting to stop 'ora.oracle01.vip' on 'oracle01'
+CRS-2677: Stop of 'ora.LISTENER_SCAN1.lsnr' on 'oracle01' succeeded
+CRS-2673: Attempting to stop 'ora.scan1.vip' on 'oracle01'
+CRS-2677: Stop of 'ora.LISTENER.lsnr' on 'oracle02' succeeded
+CRS-2673: Attempting to stop 'ora.oracle02.vip' on 'oracle02'
+CRS-2677: Stop of 'ora.DATA.dg' on 'oracle02' succeeded
+CRS-2677: Stop of 'ora.DATA.dg' on 'oracle01' succeeded
+CRS-2677: Stop of 'ora.FRA.dg' on 'oracle01' succeeded
+CRS-2677: Stop of 'ora.FRA.dg' on 'oracle02' succeeded
+CRS-2677: Stop of 'ora.oracle02.vip' on 'oracle02' succeeded
+CRS-2677: Stop of 'ora.oracle01.vip' on 'oracle01' succeeded
+CRS-2677: Stop of 'ora.scan1.vip' on 'oracle01' succeeded
+CRS-2677: Stop of 'ora.oc4j' on 'oracle01' succeeded
+CRS-2677: Stop of 'ora.OCR.dg' on 'oracle01' succeeded
+CRS-2673: Attempting to stop 'ora.asm' on 'oracle01'
+CRS-2677: Stop of 'ora.OCR.dg' on 'oracle02' succeeded
+CRS-2673: Attempting to stop 'ora.asm' on 'oracle02'
+CRS-2677: Stop of 'ora.asm' on 'oracle01' succeeded
+CRS-2677: Stop of 'ora.asm' on 'oracle02' succeeded
+CRS-2673: Attempting to stop 'ora.ons' on 'oracle02'
+CRS-2677: Stop of 'ora.ons' on 'oracle02' succeeded
+CRS-2673: Attempting to stop 'ora.net1.network' on 'oracle02'
+CRS-2677: Stop of 'ora.net1.network' on 'oracle02' succeeded
+CRS-2792: Shutdown of Cluster Ready Services-managed resources on 'oracle02' has completed
+CRS-2673: Attempting to stop 'ora.ons' on 'oracle01'
+CRS-2677: Stop of 'ora.ons' on 'oracle01' succeeded
+CRS-2673: Attempting to stop 'ora.net1.network' on 'oracle01'
+CRS-2677: Stop of 'ora.net1.network' on 'oracle01' succeeded
+CRS-2792: Shutdown of Cluster Ready Services-managed resources on 'oracle01' has completed
+CRS-2677: Stop of 'ora.crsd' on 'oracle02' succeeded
+CRS-2673: Attempting to stop 'ora.ctssd' on 'oracle02'
+CRS-2673: Attempting to stop 'ora.evmd' on 'oracle02'
+CRS-2673: Attempting to stop 'ora.asm' on 'oracle02'
+CRS-2677: Stop of 'ora.crsd' on 'oracle01' succeeded
+CRS-2673: Attempting to stop 'ora.ctssd' on 'oracle01'
+CRS-2673: Attempting to stop 'ora.evmd' on 'oracle01'
+CRS-2673: Attempting to stop 'ora.asm' on 'oracle01'
+CRS-2677: Stop of 'ora.evmd' on 'oracle02' succeeded
+CRS-2677: Stop of 'ora.evmd' on 'oracle01' succeeded
+CRS-2677: Stop of 'ora.ctssd' on 'oracle02' succeeded
+CRS-2677: Stop of 'ora.ctssd' on 'oracle01' succeeded
+CRS-2677: Stop of 'ora.asm' on 'oracle02' succeeded
+CRS-2673: Attempting to stop 'ora.cluster_interconnect.haip' on 'oracle02'
+CRS-2677: Stop of 'ora.cluster_interconnect.haip' on 'oracle02' succeeded
+CRS-2673: Attempting to stop 'ora.cssd' on 'oracle02'
+CRS-2677: Stop of 'ora.cssd' on 'oracle02' succeeded
+CRS-2677: Stop of 'ora.asm' on 'oracle01' succeeded
+CRS-2673: Attempting to stop 'ora.cluster_interconnect.haip' on 'oracle01'
+CRS-2677: Stop of 'ora.cluster_interconnect.haip' on 'oracle01' succeeded
+CRS-2673: Attempting to stop 'ora.cssd' on 'oracle01'
+CRS-2677: Stop of 'ora.cssd' on 'oracle01' succeeded
+[root@oracle02 ~]# 
+
+```
 ### 3.5. 查看状态
 
 ```bash
 crsctl status resource -t
+
 ```
+
 ```
-[root@oracle02 ~]# crsctl status resource -t
+[grid@oracle01 ~]$  crsctl status resource -t
 --------------------------------------------------------------------------------
-NAME           TARGET  STATE        SERVER                   STATE_DETAILS
+NAME           TARGET  STATE        SERVER                   STATE_DETAILS       
 --------------------------------------------------------------------------------
 Local Resources
 --------------------------------------------------------------------------------
-ora.ORC.dg
-               ONLINE  ONLINE       oracle01
-               ONLINE  ONLINE       oracle02
+ora.LISTENER.lsnr
+               ONLINE  ONLINE       oracle01                                     
+               ONLINE  ONLINE       oracle02                                     
+ora.OCR.dg
+               ONLINE  ONLINE       oracle01                                     
+               ONLINE  ONLINE       oracle02                                     
 ora.asm
-               ONLINE  ONLINE       oracle01                  Started
-               ONLINE  ONLINE       oracle02                  Started
+               ONLINE  ONLINE       oracle01                 Started             
+               ONLINE  ONLINE       oracle02                 Started             
 ora.gsd
-               OFFLINE OFFLINE      oracle01
-               OFFLINE OFFLINE      oracle02
+               OFFLINE OFFLINE      oracle01                                     
+               OFFLINE OFFLINE      oracle02                                     
 ora.net1.network
-               ONLINE  ONLINE       oracle01
-               ONLINE  ONLINE       oracle02
+               ONLINE  ONLINE       oracle01                                     
+               ONLINE  ONLINE       oracle02                                     
 ora.ons
-               ONLINE  ONLINE       oracle01
-               ONLINE  ONLINE       oracle02
+               ONLINE  ONLINE       oracle01                                     
+               ONLINE  ONLINE       oracle02                                     
 --------------------------------------------------------------------------------
 Cluster Resources
 --------------------------------------------------------------------------------
 ora.LISTENER_SCAN1.lsnr
-      1        ONLINE  ONLINE       oracle01
+      1        ONLINE  ONLINE       oracle01                                     
 ora.cvu
-      1        ONLINE  ONLINE       oracle01
+      1        ONLINE  ONLINE       oracle02                                     
 ora.oc4j
-      1        ONLINE  ONLINE       oracle01
+      1        ONLINE  ONLINE       oracle02                                     
 ora.oracle01.vip
-      1        ONLINE  ONLINE       oracle01
+      1        ONLINE  ONLINE       oracle01                                     
 ora.oracle02.vip
-      1        ONLINE  ONLINE       oracle02
+      1        ONLINE  ONLINE       oracle02                                     
 ora.scan1.vip
-      1        ONLINE  ONLINE       oracle01
+      1        ONLINE  ONLINE       oracle01                                     
 
+[grid@oracle01 grid]$ asmcmd
+ASMCMD> lsdg
+State    Type    Rebal  Sector  Block       AU  Total_MB  Free_MB  Req_mir_free_MB  Usable_file_MB  Offline_disks  Voting_files  Name
+MOUNTED  NORMAL  N         512   4096  1048576    307200   306274           102400          101937              0             Y  OCR/
 ```
 ## 4 创建ASM磁盘组：DATA/FRA
 
@@ -1836,9 +2285,9 @@ asmca
 ```
 ```
  --->create
- --->DATA,external,sde,OK，如果弹框看不到磁盘选择项，可以用鼠标拖动
+ --->DATA,external,sde/sdf/sdg,OK，如果弹框看不到磁盘选择项，可以用鼠标拖动
  --->creat
- --->FRA,external,sdf,OK，如果弹框看不到磁盘选择项，可以用鼠标拖动
+ --->FRA,external,sdh,OK，如果弹框看不到磁盘选择项，可以用鼠标拖动
  --->exit
 ```
 #验证
@@ -1846,9 +2295,9 @@ asmca
 [grid@oracle01 ~]$ asmcmd
 ASMCMD> lsdg
 State    Type    Rebal  Sector  Block       AU  Total_MB  Free_MB  Req_mir_free_MB  Usable_file_MB  Offline_disks  Voting_files  Name
-MOUNTED  EXTERN  N         512   4096  1048576    512000   511901                0          511901              0             N  DATA/
-MOUNTED  EXTERN  N         512   4096  1048576    307200   307103                0          307103              0             N  FRA/
-MOUNTED  NORMAL  N         512   4096  1048576     61440    60514            20480           20017              0             Y  ORC/
+MOUNTED  EXTERN  N         512   4096  1048576   3145728  3145602                0         3145602              0             N  DATA/
+MOUNTED  EXTERN  N         512   4096  1048576    512000   511901                0          511901              0             N  FRA/
+MOUNTED  NORMAL  N         512   4096  1048576    307200   306274           102400          101937              0             Y  OCR/
 ASMCMD> lsdsk
 Path
 /dev/sdb
@@ -1856,54 +2305,54 @@ Path
 /dev/sdd
 /dev/sde
 /dev/sdf
-ASMCMD>
-[grid@oracle01 ~]# crsctl status resource -t
+/dev/sdg
+/dev/sdh
+ASMCMD> 
+[grid@oracle01 ~]$ crsctl status resource -t
 --------------------------------------------------------------------------------
-NAME           TARGET  STATE        SERVER                   STATE_DETAILS
+NAME           TARGET  STATE        SERVER                   STATE_DETAILS       
 --------------------------------------------------------------------------------
 Local Resources
 --------------------------------------------------------------------------------
-ora.DATA.dg
-               ONLINE  ONLINE       oracle01
-               ONLINE  ONLINE       oracle02
-ora.FRA.dg
-               ONLINE  ONLINE       oracle01
-               ONLINE  ONLINE       oracle02
 ora.LISTENER.lsnr
-               ONLINE  ONLINE       oracle01
-               ONLINE  ONLINE       oracle02
-ora.ORC.dg
-               ONLINE  ONLINE       oracle01
-               ONLINE  ONLINE       oracle02
+               ONLINE  ONLINE       oracle01                                     
+               ONLINE  ONLINE       oracle02    
+ora.DATA.dg
+               ONLINE  ONLINE       oracle01                                     
+               ONLINE  ONLINE       oracle02                                     
+ora.FRA.dg
+               ONLINE  ONLINE       oracle01                                     
+               ONLINE  ONLINE       oracle02                                     
+ora.OCR.dg
+               ONLINE  ONLINE       oracle01                                     
+               ONLINE  ONLINE       oracle02                                     
 ora.asm
-               ONLINE  ONLINE       oracle01                  Started
-               ONLINE  ONLINE       oracle02                  Started
+               ONLINE  ONLINE       oracle01                 Started             
+               ONLINE  ONLINE       oracle02                 Started             
 ora.gsd
-               OFFLINE OFFLINE      oracle01
-               OFFLINE OFFLINE      oracle02
+               OFFLINE OFFLINE      oracle01                                     
+               OFFLINE OFFLINE      oracle02                                     
 ora.net1.network
-               ONLINE  ONLINE       oracle01
-               ONLINE  ONLINE       oracle02
+               ONLINE  ONLINE       oracle01                                     
+               ONLINE  ONLINE       oracle02                                     
 ora.ons
-               ONLINE  ONLINE       oracle01
-               ONLINE  ONLINE       oracle02
+               ONLINE  ONLINE       oracle01                                     
+               ONLINE  ONLINE       oracle02                                     
 --------------------------------------------------------------------------------
 Cluster Resources
 --------------------------------------------------------------------------------
 ora.LISTENER_SCAN1.lsnr
-      1        ONLINE  ONLINE       oracle01
+      1        ONLINE  ONLINE       oracle02                                     
 ora.cvu
-      1        ONLINE  ONLINE       oracle01
+      1        ONLINE  ONLINE       oracle02                                     
 ora.oc4j
-      1        ONLINE  ONLINE       oracle01
+      1        ONLINE  ONLINE       oracle01                                     
 ora.oracle01.vip
-      1        ONLINE  ONLINE       oracle01
+      1        ONLINE  ONLINE       oracle01                                     
 ora.oracle02.vip
-      1        ONLINE  ONLINE       oracle02
+      1        ONLINE  ONLINE       oracle02                                     
 ora.scan1.vip
-      1        ONLINE  ONLINE       oracle01
-[root@oracle01 ~]#
-
+      1        ONLINE  ONLINE       oracle02                                     
 ```
 ## 5 安装oracle软件
 
@@ -1918,7 +2367,7 @@ chown -R oracle:oinstall /u01/Storage/database
 su - grid
 
 cd /u01/Storage/grid
-  ./runcluvfy.sh stage -pre dbinst -n oracle01,oracle02 -fixup -verbose 
+  ./runcluvfy.sh stage -pre dbinst -n oracle01,oracle02 -fixup -verbose
 ```
 #如果下面报错内容，可以忽略
 ```
@@ -2047,13 +2496,13 @@ dbca
 --->SYS/SYSTEM/DBSNMP/SYSMAN使用一个密码: XXXXXX
 --->ASM/+DATA
     --->弹框中输入ASMSNMP的密码(此弹框可能需要鼠标拖开，密码为GI时设置的密码)
---->Specify FRA: +FRA/300000M(大小根据实际情况填写)/Enable Arechiving
+--->Specify FRA: +FRA/500000M(大小根据实际情况填写)/Enable Arechiving
 --->Sample Schemas，可以去掉打勾
---->Memory: Custom---SGA:6000M/PGA:2000M(大小根据实际设置memory*60%左右)
+--->Memory: Custom---SGA:115000M/PGA:38000M(大小根据实际设置memory*60%左右)
     --->Sizing: Processes---1500(根据服务器资源调整)
     --->CharacterSets: Use Unicode(AL32UTF8)
     --->Connection Mode: Dedicated Server Mode
-    --->All Initialization Parameters: 可以修改Redo Log Groups，再添加两组，并调整大小为200M
+--->可以修改Redo Log Groups，再添加两组，并调整大小为200M
 --->Finish
 --->OK，此处弹框可能需要鼠标拖开
 --->等待执行完毕，点击Exit
@@ -2160,7 +2609,7 @@ SQL> show parameter recovery;
 NAME                                 TYPE        VALUE
 ------------------------------------ ----------- -----------------------
 db_recovery_file_dest                string      +FRA
-db_recovery_file_dest_size           big integer 300000M
+db_recovery_file_dest_size           big integer 500000M
 recovery_parallelism                 integer     0
 SQL>  select * from v$recovery_area_usage;
 
@@ -2194,21 +2643,22 @@ SQL>
 SQL> select group#,type,member from v$logfile order by 1;
 
     GROUP# TYPE    MEMBER
----------- ------- --------------------------------------------------
-         1 ONLINE  +FRA/xydb/onlinelog/group_1.257.1092061839
-         1 ONLINE  +DATA/xydb/onlinelog/group_1.261.1092061839
-         2 ONLINE  +DATA/xydb/onlinelog/group_2.262.1092061841
-         2 ONLINE  +FRA/xydb/onlinelog/group_2.258.1092061841
-         3 ONLINE  +DATA/xydb/onlinelog/group_3.267.1092062193
-         3 ONLINE  +FRA/xydb/onlinelog/group_3.260.1092062195
-         4 ONLINE  +DATA/xydb/onlinelog/group_4.268.1092062195
-         4 ONLINE  +FRA/xydb/onlinelog/group_4.261.1092062195
-         5 ONLINE  +DATA/xydb/onlinelog/group_5.263.1092061841
-         5 ONLINE  +FRA/xydb/onlinelog/group_5.259.1092061841
-         6 ONLINE  +FRA/xydb/onlinelog/group_6.262.1092062195
-         6 ONLINE  +DATA/xydb/onlinelog/group_6.269.1092062195
+---------- ------- ----------------------------------------------------------------------------------------------------
+	 1 ONLINE  +FRA/xydb/onlinelog/group_1.257.1093116751
+	 1 ONLINE  +DATA/xydb/onlinelog/group_1.261.1093116751
+	 2 ONLINE  +DATA/xydb/onlinelog/group_2.262.1093116751
+	 2 ONLINE  +FRA/xydb/onlinelog/group_2.258.1093116751
+	 3 ONLINE  +DATA/xydb/onlinelog/group_3.266.1093116853
+	 3 ONLINE  +FRA/xydb/onlinelog/group_3.260.1093116853
+	 4 ONLINE  +DATA/xydb/onlinelog/group_4.267.1093116853
+	 4 ONLINE  +FRA/xydb/onlinelog/group_4.261.1093116853
+	 5 ONLINE  +DATA/xydb/onlinelog/group_5.263.1093116753
+	 5 ONLINE  +FRA/xydb/onlinelog/group_5.259.1093116753
+	 6 ONLINE  +FRA/xydb/onlinelog/group_6.262.1093116853
+	 6 ONLINE  +DATA/xydb/onlinelog/group_6.268.1093116853
 
 12 rows selected.
+
 
 SQL>
 SQL> show parameter undo;
@@ -2222,17 +2672,13 @@ SQL>
 
 SQL> select tablespace_name, file_name,bytes/1024/1024 MB from dba_data_files order by 1;
 
-TABLESPACE_NAME                FILE_NAME                                                  MB
+TABLESPACE_NAME 	       FILE_NAME						  MB
 ------------------------------ -------------------------------------------------- ----------
-EXAMPLE                        +DATA/xydb/datafile/example.265.1092061851            313.125
-SYSAUX                         +DATA/xydb/datafile/sysaux.257.1092061679                 550
-SYSTEM                         +DATA/xydb/datafile/system.256.1092061679                 750
-UNDOTBS1                       +DATA/xydb/datafile/undotbs1.258.1092061681               115
-UNDOTBS2                       +DATA/xydb/datafile/undotbs2.266.1092062083                25
-USERS                          +DATA/xydb/datafile/users.259.1092061681                    5
-
-6 rows selected.
-
+SYSAUX			       +DATA/xydb/datafile/sysaux.257.1093116677		 540
+SYSTEM			       +DATA/xydb/datafile/system.256.1093116677		 740
+UNDOTBS1		       +DATA/xydb/datafile/undotbs1.258.1093116677		  95
+UNDOTBS2		       +DATA/xydb/datafile/undotbs2.265.1093116795		  25
+USERS			       +DATA/xydb/datafile/users.259.1093116677 		   5
 ```
 ### 7.3.查看集群状态
 
@@ -2263,68 +2709,69 @@ sqlplus test/test@10.119.5.64:1521/xydb
 Last login: Wed Dec 22 18:49:00 CST 2021 on pts/1
 [grid@oracle01 ~]$ crsctl status resource -t
 --------------------------------------------------------------------------------
-NAME           TARGET  STATE        SERVER                   STATE_DETAILS
+NAME           TARGET  STATE        SERVER                   STATE_DETAILS       
 --------------------------------------------------------------------------------
 Local Resources
 --------------------------------------------------------------------------------
 ora.DATA.dg
-               ONLINE  ONLINE       oracle01
-               ONLINE  ONLINE       oracle02
+               ONLINE  ONLINE       oracle01                                     
+               ONLINE  ONLINE       oracle02                                     
 ora.FRA.dg
-               ONLINE  ONLINE       oracle01
-               ONLINE  ONLINE       oracle02
+               ONLINE  ONLINE       oracle01                                     
+               ONLINE  ONLINE       oracle02                                     
 ora.LISTENER.lsnr
-               ONLINE  ONLINE       oracle01
-               ONLINE  ONLINE       oracle02
-ora.ORC.dg
-               ONLINE  ONLINE       oracle01
-               ONLINE  ONLINE       oracle02
+               ONLINE  ONLINE       oracle01                                     
+               ONLINE  ONLINE       oracle02                                     
+ora.OCR.dg
+               ONLINE  ONLINE       oracle01                                     
+               ONLINE  ONLINE       oracle02                                     
 ora.asm
-               ONLINE  ONLINE       oracle01                  Started
-               ONLINE  ONLINE       oracle02                  Started
+               ONLINE  ONLINE       oracle01                 Started             
+               ONLINE  ONLINE       oracle02                 Started             
 ora.gsd
-               OFFLINE OFFLINE      oracle01
-               OFFLINE OFFLINE      oracle02
+               OFFLINE OFFLINE      oracle01                                     
+               OFFLINE OFFLINE      oracle02                                     
 ora.net1.network
-               ONLINE  ONLINE       oracle01
-               ONLINE  ONLINE       oracle02
+               ONLINE  ONLINE       oracle01                                     
+               ONLINE  ONLINE       oracle02                                     
 ora.ons
-               ONLINE  ONLINE       oracle01
-               ONLINE  ONLINE       oracle02
+               ONLINE  ONLINE       oracle01                                     
+               ONLINE  ONLINE       oracle02                                     
 --------------------------------------------------------------------------------
 Cluster Resources
 --------------------------------------------------------------------------------
 ora.LISTENER_SCAN1.lsnr
-      1        ONLINE  ONLINE       oracle01
+      1        ONLINE  ONLINE       oracle01                                     
 ora.cvu
-      1        ONLINE  ONLINE       oracle01
+      1        ONLINE  ONLINE       oracle02                                     
 ora.oc4j
-      1        ONLINE  ONLINE       oracle01
+      1        ONLINE  ONLINE       oracle02                                     
 ora.oracle01.vip
-      1        ONLINE  ONLINE       oracle01
+      1        ONLINE  ONLINE       oracle01                                     
 ora.oracle02.vip
-      1        ONLINE  ONLINE       oracle02
+      1        ONLINE  ONLINE       oracle02                                     
 ora.scan1.vip
-      1        ONLINE  ONLINE       oracle01
+      1        ONLINE  ONLINE       oracle01                                     
 ora.xydb.db
-      1        ONLINE  ONLINE       oracle01                  Open
-      2        ONLINE  ONLINE       oracle02                  Open
+      1        ONLINE  ONLINE       oracle01                 Open                
+      2        ONLINE  ONLINE       oracle02                 Open    
 [grid@oracle01 ~]$ srvctl status asm
 ASM is running on oracle01,oracle02
 [grid@oracle01 ~]$ asmcmd
 ASMCMD> lsdg
 State    Type    Rebal  Sector  Block       AU  Total_MB  Free_MB  Req_mir_free_MB  Usable_file_MB  Offline_disks  Voting_files  Name
-MOUNTED  EXTERN  N         512   4096  1048576    512000   507820                0          507820              0             N  DATA/
-MOUNTED  EXTERN  N         512   4096  1048576    307200   305730                0          305730              0             N  FRA/
-MOUNTED  NORMAL  N         512   4096  1048576     61440    60514            20480           20017              0             Y  ORC/
-ASMCMD>
+MOUNTED  EXTERN  N         512   4096  1048576   3145728  3142816                0         3142816              0             N  DATA/
+MOUNTED  EXTERN  N         512   4096  1048576    512000   510286                0          510286              0             N  FRA/
+MOUNTED  NORMAL  N         512   4096  1048576    307200   306274           102400          101937              0             Y  OCR/
+ASMCMD> 
 
 [grid@oracle01 ~]$ srvctl status database -d xydb
 Instance xydb1 is running on node oracle01
 Instance xydb2 is running on node oracle02
+
 [grid@oracle01 ~]$ lsnrctl status
 
-LSNRCTL for Linux: Version 11.2.0.4.0 - Production on 23-DEC-2021 16:17:15
+LSNRCTL for Linux: Version 11.2.0.4.0 - Production on 05-JAN-2022 11:22:04
 
 Copyright (c) 1991, 2013, Oracle.  All rights reserved.
 
@@ -2333,13 +2780,13 @@ STATUS of the LISTENER
 ------------------------
 Alias                     LISTENER
 Version                   TNSLSNR for Linux: Version 11.2.0.4.0 - Production
-Start Date                22-DEC-2021 17:14:46
-Uptime                    0 days 23 hr. 2 min. 28 sec
+Start Date                04-JAN-2022 18:53:14
+Uptime                    0 days 16 hr. 28 min. 49 sec
 Trace Level               off
 Security                  ON: Local OS Authentication
 SNMP                      OFF
 Listener Parameter File   /u01/app/11.2.0/grid/network/admin/listener.ora
-Listener Log File         /u01/app/grid/diag/tnslsnr/oracle01/listener/alert/log.xml
+Listener Log File         /u01/app/11.2.0/grid/log/diag/tnslsnr/oracle01/listener/alert/log.xml
 Listening Endpoints Summary...
   (DESCRIPTION=(ADDRESS=(PROTOCOL=ipc)(KEY=LISTENER)))
   (DESCRIPTION=(ADDRESS=(PROTOCOL=tcp)(HOST=10.119.5.60)(PORT=1521)))
@@ -2352,7 +2799,6 @@ Service "xydb" has 1 instance(s).
 Service "xydbXDB" has 1 instance(s).
   Instance "xydb1", status READY, has 1 handler(s) for this service...
 The command completed successfully
-
 ```
 
 ### 7.4.创建表空间、用户、表等测试
@@ -2370,7 +2816,6 @@ create table test1(id number,name varchar2(20));
 insert into test1 values(1,'JACKY');
 commit;
 select * from test1;
-
 ```
 #日志
 ```
@@ -2419,7 +2864,7 @@ su - oracle
 mkdir /home/oracle/backup
 touch /home/oracle/backup/rmanrun.log
 touch /home/oracle/backup/rmanbak.sh
-chmod a+x /home/oracle/backup/rman
+chmod a+x /home/oracle/backup/rmanbak.sh
 ```
 
 #rman全库备份脚本
@@ -2529,22 +2974,22 @@ elif [ -f $HOME/.profile ]; then
         . $HOME/.profile
 fi
 
-dmpfile=full_db$time.dmp
-logfile=full_db$time.log
+dmpfilename=full_db$time.dmp
+logfilename=full_db$time.log
 
-echo start expdp $dmpfile ... >> $expdp_dir/expdprun.log
+echo start expdp $dmpfilename ... >> $expdp_dir/expdprun.log
 
-expdp system/Z4wKxUTEb77 directory=expdir dumpfile=20211224.dmp logfile=$logfile full=y  parallel=4 cluster=N
+expdp system/Z8jAmy3Tec92 directory=expdir dumpfile=$dmpfilename logfile=$logfilename full=y  parallel=4 cluster=N
 
-echo done expdp $dmpfile ...  >> $expdp_dir/expdprun.log
+echo done expdp $dmpfilename ...  >> $expdp_dir/expdprun.log
 
-#delete 3days before log 
+#delete 30days before log 
+echo start delete $logfilename ... >> $expdp_dir/expdprun.log
+find $expdp_dir -name 'full_db_*.log' -mtime +30 -exec rm {} \;
 
-echo start delete $logfile ... >> $expdp_dir/expdprun.log
-find $expdp_dir -name 'full_db_*.log' -mtime +3 -exec rm {} \;
-
-echo start delete $dmpfile ... >> $expdp_dir/expdprun.log
-find $expdp_dir -name 'full_db_*.dmp' -mtime +3 -exec rm {} \;
+#delete 30days before dmpfile 
+echo start delete $dmpfilename ... >> $expdp_dir/expdprun.log
+find $expdp_dir -name 'full_db_*.dmp' -mtime +30 -exec rm {} \;
 
 echo done delete ...  >> $expdp_dir/expdprun.log
 ```
@@ -2552,6 +2997,6 @@ echo done delete ...  >> $expdp_dir/expdprun.log
 ```bash
 crontab -e
 
-#每天0:30开始执行
-30 1 * * * /home/oracle/expdir/expdir.sh
+#每周日1:30开始执行
+30 1 * * 0 /home/oracle/expdir/expdir.sh
 ```

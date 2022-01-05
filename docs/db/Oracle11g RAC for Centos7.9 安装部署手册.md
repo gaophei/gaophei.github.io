@@ -1002,7 +1002,7 @@ cp /lib/systemd/system/vncserver@.service /etc/systemd/system/vncserver@.service
 vi /etc/sysconfig/vncservers
 #填入以下内容
 VNCSERVERS="1:grid"
-VNCSERVERS="1:oracle"
+VNCSERVERS="2:oracle"
 VNCSERVERARGS[1]="-geometry 800x600 -nolisten tcp -localhost -alwaysshared -depth 24"
 ```
 #进入grid测试
