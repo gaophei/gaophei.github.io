@@ -42,6 +42,10 @@ alter database archivelog ;
 alter database open;
 
 archive log list;
+
+show parameter recovery;
+#根据实际磁盘大小设置FRA大小
+ alter system set db_recovery_file_dest_size=100G;
 ```
 
 ##删除归档

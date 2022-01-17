@@ -297,7 +297,7 @@ tar -xvf mysql-8.0.27-1.el7.x86_64.rpm-bundle.tar
 
 rpm -ivh mysql-community-common-8.0.27-1.el7.x86_64.rpm
 
-rpm -ivh mysql-community-client-plugins-8.0.27-1.el7.x86_64.rpm
+#rpm -ivh mysql-community-client-plugins-8.0.27-1.el7.x86_64.rpm
 
 rpm -ivh mysql-community-libs-8.0.27-1.el7.x86_64.rpm
 
