@@ -326,6 +326,11 @@ systemctl stop ntpd.service
 mv /etc/ntp.conf /etc/ntp.conf.orig
 
 systemctl status ntpd
+
+systemctl disable chronyd
+systemctl stop chronyd
+
+systemctl status chronyd
 ```
 #时区设置
 ```bash
