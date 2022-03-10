@@ -1,4 +1,4 @@
-**Oracle11C RAC for Centos7.9 安装手册**
+**19C RAC for Centos7.9 安装手册**
 
 ## 目录
 1 环境..............................................................................................................................................2
@@ -6,7 +6,7 @@
 1.2. ASM 磁盘组规划 ....................................................................................................................2
 1.3. 主机网络规划..........................................................................................................................2
 1.4. 操作系统配置部分.................................................................................................................2
-2 准备工作（oracle1 与 oracle2 同时配置） ............................................................................................3
+2 准备工作（zhongtaidb1 与 zhongtaidb2 同时配置） ............................................................................................3
 2.1. 配置本地 yum 源： ................................................................................................................3
 2.2. 安装 rpm 依赖包 ....................................................................................................................4
 2.3. 创建用户...................................................................................................................................5
@@ -37,90 +37,234 @@
 ## 1.系统环境
 ### 1.1. 系统版本：
 ```
-[root@oracle1 Packages]# cat /etc/redhat-release
+[root@zhongtaidb1 Packages]# cat /etc/redhat-release
 CentOS Linux release 7.9.2009 (Core)
 ```
 ### 1.2. ASM 磁盘组规划
 ```
 ASM 磁盘组 用途 大小 冗余
-ocr、 voting file   20G+20G+20G NORMAL
-DATA 数据文件 500G EXTERNAL
-FRA    归档日志 300G EXTERNAL
+ocr    voting file   100G+100G+100G NORMAL
+DATA 数据文件 2T+2T+2T EXTERNAL
+FRA    归档日志 2T EXTERNAL
 ```
 ### 1.3. 主机网络规划
 
 #IP规划
 ```
 网络配置               节点 1                               节点 2
-主机名称               oracle1                             oracle2
-public ip            210.46.97.93                       210.46.97.94
-private ip           192.168.97.93                      192.168.97.94
-vip                  210.46.97.96                       210.46.97.97
-scan ip              210.46.97.98
+主机名称               zhongtaidb1                        zhongtaidb2
+public ip            192.168.203.106                    192.168.203.107
+private ip           10.10.10.11                      10.10.10.12
+vip                  192.168.203.108                    192.168.203.109
+scan ip              192.168.203.111 
 ```
-#网卡配置
+#网卡配置及多路径配置
 ```bash
 ifconfig
 nmcli conn show
-#发现虚拟机为克隆模式，两台服务器ens32的uuid相同，重新生成新的UUID
-uuidgen ens32
-#然后修改/etc/sysconfig/network-scripts/ifcfg-ens32中的UUID
-#创建ens160
-cp /etc/sysconfig/network-scripts/ifcfg-ens32  /etc/sysconfig/network-scripts/ifcfg-ens160
+
+#eno8为私有网卡
+#ens3f0和ens3f1d1绑定为team0为业务网卡
+```
+
+#节点一zhongtaidb1
+```bash
+nmcli con mod eno8 ipv4.addresses 10.10.10.11/24 ipv4.method manual connection.autoconnect yes
+
+#第一种方式activebackup
+nmcli con add type team con-name team0 ifname team0 config '{"runner":{"name": "activebackup"}}'
+
+#第二种方式roundrobin
+#nmcli con add type team con-name team0 ifname team0 config '{"runner":{"name": "roundrobin"}}'
+ 
+nmcli con modify team0 ipv4.address '192.168.203.106/24' ipv4.gateway '192.168.203.254'
+ 
+nmcli con modify team0 ipv4.method manual
+ 
+ifup team0
+
+nmcli con add type team-slave con-name team0-ens3f0 ifname ens3f0 master team0
+
+nmcli con add type team-slave con-name team0-ens3f1d1 ifname ens3f1d1 master team0
+
+teamdctl team0 state
+```
+#节点二zhongtaidb2
+```bash
+nmcli con mod eno8 ipv4.addresses 10.10.10.12/24 ipv4.method manual connection.autoconnect yes
+
+#第一种方式activebackup
+nmcli con add type team con-name team0 ifname team0 config '{"runner":{"name": "activebackup"}}'
+
+#第二种方式roundrobin
+#nmcli con add type team con-name team0 ifname team0 config '{"runner":{"name": "roundrobin"}}'
+ 
+nmcli con modify team0 ipv4.address '192.168.203.106/24' ipv4.gateway '192.168.203.254'
+ 
+nmcli con modify team0 ipv4.method manual
+ 
+ifup team0
+
+nmcli con add type team-slave con-name team0-ens3f0 ifname ens3f0 master team0
+
+nmcli con add type team-slave con-name team0-ens3f1d1 ifname ens3f1d1 master team0
+
+teamdctl team0 state
 ```
 #修改私有网卡的相关配置
-#oracle1
+#zhongtaidb1
 ```
-[root@oracle1 network-scripts]# cat ifcfg-ens32
-TYPE=Ethernet
-PROXY_METHOD=none
-BROWSER_ONLY=no
-BOOTPROTO=static
-DEFROUTE=yes
-IPV4_FAILURE_FATAL=no
-IPV6INIT=yes
-IPV6_AUTOCONF=yes
-IPV6_DEFROUTE=yes
-IPV6_FAILURE_FATAL=no
-IPV6_ADDR_GEN_MODE=stable-privacy
-NAME=ens32
-#UUID=c0a520bb-1a60-4e88-bda7-03781a44c22b
-UUID=d27052e5-c774-4c86-a6df-5c21a7424c0c
-DEVICE=ens32
-ONBOOT=yes
-IPADDR=210.46.97.93
-NETMASK=255.255.255.0
-GATEWAY=210.46.97.3
-DNS1=210.46.97.1
+[root@zhongtaidb1 ~]# nmcli dev
+DEVICE    TYPE      STATE        CONNECTION
+team0     team      connected    team0
+eno8      ethernet  connected    eno8
+ens3f0    ethernet  connected    team0-ens3f0
+ens3f1d1  ethernet  connected    team0-ens3f1d1
+eno5      ethernet  unavailable  --
+eno6      ethernet  unavailable  --
+eno7      ethernet  unavailable  --
+lo        loopback  unmanaged    --
+[root@zhongtaidb1 ~]#
 
-[root@oracle1 network-scripts]# cat ifcfg-ens160
-TYPE=Ethernet
+[root@zhongtaidb1 ~]# nmcli conn show
+NAME            UUID                                  TYPE      DEVICE
+team0           2720d30c-88dd-41df-aee0-57c7b2341387  team      team0
+eno8            46fbcecc-e3d9-4e9e-99d9-984746affe06  ethernet  eno8
+team0-ens3f0    8c55f51d-ed1b-4938-8da2-210f570c27a0  ethernet  ens3f0
+team0-ens3f1d1  518a337e-8567-4644-b143-eef226ce60fe  ethernet  ens3f1d1
+eno5            de9c06af-1c86-4f50-86ee-3bdc6d9b4b6e  ethernet  --
+eno6            32839215-743d-4a52-8ccc-81b332d1107e  ethernet  --
+eno7            ad7312f3-2809-4675-9d0a-e88d23796dd9  ethernet  --
+ens3f0          2c40ee1c-f649-4648-af65-cabe2543db98  ethernet  --
+ens3f1d1        09833b6a-29bb-4e6a-99b5-6b9a75ebfb47  ethernet  --
+[root@zhongtaidb1 ~]# ifconfig
+eno5: flags=4099<UP,BROADCAST,MULTICAST>  mtu 1500
+        ether d4:f5:ef:60:3f:f0  txqueuelen 1000  (Ethernet)
+        RX packets 0  bytes 0 (0.0 B)
+        RX errors 0  dropped 0  overruns 0  frame 0
+        TX packets 0  bytes 0 (0.0 B)
+        TX errors 0  dropped 0 overruns 0  carrier 0  collisions 0
+        device memory 0xe6f00000-e6ffffff
+
+eno6: flags=4099<UP,BROADCAST,MULTICAST>  mtu 1500
+        ether d4:f5:ef:60:3f:f1  txqueuelen 1000  (Ethernet)
+        RX packets 0  bytes 0 (0.0 B)
+        RX errors 0  dropped 0  overruns 0  frame 0
+        TX packets 0  bytes 0 (0.0 B)
+        TX errors 0  dropped 0 overruns 0  carrier 0  collisions 0
+        device memory 0xe6e00000-e6efffff
+
+eno7: flags=4099<UP,BROADCAST,MULTICAST>  mtu 1500
+        ether d4:f5:ef:60:3f:f2  txqueuelen 1000  (Ethernet)
+        RX packets 0  bytes 0 (0.0 B)
+        RX errors 0  dropped 0  overruns 0  frame 0
+        TX packets 0  bytes 0 (0.0 B)
+        TX errors 0  dropped 0 overruns 0  carrier 0  collisions 0
+        device memory 0xe6d00000-e6dfffff
+
+eno8: flags=4163<UP,BROADCAST,RUNNING,MULTICAST>  mtu 1500
+        inet 10.10.10.11  netmask 255.255.255.0  broadcast 10.10.10.255
+        inet6 fe80::d7df:a509:d372:4544  prefixlen 64  scopeid 0x20<link>
+        ether d4:f5:ef:60:3f:f3  txqueuelen 1000  (Ethernet)
+        RX packets 1309  bytes 103335 (100.9 KiB)
+        RX errors 0  dropped 0  overruns 0  frame 0
+        TX packets 1354  bytes 147658 (144.1 KiB)
+        TX errors 0  dropped 0 overruns 0  carrier 0  collisions 0
+        device memory 0xe6c00000-e6cfffff
+
+ens3f0: flags=4163<UP,BROADCAST,RUNNING,MULTICAST>  mtu 1500
+        ether f4:03:43:f1:01:20  txqueuelen 1000  (Ethernet)
+        RX packets 7881303  bytes 5218373455 (4.8 GiB)
+        RX errors 0  dropped 0  overruns 0  frame 0
+        TX packets 4175830  bytes 4999490153 (4.6 GiB)
+        TX errors 0  dropped 0 overruns 0  carrier 0  collisions 0
+
+ens3f1d1: flags=4163<UP,BROADCAST,RUNNING,MULTICAST>  mtu 1500
+        ether f4:03:43:f1:01:20  txqueuelen 1000  (Ethernet)
+        RX packets 4271950  bytes 256318216 (244.4 MiB)
+        RX errors 0  dropped 0  overruns 0  frame 0
+        TX packets 0  bytes 0 (0.0 B)
+        TX errors 0  dropped 0 overruns 0  carrier 0  collisions 0
+
+lo: flags=73<UP,LOOPBACK,RUNNING>  mtu 65536
+        inet 127.0.0.1  netmask 255.0.0.0
+        inet6 ::1  prefixlen 128  scopeid 0x10<host>
+        loop  txqueuelen 1000  (Local Loopback)
+        RX packets 807  bytes 70113 (68.4 KiB)
+        RX errors 0  dropped 0  overruns 0  frame 0
+        TX packets 807  bytes 70113 (68.4 KiB)
+        TX errors 0  dropped 0 overruns 0  carrier 0  collisions 0
+
+team0: flags=4163<UP,BROADCAST,RUNNING,MULTICAST>  mtu 1500
+        inet 192.168.203.106  netmask 255.255.255.0  broadcast 192.168.203.255
+        inet6 fe80::7a3c:dbb6:cda0:17e1  prefixlen 64  scopeid 0x20<link>
+        ether f4:03:43:f1:01:20  txqueuelen 1000  (Ethernet)
+        RX packets 5597102  bytes 4989256929 (4.6 GiB)
+        RX errors 0  dropped 333  overruns 0  frame 0
+        TX packets 1015371  bytes 4790889811 (4.4 GiB)
+        TX errors 0  dropped 0 overruns 0  carrier 0  collisions 0
+        
+[root@zhongtaidb1 ~]# ip a
+1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN group default qlen 1000
+    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
+    inet 127.0.0.1/8 scope host lo
+       valid_lft forever preferred_lft forever
+    inet6 ::1/128 scope host
+       valid_lft forever preferred_lft forever
+2: ens3f0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc mq master team0 state UP group default qlen 1000
+    link/ether f4:03:43:f1:01:20 brd ff:ff:ff:ff:ff:ff
+3: ens3f1d1: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc mq master team0 state UP group default qlen 1000
+    link/ether f4:03:43:f1:01:20 brd ff:ff:ff:ff:ff:ff
+4: eno5: <NO-CARRIER,BROADCAST,MULTICAST,UP> mtu 1500 qdisc mq state DOWN group default qlen 1000
+    link/ether d4:f5:ef:60:3f:f0 brd ff:ff:ff:ff:ff:ff
+5: eno6: <NO-CARRIER,BROADCAST,MULTICAST,UP> mtu 1500 qdisc mq state DOWN group default qlen 1000
+    link/ether d4:f5:ef:60:3f:f1 brd ff:ff:ff:ff:ff:ff
+6: eno7: <NO-CARRIER,BROADCAST,MULTICAST,UP> mtu 1500 qdisc mq state DOWN group default qlen 1000
+    link/ether d4:f5:ef:60:3f:f2 brd ff:ff:ff:ff:ff:ff
+7: eno8: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc mq state UP group default qlen 1000
+    link/ether d4:f5:ef:60:3f:f3 brd ff:ff:ff:ff:ff:ff
+    inet 10.10.10.11/24 brd 10.10.10.255 scope global noprefixroute eno8
+       valid_lft forever preferred_lft forever
+    inet6 fe80::d7df:a509:d372:4544/64 scope link noprefixroute
+       valid_lft forever preferred_lft forever
+8: team0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue state UP group default qlen 1000
+    link/ether f4:03:43:f1:01:20 brd ff:ff:ff:ff:ff:ff
+    inet 192.168.203.106/24 brd 192.168.203.255 scope global noprefixroute team0
+       valid_lft forever preferred_lft forever
+    inet6 fe80::7a3c:dbb6:cda0:17e1/64 scope link noprefixroute
+       valid_lft forever preferred_lft forever
+[root@zhongtaidb1 ~]# ip route
+default via 192.168.203.1 dev team0 proto static metric 350
+10.10.10.0/24 dev eno8 proto kernel scope link src 10.10.10.11 metric 102
+192.168.203.0/24 dev team0 proto kernel scope link src 192.168.203.106 metric 350
+[root@zhongtaidb1 ~]# route -n
+Kernel IP routing table
+Destination     Gateway         Genmask         Flags Metric Ref    Use Iface
+0.0.0.0         192.168.203.1   0.0.0.0         UG    350    0        0 team0
+10.10.10.0      0.0.0.0         255.255.255.0   U     102    0        0 eno8
+192.168.203.0   0.0.0.0         255.255.255.0   U     350    0        0 team0
+
+[root@zhongtaidb1 ~]# cd /etc/sysconfig/network-scripts/
+[root@zhongtaidb1 network-scripts]# ls
+ifcfg-eno5            ifdown-bnep      ifdown-tunnel  ifup-ppp
+ifcfg-eno6            ifdown-eth       ifup           ifup-routes
+ifcfg-eno7            ifdown-ippp      ifup-aliases   ifup-sit
+ifcfg-eno8            ifdown-ipv6      ifup-bnep      ifup-Team
+ifcfg-ens3f0          ifdown-isdn      ifup-eth       ifup-TeamPort
+ifcfg-ens3f1d1        ifdown-post      ifup-ippp      ifup-tunnel
+ifcfg-lo              ifdown-ppp       ifup-ipv6      ifup-wireless
+ifcfg-team0           ifdown-routes    ifup-isdn      init.ipv6-global
+ifcfg-team0-ens3f0    ifdown-sit       ifup-plip      network-functions
+ifcfg-team0-ens3f1d1  ifdown-Team      ifup-plusb     network-functions-ipv6
+ifdown                ifdown-TeamPort  ifup-post
+[root@zhongtaidb1 network-scripts]# cat ifcfg-team0
+TEAM_CONFIG="{\"runner\":{\"name\":\"activebackup\"}}"
 PROXY_METHOD=none
 BROWSER_ONLY=no
-BOOTPROTO=static
-DEFROUTE=yes
-IPV4_FAILURE_FATAL=no
-IPV6INIT=no
-IPV6_AUTOCONF=yes
-IPV6_DEFROUTE=yes
-IPV6_FAILURE_FATAL=no
-IPV6_ADDR_GEN_MODE=stable-privacy
-NAME=ens160
-UUID=4dd5b952-2a74-34db-b642-7ea138d0a101
-DEVICE=ens160
-ONBOOT=yes
-IPADDR=192.168.97.93
-NETMASK=255.255.255.0
-GATEWAY=192.168.97.3
-```
-#oracle2
-```
-[root@oracle2 ~]# cd /etc/sysconfig/network-scripts/
-[root@oracle2 network-scripts]# cat ifcfg-ens32
-TYPE=Ethernet
-PROXY_METHOD=none
-BROWSER_ONLY=no
-BOOTPROTO=static
+BOOTPROTO=none
+IPADDR=192.168.203.106
+PREFIX=24
+GATEWAY=192.168.203.1
 DEFROUTE=yes
 IPV4_FAILURE_FATAL=no
 IPV6INIT=yes
@@ -128,34 +272,284 @@ IPV6_AUTOCONF=yes
 IPV6_DEFROUTE=yes
 IPV6_FAILURE_FATAL=no
 IPV6_ADDR_GEN_MODE=stable-privacy
-NAME=ens32
-#UUID=c0a520bb-1a60-4e88-bda7-03781a44c22b
-UUID=c5b7477d-1162-443a-8b99-579ac8c27d29
-DEVICE=ens32
+NAME=team0
+UUID=2720d30c-88dd-41df-aee0-57c7b2341387
+DEVICE=team0
 ONBOOT=yes
-IPADDR=210.46.97.94
-NETMASK=255.255.255.0
-GATEWAY=210.46.97.3
-DNS1=210.46.97.1
-[root@oracle2 network-scripts]# cat ifcfg-ens160
+DEVICETYPE=Team
+MACADDR=f4:03:43:f1:01:20
+[root@zhongtaidb1 network-scripts]# cat ifcfg-team0-ens3f0
+NAME=team0-ens3f0
+UUID=8c55f51d-ed1b-4938-8da2-210f570c27a0
+DEVICE=ens3f0
+ONBOOT=yes
+TEAM_MASTER=team0
+DEVICETYPE=TeamPort
+[root@zhongtaidb1 network-scripts]# cat ifcfg-team0-ens3f1d1
+NAME=team0-ens3f1d1
+UUID=518a337e-8567-4644-b143-eef226ce60fe
+DEVICE=ens3f1d1
+ONBOOT=yes
+TEAM_MASTER=team0
+DEVICETYPE=TeamPort
+[root@zhongtaidb1 network-scripts]# cat ifcfg-eno8
 TYPE=Ethernet
 PROXY_METHOD=none
 BROWSER_ONLY=no
-BOOTPROTO=static
+BOOTPROTO=none
 DEFROUTE=yes
 IPV4_FAILURE_FATAL=no
-IPV6INIT=no
+IPV6INIT=yes
 IPV6_AUTOCONF=yes
 IPV6_DEFROUTE=yes
 IPV6_FAILURE_FATAL=no
 IPV6_ADDR_GEN_MODE=stable-privacy
-NAME=ens160
-UUID=72a36720-cde5-3b0a-86bd-bc6080988a3c
-DEVICE=ens160
+NAME=eno8
+UUID=46fbcecc-e3d9-4e9e-99d9-984746affe06
+DEVICE=eno8
 ONBOOT=yes
-IPADDR=192.168.97.94
-NETMASK=255.255.255.0
-GATEWAY=192.168.97.3
+IPADDR=10.10.10.11
+PREFIX=24
+
+[root@zhongtaidb1 ~]# teamdctl team0 st
+setup:
+  runner: activebackup
+ports:
+  ens3f0
+    link watches:
+      link summary: up
+      instance[link_watch_0]:
+        name: ethtool
+        link: up
+        down count: 0
+  ens3f1d1
+    link watches:
+      link summary: up
+      instance[link_watch_0]:
+        name: ethtool
+        link: up
+        down count: 0
+runner:
+  active port: ens3f0
+```
+#zhongtaidb2
+```
+[root@zhongtaidb2 ~]# nmcli dev
+DEVICE    TYPE      STATE        CONNECTION
+team0     team      connected    team0
+eno8      ethernet  connected    eno8
+ens3f0    ethernet  connected    team0-ens3f0
+ens3f1d1  ethernet  connected    team0-ens3f1d1
+eno5      ethernet  unavailable  --
+eno6      ethernet  unavailable  --
+eno7      ethernet  unavailable  --
+lo        loopback  unmanaged    --
+
+[root@zhongtaidb2 ~]# nmcli conn show
+NAME            UUID                                  TYPE      DEVICE
+team0           6df09d29-7cd6-4681-a678-6ab9aaa026a6  team      team0
+eno8            4d0be2df-c5da-41c9-bfd5-8f8cc6ad6e74  ethernet  eno8
+team0-ens3f0    2c54fa8b-e63a-46c5-9fd3-9047784bb9cc  ethernet  ens3f0
+team0-ens3f1d1  97341b21-6def-4288-b380-ac3a3b964076  ethernet  ens3f1d1
+eno5            6f1356e3-4cf8-4d04-8569-8f27a61a0f46  ethernet  --
+eno6            54b39264-6645-4337-9c45-d81bf4a9e8d4  ethernet  --
+eno7            f5d5497c-3d67-4eb8-a1a2-12d9adcaca74  ethernet  --
+ens3f0          0be449f6-5011-4770-a5ac-a6bad4498449  ethernet  --
+ens3f1d1        2d0b2436-9148-4eb4-ac4b-ba00c1494c58  ethernet  --
+[root@zhongtaidb2 ~]# ifconfig
+eno5: flags=4099<UP,BROADCAST,MULTICAST>  mtu 1500
+        ether d4:f5:ef:38:96:1c  txqueuelen 1000  (Ethernet)
+        RX packets 0  bytes 0 (0.0 B)
+        RX errors 0  dropped 0  overruns 0  frame 0
+        TX packets 0  bytes 0 (0.0 B)
+        TX errors 0  dropped 0 overruns 0  carrier 0  collisions 0
+        device memory 0xe6f00000-e6ffffff
+
+eno6: flags=4099<UP,BROADCAST,MULTICAST>  mtu 1500
+        ether d4:f5:ef:38:96:1d  txqueuelen 1000  (Ethernet)
+        RX packets 0  bytes 0 (0.0 B)
+        RX errors 0  dropped 0  overruns 0  frame 0
+        TX packets 0  bytes 0 (0.0 B)
+        TX errors 0  dropped 0 overruns 0  carrier 0  collisions 0
+        device memory 0xe6e00000-e6efffff
+
+eno7: flags=4099<UP,BROADCAST,MULTICAST>  mtu 1500
+        ether d4:f5:ef:38:96:1e  txqueuelen 1000  (Ethernet)
+        RX packets 0  bytes 0 (0.0 B)
+        RX errors 0  dropped 0  overruns 0  frame 0
+        TX packets 0  bytes 0 (0.0 B)
+        TX errors 0  dropped 0 overruns 0  carrier 0  collisions 0
+        device memory 0xe6d00000-e6dfffff
+
+eno8: flags=4163<UP,BROADCAST,RUNNING,MULTICAST>  mtu 1500
+        inet 10.10.10.12  netmask 255.255.255.0  broadcast 10.10.10.255
+        inet6 fe80::1504:5d2:edc0:c974  prefixlen 64  scopeid 0x20<link>
+        ether d4:f5:ef:38:96:1f  txqueuelen 1000  (Ethernet)
+        RX packets 124  bytes 10842 (10.5 KiB)
+        RX errors 0  dropped 0  overruns 0  frame 0
+        TX packets 115  bytes 19599 (19.1 KiB)
+        TX errors 0  dropped 0 overruns 0  carrier 0  collisions 0
+        device memory 0xe6c00000-e6cfffff
+
+ens3f0: flags=4163<UP,BROADCAST,RUNNING,MULTICAST>  mtu 1500
+        ether f4:03:43:f0:db:60  txqueuelen 1000  (Ethernet)
+        RX packets 7620522  bytes 5195158075 (4.8 GiB)
+        RX errors 0  dropped 0  overruns 0  frame 0
+        TX packets 224820  bytes 16536892 (15.7 MiB)
+        TX errors 0  dropped 0 overruns 0  carrier 0  collisions 0
+
+ens3f1d1: flags=4163<UP,BROADCAST,RUNNING,MULTICAST>  mtu 1500
+        ether f4:03:43:f0:db:60  txqueuelen 1000  (Ethernet)
+        RX packets 4271914  bytes 256315926 (244.4 MiB)
+        RX errors 0  dropped 0  overruns 0  frame 0
+        TX packets 0  bytes 0 (0.0 B)
+        TX errors 0  dropped 0 overruns 0  carrier 0  collisions 0
+
+lo: flags=73<UP,LOOPBACK,RUNNING>  mtu 65536
+        inet 127.0.0.1  netmask 255.0.0.0
+        inet6 ::1  prefixlen 128  scopeid 0x10<host>
+        loop  txqueuelen 1000  (Local Loopback)
+        RX packets 753  bytes 65613 (64.0 KiB)
+        RX errors 0  dropped 0  overruns 0  frame 0
+        TX packets 753  bytes 65613 (64.0 KiB)
+        TX errors 0  dropped 0 overruns 0  carrier 0  collisions 0
+
+team0: flags=4163<UP,BROADCAST,RUNNING,MULTICAST>  mtu 1500
+        inet 192.168.203.107  netmask 255.255.255.0  broadcast 192.168.203.255
+        inet6 fe80::9089:3568:982e:f299  prefixlen 64  scopeid 0x20<link>
+        ether f4:03:43:f0:db:60  txqueuelen 1000  (Ethernet)
+        RX packets 4609193  bytes 4931881827 (4.5 GiB)
+        RX errors 0  dropped 333  overruns 0  frame 0
+        TX packets 224792  bytes 16525002 (15.7 MiB)
+        TX errors 0  dropped 0 overruns 0  carrier 0  collisions 0
+
+[root@zhongtaidb2 ~]# ip a
+1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN group default qlen 1000
+    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
+    inet 127.0.0.1/8 scope host lo
+       valid_lft forever preferred_lft forever
+    inet6 ::1/128 scope host
+       valid_lft forever preferred_lft forever
+2: ens3f0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc mq master team0 state UP group default qlen 1000
+    link/ether f4:03:43:f0:db:60 brd ff:ff:ff:ff:ff:ff
+3: ens3f1d1: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc mq master team0 state UP group default qlen 1000
+    link/ether f4:03:43:f0:db:60 brd ff:ff:ff:ff:ff:ff
+4: eno5: <NO-CARRIER,BROADCAST,MULTICAST,UP> mtu 1500 qdisc mq state DOWN group default qlen 1000
+    link/ether d4:f5:ef:38:96:1c brd ff:ff:ff:ff:ff:ff
+5: eno6: <NO-CARRIER,BROADCAST,MULTICAST,UP> mtu 1500 qdisc mq state DOWN group default qlen 1000
+    link/ether d4:f5:ef:38:96:1d brd ff:ff:ff:ff:ff:ff
+6: eno7: <NO-CARRIER,BROADCAST,MULTICAST,UP> mtu 1500 qdisc mq state DOWN group default qlen 1000
+    link/ether d4:f5:ef:38:96:1e brd ff:ff:ff:ff:ff:ff
+7: eno8: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc mq state UP group default qlen 1000
+    link/ether d4:f5:ef:38:96:1f brd ff:ff:ff:ff:ff:ff
+    inet 10.10.10.12/24 brd 10.10.10.255 scope global noprefixroute eno8
+       valid_lft forever preferred_lft forever
+    inet6 fe80::1504:5d2:edc0:c974/64 scope link noprefixroute
+       valid_lft forever preferred_lft forever
+8: team0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue state UP group default qlen 1000
+    link/ether f4:03:43:f0:db:60 brd ff:ff:ff:ff:ff:ff
+    inet 192.168.203.107/24 brd 192.168.203.255 scope global noprefixroute team0
+       valid_lft forever preferred_lft forever
+    inet6 fe80::9089:3568:982e:f299/64 scope link noprefixroute
+       valid_lft forever preferred_lft forever
+[root@zhongtaidb2 ~]# ip route
+default via 192.168.203.1 dev team0 proto static metric 350
+10.10.10.0/24 dev eno8 proto kernel scope link src 10.10.10.12 metric 102
+192.168.203.0/24 dev team0 proto kernel scope link src 192.168.203.107 metric 350
+[root@zhongtaidb2 ~]# route -n
+Kernel IP routing table
+Destination     Gateway         Genmask         Flags Metric Ref    Use Iface
+0.0.0.0         192.168.203.1   0.0.0.0         UG    350    0        0 team0
+10.10.10.0      0.0.0.0         255.255.255.0   U     102    0        0 eno8
+192.168.203.0   0.0.0.0         255.255.255.0   U     350    0        0 team0
+
+[root@zhongtaidb2 ~]# cd /etc/sysconfig/network-scripts/
+[root@zhongtaidb2 network-scripts]# ls
+ifcfg-eno5            ifdown-bnep      ifdown-tunnel  ifup-ppp
+ifcfg-eno6            ifdown-eth       ifup           ifup-routes
+ifcfg-eno7            ifdown-ippp      ifup-aliases   ifup-sit
+ifcfg-eno8            ifdown-ipv6      ifup-bnep      ifup-Team
+ifcfg-ens3f0          ifdown-isdn      ifup-eth       ifup-TeamPort
+ifcfg-ens3f1d1        ifdown-post      ifup-ippp      ifup-tunnel
+ifcfg-lo              ifdown-ppp       ifup-ipv6      ifup-wireless
+ifcfg-team0           ifdown-routes    ifup-isdn      init.ipv6-global
+ifcfg-team0-ens3f0    ifdown-sit       ifup-plip      network-functions
+ifcfg-team0-ens3f1d1  ifdown-Team      ifup-plusb     network-functions-ipv6
+ifdown                ifdown-TeamPort  ifup-post
+[root@zhongtaidb2 network-scripts]# cat ifcfg-team0
+TEAM_CONFIG="{\"runner\":{\"name\":\"activebackup\"}}"
+PROXY_METHOD=none
+BROWSER_ONLY=no
+BOOTPROTO=none
+IPADDR=192.168.203.107
+PREFIX=24
+GATEWAY=192.168.203.1
+DEFROUTE=yes
+IPV4_FAILURE_FATAL=no
+IPV6INIT=yes
+IPV6_AUTOCONF=yes
+IPV6_DEFROUTE=yes
+IPV6_FAILURE_FATAL=no
+IPV6_ADDR_GEN_MODE=stable-privacy
+NAME=team0
+UUID=6df09d29-7cd6-4681-a678-6ab9aaa026a6
+DEVICE=team0
+ONBOOT=yes
+DEVICETYPE=Team
+MACADDR=f4:03:43:f0:db:60
+[root@zhongtaidb2 network-scripts]# cat ifcfg-team0-ens3f0
+NAME=team0-ens3f0
+UUID=2c54fa8b-e63a-46c5-9fd3-9047784bb9cc
+DEVICE=ens3f0
+ONBOOT=yes
+TEAM_MASTER=team0
+DEVICETYPE=TeamPort
+[root@zhongtaidb2 network-scripts]# cat ifcfg-team0-ens3f1d1
+NAME=team0-ens3f1d1
+UUID=97341b21-6def-4288-b380-ac3a3b964076
+DEVICE=ens3f1d1
+ONBOOT=yes
+TEAM_MASTER=team0
+DEVICETYPE=TeamPort
+[root@zhongtaidb2 network-scripts]# cat ifcfg-eno8
+TYPE=Ethernet
+PROXY_METHOD=none
+BROWSER_ONLY=no
+BOOTPROTO=none
+DEFROUTE=yes
+IPV4_FAILURE_FATAL=no
+IPV6INIT=yes
+IPV6_AUTOCONF=yes
+IPV6_DEFROUTE=yes
+IPV6_FAILURE_FATAL=no
+IPV6_ADDR_GEN_MODE=stable-privacy
+NAME=eno8
+UUID=4d0be2df-c5da-41c9-bfd5-8f8cc6ad6e74
+DEVICE=eno8
+ONBOOT=yes
+IPADDR=10.10.10.12
+PREFIX=24
+
+[root@zhongtaidb2 ~]# teamdctl team0 state
+setup:
+  runner: activebackup
+ports:
+  ens3f0
+    link watches:
+      link summary: up
+      instance[link_watch_0]:
+        name: ethtool
+        link: up
+        down count: 0
+  ens3f1d1
+    link watches:
+      link summary: up
+      instance[link_watch_0]:
+        name: ethtool
+        link: up
+        down count: 0
+runner:
+  active port: ens3f0
 ```
 ### 1.4. 操作系统配置部分
 
@@ -163,6 +557,8 @@ GATEWAY=192.168.97.3
 ```bash
 systemctl stop firewalld
 systemctl disabled firewalld
+
+systemctl status firewalld
 ```
 #关闭 selinux
 ```bash
@@ -170,8 +566,60 @@ sed -i 's/SELINUX=enforcing/SELINUX=disabled/g' /etc/selinux/config
 
 setenforce 0
 ```
+### 1.5.多路径配置情况
+```  
+[root@zhongtaidb2 ~]# cat /etc/multipath/
+bindings  wwids     
+[root@zhongtaidb2 ~]# cat /etc/multipath/bindings 
+# Multipath bindings, Version : 1.0
+# NOTE: this file is automatically maintained by the multipath program.
+# You should not need to edit this file in normal circumstances.
+#
+# Format:
+# alias wwid
+#
+mpatha 24c740a67e89393fa6c9ce90079a4df08
+mpathb 2bf57071b2488dae06c9ce90079a4df08
+mpathc 2ee6c414e797cb16f6c9ce90079a4df08
+mpathd 2d96d1c2c86f4f6d26c9ce90079a4df08
+mpathe 2086fa4c938d839c66c9ce90079a4df08
+mpathf 27b44daa76accbc526c9ce90079a4df08
+mpathg 2aa67dbb0c9c0573b6c9ce90079a4df08
+[root@zhongtaidb2 ~]# cat /etc/multipath/wwids 
+# Multipath wwids, Version : 1.0
+# NOTE: This file is automatically maintained by multipath and multipathd.
+# You should not need to edit this file in normal circumstances.
+#
+# Valid WWIDs:
+mpatha 24c740a67e89393fa6c9ce90079a4df08
+mpathb 2bf57071b2488dae06c9ce90079a4df08
+mpathc 2ee6c414e797cb16f6c9ce90079a4df08
+mpathd 2d96d1c2c86f4f6d26c9ce90079a4df08
+mpathe 2086fa4c938d839c66c9ce90079a4df08
+mpathf 27b44daa76accbc526c9ce90079a4df08
+mpathg 2aa67dbb0c9c0573b6c9ce90079a4df08
 
-## 2.准备工作（oracle1 与 oracle2 同时配置）
+[root@zhongtaidb2 ~]# sfdisk -s|grep mpath
+/dev/mapper/mpatha: 104857600
+/dev/mapper/mpathb: 104857600
+/dev/mapper/mpathc: 104857600
+/dev/mapper/mpathd: 2147483648
+/dev/mapper/mpathe: 2147483648
+/dev/mapper/mpathf: 2147483648
+/dev/mapper/mpathg: 2147483648
+
+[root@zhongtaidb1 ~]# multipathd show maps
+name   sysfs uuid
+mpatha dm-2  24c740a67e89393fa6c9ce90079a4df08
+mpathb dm-3  2bf57071b2488dae06c9ce90079a4df08
+mpathc dm-4  2ee6c414e797cb16f6c9ce90079a4df08
+mpathd dm-5  2d96d1c2c86f4f6d26c9ce90079a4df08
+mpathe dm-6  2086fa4c938d839c66c9ce90079a4df08
+mpathf dm-7  27b44daa76accbc526c9ce90079a4df08
+mpathg dm-8  2aa67dbb0c9c0573b6c9ce90079a4df08
+```
+
+## 2.准备工作（zhongtaidb1 与 zhongtaidb2 同时配置）
 
 ### 2.1. 配置本地 yum 源--可选
 
@@ -246,7 +694,8 @@ yum install -y libXi
 yum install -y libXi.i686
 yum install -y make
 yum install -y sysstat
-yum install -y unixODBCyum install -y unixODBC-devel
+yum install -y unixODBC
+yum install -y unixODBC-devel
 yum install -y readline
 yum install -y libtermcap-devel
 yum install -y bc
@@ -270,6 +719,8 @@ yum install -y python-rtslib
 yum install -y python-six
 yum install -y targetcli
 yum install -y smartmontools
+
+rpm -qa   binutils  compat-libcap1  compat-libstdc++-33    gcc  gcc-c++  glibc    glibc-devel    ksh  libgcc   libstdc++    libstdc++-devel   libaio   libaio-devel    libXext   libXtst  libX11    libXau   libxcb    libXi   make  sysstat  unixODBC   unixODBC-devel  readline  libtermcap-devel  bc  compat-libstdc++  elfutils-libelf  elfutils-libelf-devel  fontconfig-devel  libXi  libXtst  libXrender  libXrender-devel  libgcc  librdmacm-devel  libstdc++  libstdc++-devel  net-tools  nfs-utils  python  python-configshell  python-rtslib  python-six  targetcli  smartmontools
 ```
 ### 2.3. 创建用户
 
@@ -297,25 +748,25 @@ passwd grid
 #hosts 文件配置
 #hostname
 ```bash
-#oracle1
-hostnamectl set-hostname oracle1
-#oracle2
-hostnamectl set-hostname oracle2
+#zhongtaidb1
+hostnamectl set-hostname zhongtaidb1
+#zhongtaidb2
+hostnamectl set-hostname zhongtaidb2
 
 cat >> /etc/hosts <<EOF
-#public ip ens32
-210.46.97.93 oracle1
-210.46.97.94 oracle2
+#public ip team0
+192.168.203.106 zhongtaidb1
+192.168.203.107 zhongtaidb2
 #vip
-210.46.97.96 oracle1-vip
-210.46.97.97 oracle2-vip
-#private ip ens160
-192.168.97.93 oracle1-prv
-192.168.97.94 oracle2-prv
+192.168.203.108 zhongtaidb1-vip
+192.168.203.109 zhongtaidb2-vip
+#private ip eno8
+10.10.10.11 zhongtaidb1-prv
+10.10.10.12 zhongtaidb2-prv
 #scan ip
-210.46.97.98 rac-scan
-
+192.168.203.111 rac-scan
 EOF
+
 ```
 ### 2.5. 禁用 NTP
 
@@ -331,11 +782,16 @@ systemctl disable chronyd
 systemctl stop chronyd
 
 systemctl status chronyd
+
+ntpdate pool.ntp.org
 ```
 #时区设置
 ```bash
 #查看是否中国时区
 date -R 
+timedatectl
+clockdiff zhongtaidb1
+clockdiff zhongtaidb2
 
 #设置中国时区
 ln -sf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime
@@ -375,6 +831,8 @@ cat >> /etc/security/limits.conf <<EOF
 *            hard    sigpending      90000
 *            soft    nproc           90000
 *            hard    nproc           90000
+*            soft    stack           90000
+*            hard    stack           90000
 
 EOF
 
@@ -387,7 +845,8 @@ cat /sys/kernel/mm/transparent_hugepage/enabled
 #若以上命令执行结果显示为“always”，则表示开启了THP
 
 ##修改方法一，必须知道引导是BIOS还是EFI
-则修改/etc/default/grub，在RUB_CMDLINE_LINUX中添加transparent_hugepage=never
+#可以通过df -h或者cat /etc/fstab查看是否有/boot/efi分区
+#则修改/etc/default/grub，在RUB_CMDLINE_LINUX中添加transparent_hugepage=never
 
 #内容如下
 ```
@@ -398,10 +857,24 @@ GRUB_CMDLINE_LINUX="crashkernel=auto rd.lvm.lv=centos/root rd.lvm.lv=centos/swap
 #On BIOS-based machines
 ```bash
 grub2-mkconfig -o /boot/grub2/grub.cfg
+
+reboot
 ```
 #On UEFI-based machines
 ```bash
 grub2-mkconfig -o /boot/efi/EFI/centos/grub.cfg
+
+reboot
+```
+#日志
+```
+[root@zhongtaidb1 ~]# grub2-mkconfig -o /boot/efi/EFI/centos/grub.cfg
+Generating grub configuration file ...
+Found linux image: /boot/vmlinuz-3.10.0-1160.el7.x86_64
+Found initrd image: /boot/initramfs-3.10.0-1160.el7.x86_64.img
+Found linux image: /boot/vmlinuz-0-rescue-ec5c058bc1d14a888efba10ef3d6c18f
+Found initrd image: /boot/initramfs-0-rescue-ec5c058bc1d14a888efba10ef3d6c18f.img
+done
 ```
 重启节点后，检查配置是否正常：
 ```bash
@@ -439,9 +912,9 @@ cat >> /etc/sysctl.conf  <<EOF
 fs.aio-max-nr = 3145728
 fs.file-max = 6815744
 #shmax/4096
-kernel.shmall = 3774873
-#memory*90%
-kernel.shmmax = 15461882265
+kernel.shmall = 107 374182
+#memory*80%(512*1024*1024*1024*80%)
+kernel.shmmax = 439804651111
 kernel.shmmni = 4096
 kernel.sem = 6144 50331648 4096 8192
 net.ipv4.ip_local_port_range = 9000 65500
@@ -479,7 +952,7 @@ EOF
 ```
 ### 2.8. 配置环境变量
 
-#grid用户，注意oracle1/oracle2两台服务器的区别
+#grid用户，注意zhongtaidb1/zhongtaidb2两台服务器的区别
 
 ```bash
 su - grid
@@ -487,10 +960,10 @@ su - grid
 cat >> /home/grid/.bash_profile <<'EOF'
 
 export ORACLE_SID=+ASM1
-#注意oracle2修改
+#注意zhongtaidb2修改
 #export ORACLE_SID=+ASM2
 export ORACLE_BASE=/u01/app/grid
-export ORACLE_HOME=/u01/app/11.2.0/grid
+export ORACLE_HOME=/u01/app/19.0.0/grid
 export NLS_DATE_FORMAT="yyyy-mm-dd HH24:MI:SS"
 export PATH=.:$PATH:$HOME/bin:$ORACLE_HOME/bin
 export LD_LIBRARY_PATH=$ORACLE_HOME/lib:/lib:/usr/lib
@@ -498,16 +971,16 @@ export CLASSPATH=$ORACLE_HOME/JRE:$ORACLE_HOME/jlib:$ORACLE_HOME/rdbms/jlib
 EOF
 
 ```
-#oracle用户，注意oracle1/oracle2的区别
+#oracle用户，注意zhongtaidb1/zhongtaidb2的区别
 ```bash
 su - oracle
 
 cat >> /home/oracle/.bash_profile <<'EOF'
 
 export ORACLE_BASE=/u01/app/oracle
-export ORACLE_HOME=$ORACLE_BASE/product/11.2.0/db_1
+export ORACLE_HOME=$ORACLE_BASE/product/19.0.0/db_1
 export ORACLE_SID=xydb1
-#注意oracle2修改
+#注意zhongtaidb2修改
 #export ORACLE_SID=xydb2
 export PATH=$ORACLE_HOME/bin:$PATH
 export LD_LIBRARY_PATH=$ORACLE_HOME/bin:/bin:/usr/bin:/usr/local/bin
@@ -517,7 +990,7 @@ EOF
 ```
 ### 2.9. 配置共享磁盘权限
 
-#### 2.9.1.无多路径模式
+#### 2.9.1.无多路径模式---本次为多路径模式
 
 #适用于vsphere平台直接共享存储磁盘
 
@@ -528,7 +1001,7 @@ sfdisk -s
 ```
 #显示如下
 ```
-[root@oracle1 ~]# sfdisk -s
+[root@zhongtaidb1 ~]# sfdisk -s
 /dev/sdc:  20971520
 /dev/sde: 524288000
 /dev/sda: 524288000
@@ -539,15 +1012,15 @@ sfdisk -s
 /dev/mapper/centos-swap:  67108864
 total: 1949298688 blocks
 
-[root@oracle1 ~]# /usr/lib/udev/scsi_id -g -u -d /dev/sdb
+[root@zhongtaidb1 ~]# /usr/lib/udev/scsi_id -g -u -d /dev/sdb
 36000c29cab9f05183d3af0fc44e8022f
-[root@oracle1 ~]# /usr/lib/udev/scsi_id -g -u -d /dev/sdc
+[root@zhongtaidb1 ~]# /usr/lib/udev/scsi_id -g -u -d /dev/sdc
 36000c29aa1f89b4a2054f787a381ec5f
-[root@oracle1 ~]# /usr/lib/udev/scsi_id -g -u -d /dev/sdd
+[root@zhongtaidb1 ~]# /usr/lib/udev/scsi_id -g -u -d /dev/sdd
 36000c293eb6bd488a57530ba68d59381
-[root@oracle1 ~]# /usr/lib/udev/scsi_id -g -u -d /dev/sde
+[root@zhongtaidb1 ~]# /usr/lib/udev/scsi_id -g -u -d /dev/sde
 36000c29e32ff47627698b21515cc5682
-[root@oracle1 ~]# /usr/lib/udev/scsi_id -g -u -d /dev/sdf
+[root@zhongtaidb1 ~]# /usr/lib/udev/scsi_id -g -u -d /dev/sdf
 36000c29b4a664efab3f02294bb39f75c
 ```
 #99-oracle-asmdevices.rules
@@ -573,7 +1046,7 @@ ll /dev|grep asm
 ```
 #显示如下
 ```
-[root@oracle1 ~]# ll /dev|grep asm
+[root@zhongtaidb1 ~]# ll /dev|grep asm
 brw-rw----  1 grid asmadmin   8,  16 Dec 21 16:25 sdb
 brw-rw----  1 grid asmadmin   8,  32 Dec 21 16:25 sdc
 brw-rw----  1 grid asmadmin   8,  48 Dec 21 16:25 sdd
@@ -588,130 +1061,194 @@ brw-rw----  1 grid asmadmin   8,  80 Dec 21 16:25 sdf
 #存储uuid
 ```
 以下是oracle 卷的序列号，请按照这个顺序使用，跟存储上的名称才能对应。
-data1(2TB): e25b665dc06369916c9ce900b6fab6bc
-/dev/sdd  /dev/sdp  /dev/sdt  /dev/sdx
-data2(2TB): cdc2ff0f5bc698456c9ce900b6fab6bc
-/dev/sdaa  /dev/sdae  /dev/sdg  /dev/sdk
-FRA(2TB): fc7ffd18baba312e6c9ce900b6fab6bc
-/dev/sdab  /dev/sdaf  /dev/sdh  /dev/sdl
-LOG1(150GB): 6f1134c7f5aeac0d6c9ce900b6fab6bc
-/dev/sde  /dev/sdq  /dev/sdu  /dev/sdy
-LGO2(150GB): f8505ff366f3732a6c9ce900b6fab6bc
-/dev/sdac  /dev/sdag  /dev/sdi  /dev/sdm
-OCR1(100GB): 11e8f142da86728d6c9ce900b6fab6bc
-/dev/sdb   /dev/sdn  /dev/sdr  /dev/sdv
-OCR2(100GB): c95d9e2bbe0ff5906c9ce900b6fab6bc
-/dev/sdc  /dev/sdo  /dev/sds  /dev/sdw
-OCR3(100GB): b38e62246b6fc4fb6c9ce900b6fab6bc
-/dev/sdad  /dev/sdf  /dev/sdj  /dev/sdz
+data1(2TB): 2d96d1c2c86f4f6d26c9ce90079a4df08
+/dev/sdf  /dev/sdm  /dev/sdt  /dev/sdaa
+data2(2TB): 2086fa4c938d839c66c9ce90079a4df08
+/dev/sdg  /dev/sdn  /dev/sdu  /dev/sdab
+data3(2TB): 27b44daa76accbc526c9ce90079a4df08
+/dev/sdh  /dev/sdao  /dev/sdv  /dev/sdac
+FRA(2TB): 2f8505ff366f3732a6c9ce900b6fab6bc
+/dev/sdi  /dev/sdp  /dev/sdw  /dev/sdad
+OCR1(100GB): 24c740a67e89393fa6c9ce90079a4df08
+/dev/sdc   /dev/sdj  /dev/sdq  /dev/sdx
+OCR2(100GB): 2bf57071b2488dae06c9ce90079a4df08
+/dev/sdd  /dev/sdk  /dev/sdr  /dev/sdy
+OCR3(100GB): 2ee6c414e797cb16f6c9ce90079a4df08
+/dev/sde  /dev/sdl  /dev/sds  /dev/sdz
 ```
 #通过scsi_id检查
 ```
-[root@oracle1 ~]# sfdisk -s
-/dev/sda: 585531392
-/dev/mapper/centos-root: 516321280
-/dev/mapper/centos-swap:  67108864
-/dev/sdb: 104857600
-/dev/sdc: 2147483648
-/dev/sdd: 2147483648
-/dev/sde: 157286400
-/dev/sdf: 104857600
+[root@zhongtaidb1 ~]# sfdisk -s
+/dev/sda: 468818776
+/dev/sdc: 104857600
+/dev/sdd: 104857600
+/dev/sde: 104857600
+/dev/sdf: 2147483648
 /dev/sdg: 2147483648
 /dev/sdh: 2147483648
-/dev/sdi: 157286400
+/dev/sdi: 2147483648
+/dev/mapper/centos-root: 419430400
 /dev/sdj: 104857600
+/dev/mapper/centos-swap:  33554432
 /dev/sdk: 104857600
-/dev/sdl: 2147483648
-/dev/sdm: 157286400
-/dev/sdn: 104857600
-/dev/sdo: 104857600
+/dev/sdl: 104857600
+/dev/sdm: 2147483648
+/dev/sdn: 2147483648
+/dev/sdo: 2147483648
 /dev/sdp: 2147483648
-/dev/sdq: 157286400
+/dev/mapper/mpatha: 104857600
+/dev/mapper/mpathb: 104857600
+/dev/mapper/mpathc: 104857600
+/dev/mapper/mpathd: 2147483648
+/dev/mapper/mpathe: 2147483648
+/dev/mapper/mpathf: 2147483648
+/dev/mapper/mpathg: 2147483648
+/dev/sdq: 104857600
 /dev/sdr: 104857600
 /dev/sds: 104857600
 /dev/sdt: 2147483648
-/dev/sdu: 157286400
-/dev/sdv: 104857600
+/dev/sdu: 2147483648
+/dev/sdv: 2147483648
 /dev/sdw: 2147483648
-/dev/sdx: 2147483648
-/dev/sdy: 157286400
+/dev/sdx: 104857600
+/dev/sdy: 104857600
 /dev/sdz: 104857600
 /dev/sdaa: 2147483648
 /dev/sdab: 2147483648
-/dev/sdac: 157286400
-/dev/sdad: 104857600
-/dev/sdae: 104857600
-/dev/sdaf: 2147483648
-/dev/sdag: 157286400
-total: 29455347712 blocks
+/dev/sdac: 2147483648
+/dev/sdad: 2147483648
+/dev/loop0:   4601856
+total: 45448942424 blocks
 
-[root@oracle1 ~]# /usr/lib/udev/scsi_id -g -u -d /dev/sdb
-2b38e62246b6fc4fb6c9ce900b6fab6bc
-[root@oracle1 ~]# /usr/lib/udev/scsi_id -g -u -d /dev/sdc
-2cdc2ff0f5bc698456c9ce900b6fab6bc
-[root@oracle1 ~]# /usr/lib/udev/scsi_id -g -u -d /dev/sdd
-2fc7ffd18baba312e6c9ce900b6fab6bc
-[root@oracle1 ~]# /usr/lib/udev/scsi_id -g -u -d /dev/sde
-2f8505ff366f3732a6c9ce900b6fab6bc
-[root@oracle1 ~]# /usr/lib/udev/scsi_id -g -u -d /dev/sdf
-2b38e62246b6fc4fb6c9ce900b6fab6bc
-[root@oracle1 ~]# /usr/lib/udev/scsi_id -g -u -d /dev/sdg
-2cdc2ff0f5bc698456c9ce900b6fab6bc
-[root@oracle1 ~]# /usr/lib/udev/scsi_id -g -u -d /dev/sdh
-2fc7ffd18baba312e6c9ce900b6fab6bc
-[root@oracle1 ~]# /usr/lib/udev/scsi_id -g -u -d /dev/sdi
-2f8505ff366f3732a6c9ce900b6fab6bc
-[root@oracle1 ~]# /usr/lib/udev/scsi_id -g -u -d /dev/sdj
-211e8f142da86728d6c9ce900b6fab6bc
-[root@oracle1 ~]# /usr/lib/udev/scsi_id -g -u -d /dev/sdk
-2c95d9e2bbe0ff5906c9ce900b6fab6bc
-[root@oracle1 ~]# /usr/lib/udev/scsi_id -g -u -d /dev/sdl
-2e25b665dc06369916c9ce900b6fab6bc
-[root@oracle1 ~]# /usr/lib/udev/scsi_id -g -u -d /dev/sdm
-26f1134c7f5aeac0d6c9ce900b6fab6bc
-[root@oracle1 ~]# /usr/lib/udev/scsi_id -g -u -d /dev/sdn
-211e8f142da86728d6c9ce900b6fab6bc
-[root@oracle1 ~]# /usr/lib/udev/scsi_id -g -u -d /dev/sdo
-2c95d9e2bbe0ff5906c9ce900b6fab6bc
-[root@oracle1 ~]# /usr/lib/udev/scsi_id -g -u -d /dev/sdp
-2e25b665dc06369916c9ce900b6fab6bc
-[root@oracle1 ~]# /usr/lib/udev/scsi_id -g -u -d /dev/sdq
-26f1134c7f5aeac0d6c9ce900b6fab6bc
-[root@oracle1 ~]# /usr/lib/udev/scsi_id -g -u -d /dev/sdr
-211e8f142da86728d6c9ce900b6fab6bc
-[root@oracle1 ~]# /usr/lib/udev/scsi_id -g -u -d /dev/sds
-2c95d9e2bbe0ff5906c9ce900b6fab6bc
-[root@oracle1 ~]# /usr/lib/udev/scsi_id -g -u -d /dev/sdt
-2e25b665dc06369916c9ce900b6fab6bc
-[root@oracle1 ~]# /usr/lib/udev/scsi_id -g -u -d /dev/sdu
-26f1134c7f5aeac0d6c9ce900b6fab6bc
-[root@oracle1 ~]# /usr/lib/udev/scsi_id -g -u -d /dev/sdv
-2b38e62246b6fc4fb6c9ce900b6fab6bc
-[root@oracle1 ~]# /usr/lib/udev/scsi_id -g -u -d /dev/sdw
-2cdc2ff0f5bc698456c9ce900b6fab6bc
-[root@oracle1 ~]# /usr/lib/udev/scsi_id -g -u -d /dev/sdx
-2fc7ffd18baba312e6c9ce900b6fab6bc
-[root@oracle1 ~]# /usr/lib/udev/scsi_id -g -u -d /dev/sdy
-2f8505ff366f3732a6c9ce900b6fab6bc
-[root@oracle1 ~]# /usr/lib/udev/scsi_id -g -u -d /dev/sdz
-2b38e62246b6fc4fb6c9ce900b6fab6bc
-[root@oracle1 ~]# /usr/lib/udev/scsi_id -g -u -d /dev/sdaa
-2cdc2ff0f5bc698456c9ce900b6fab6bc
-[root@oracle1 ~]# /usr/lib/udev/scsi_id -g -u -d /dev/sdab
-2fc7ffd18baba312e6c9ce900b6fab6bc
-[root@oracle1 ~]# /usr/lib/udev/scsi_id -g -u -d /dev/sdac
-2f8505ff366f3732a6c9ce900b6fab6bc
-[root@oracle1 ~]# /usr/lib/udev/scsi_id -g -u -d /dev/sdad
-211e8f142da86728d6c9ce900b6fab6bc
-[root@oracle1 ~]# /usr/lib/udev/scsi_id -g -u -d /dev/sdae
-2c95d9e2bbe0ff5906c9ce900b6fab6bc
-[root@oracle1 ~]# /usr/lib/udev/scsi_id -g -u -d /dev/sdaf
-2e25b665dc06369916c9ce900b6fab6bc
-[root@oracle1 ~]# /usr/lib/udev/scsi_id -g -u -d /dev/sdag
-26f1134c7f5aeac0d6c9ce900b6fab6bc
+[root@zhongtaidb1 ~]# /usr/lib/udev/scsi_id -g -u -d /dev/sdc
+24c740a67e89393fa6c9ce90079a4df08
+[root@zhongtaidb1 ~]# /usr/lib/udev/scsi_id -g -u -d /dev/sdd
+2bf57071b2488dae06c9ce90079a4df08
+[root@zhongtaidb1 ~]# /usr/lib/udev/scsi_id -g -u -d /dev/sde
+2ee6c414e797cb16f6c9ce90079a4df08
+[root@zhongtaidb1 ~]# /usr/lib/udev/scsi_id -g -u -d /dev/sdf
+2d96d1c2c86f4f6d26c9ce90079a4df08
+[root@zhongtaidb1 ~]# /usr/lib/udev/scsi_id -g -u -d /dev/sdg
+2086fa4c938d839c66c9ce90079a4df08
+[root@zhongtaidb1 ~]# /usr/lib/udev/scsi_id -g -u -d /dev/sdh
+27b44daa76accbc526c9ce90079a4df08
+[root@zhongtaidb1 ~]# /usr/lib/udev/scsi_id -g -u -d /dev/sdi
+2aa67dbb0c9c0573b6c9ce90079a4df08
+[root@zhongtaidb1 ~]# /usr/lib/udev/scsi_id -g -u -d /dev/sdj
+24c740a67e89393fa6c9ce90079a4df08
+[root@zhongtaidb1 ~]# /usr/lib/udev/scsi_id -g -u -d /dev/sdk
+2bf57071b2488dae06c9ce90079a4df08
+[root@zhongtaidb1 ~]# /usr/lib/udev/scsi_id -g -u -d /dev/sdl
+2ee6c414e797cb16f6c9ce90079a4df08
+[root@zhongtaidb1 ~]# /usr/lib/udev/scsi_id -g -u -d /dev/sdm
+2d96d1c2c86f4f6d26c9ce90079a4df08
+[root@zhongtaidb1 ~]# /usr/lib/udev/scsi_id -g -u -d /dev/sdn
+2086fa4c938d839c66c9ce90079a4df08
+[root@zhongtaidb1 ~]# /usr/lib/udev/scsi_id -g -u -d /dev/sdo
+27b44daa76accbc526c9ce90079a4df08
+[root@zhongtaidb1 ~]# /usr/lib/udev/scsi_id -g -u -d /dev/sdp
+2aa67dbb0c9c0573b6c9ce90079a4df08
+[root@zhongtaidb1 ~]# /usr/lib/udev/scsi_id -g -u -d /dev/sdq
+24c740a67e89393fa6c9ce90079a4df08
+[root@zhongtaidb1 ~]# /usr/lib/udev/scsi_id -g -u -d /dev/sdr
+2bf57071b2488dae06c9ce90079a4df08
+[root@zhongtaidb1 ~]# /usr/lib/udev/scsi_id -g -u -d /dev/sds
+2ee6c414e797cb16f6c9ce90079a4df08
+[root@zhongtaidb1 ~]# /usr/lib/udev/scsi_id -g -u -d /dev/sdt
+2d96d1c2c86f4f6d26c9ce90079a4df08
+[root@zhongtaidb1 ~]# /usr/lib/udev/scsi_id -g -u -d /dev/sdu
+2086fa4c938d839c66c9ce90079a4df08
+[root@zhongtaidb1 ~]# /usr/lib/udev/scsi_id -g -u -d /dev/sdv
+27b44daa76accbc526c9ce90079a4df08
+[root@zhongtaidb1 ~]# /usr/lib/udev/scsi_id -g -u -d /dev/sdw
+2aa67dbb0c9c0573b6c9ce90079a4df08
+[root@zhongtaidb1 ~]# /usr/lib/udev/scsi_id -g -u -d /dev/sdx
+24c740a67e89393fa6c9ce90079a4df08
+[root@zhongtaidb1 ~]# /usr/lib/udev/scsi_id -g -u -d /dev/sdy
+2bf57071b2488dae06c9ce90079a4df08
+[root@zhongtaidb1 ~]# /usr/lib/udev/scsi_id -g -u -d /dev/sdz
+2ee6c414e797cb16f6c9ce90079a4df08
+[root@zhongtaidb1 ~]# /usr/lib/udev/scsi_id -g -u -d /dev/sdaa
+2d96d1c2c86f4f6d26c9ce90079a4df08
+[root@zhongtaidb1 ~]# /usr/lib/udev/scsi_id -g -u -d /dev/sdab
+2086fa4c938d839c66c9ce90079a4df08
+[root@zhongtaidb1 ~]# /usr/lib/udev/scsi_id -g -u -d /dev/sdac
+27b44daa76accbc526c9ce90079a4df08
+[root@zhongtaidb1 ~]# /usr/lib/udev/scsi_id -g -u -d /dev/sdad
+2aa67dbb0c9c0573b6c9ce90079a4df08
+[root@zhongtaidb1 ~]#
 
 #通过循环来获取
 for i in `cat /proc/partitions |awk {'print $4'} |grep sd`; do echo "Device: $i WWID: `/usr/lib/udev/scsi_id --page=0x83 --whitelisted --device=/dev/$i` "; done |sort -k4
+
+[root@zhongtaidb1 ~]# for i in `cat /proc/partitions |awk {'print $4'} |grep sd`; do echo "Device: $i WWID: `/usr/lib/udev/scsi_id --page=0x83 --whitelisted --device=/dev/$i` "; done |sort -k4
+Device: sdab WWID: 2086fa4c938d839c66c9ce90079a4df08
+Device: sdg WWID: 2086fa4c938d839c66c9ce90079a4df08
+Device: sdn WWID: 2086fa4c938d839c66c9ce90079a4df08
+Device: sdu WWID: 2086fa4c938d839c66c9ce90079a4df08
+Device: sdc WWID: 24c740a67e89393fa6c9ce90079a4df08
+Device: sdj WWID: 24c740a67e89393fa6c9ce90079a4df08
+Device: sdq WWID: 24c740a67e89393fa6c9ce90079a4df08
+Device: sdx WWID: 24c740a67e89393fa6c9ce90079a4df08
+Device: sdac WWID: 27b44daa76accbc526c9ce90079a4df08
+Device: sdh WWID: 27b44daa76accbc526c9ce90079a4df08
+Device: sdo WWID: 27b44daa76accbc526c9ce90079a4df08
+Device: sdv WWID: 27b44daa76accbc526c9ce90079a4df08
+Device: sdad WWID: 2aa67dbb0c9c0573b6c9ce90079a4df08
+Device: sdi WWID: 2aa67dbb0c9c0573b6c9ce90079a4df08
+Device: sdp WWID: 2aa67dbb0c9c0573b6c9ce90079a4df08
+Device: sdw WWID: 2aa67dbb0c9c0573b6c9ce90079a4df08
+Device: sdd WWID: 2bf57071b2488dae06c9ce90079a4df08
+Device: sdk WWID: 2bf57071b2488dae06c9ce90079a4df08
+Device: sdr WWID: 2bf57071b2488dae06c9ce90079a4df08
+Device: sdy WWID: 2bf57071b2488dae06c9ce90079a4df08
+Device: sdaa WWID: 2d96d1c2c86f4f6d26c9ce90079a4df08
+Device: sdf WWID: 2d96d1c2c86f4f6d26c9ce90079a4df08
+Device: sdm WWID: 2d96d1c2c86f4f6d26c9ce90079a4df08
+Device: sdt WWID: 2d96d1c2c86f4f6d26c9ce90079a4df08
+Device: sde WWID: 2ee6c414e797cb16f6c9ce90079a4df08
+Device: sdl WWID: 2ee6c414e797cb16f6c9ce90079a4df08
+Device: sds WWID: 2ee6c414e797cb16f6c9ce90079a4df08
+Device: sdz WWID: 2ee6c414e797cb16f6c9ce90079a4df08
+Device: sda1 WWID: 3600508b1001c18a54136918e59858bef
+Device: sda2 WWID: 3600508b1001c18a54136918e59858bef
+Device: sda3 WWID: 3600508b1001c18a54136918e59858bef
+Device: sda WWID: 3600508b1001c18a54136918e59858bef
+
+[root@zhongtaidb1 ~]# lsscsi -i
+[0:0:0:0]    disk    Generic- SD/MMC CRW       1.00  /dev/sdb   Generic-_SD_MMC_CRW_29203008282014000-0:0
+[1:0:0:0]    disk    Nimble   Server           1.0   /dev/sdc   24c740a67e89393fa6c9ce90079a4df08
+[1:0:0:1]    disk    Nimble   Server           1.0   /dev/sdd   2bf57071b2488dae06c9ce90079a4df08
+[1:0:0:2]    disk    Nimble   Server           1.0   /dev/sde   2ee6c414e797cb16f6c9ce90079a4df08
+[1:0:0:3]    disk    Nimble   Server           1.0   /dev/sdf   2d96d1c2c86f4f6d26c9ce90079a4df08
+[1:0:0:4]    disk    Nimble   Server           1.0   /dev/sdg   2086fa4c938d839c66c9ce90079a4df08
+[1:0:0:5]    disk    Nimble   Server           1.0   /dev/sdh   27b44daa76accbc526c9ce90079a4df08
+[1:0:0:6]    disk    Nimble   Server           1.0   /dev/sdi   2aa67dbb0c9c0573b6c9ce90079a4df08
+[1:0:1:0]    disk    Nimble   Server           1.0   /dev/sdj   24c740a67e89393fa6c9ce90079a4df08
+[1:0:1:1]    disk    Nimble   Server           1.0   /dev/sdk   2bf57071b2488dae06c9ce90079a4df08
+[1:0:1:2]    disk    Nimble   Server           1.0   /dev/sdl   2ee6c414e797cb16f6c9ce90079a4df08
+[1:0:1:3]    disk    Nimble   Server           1.0   /dev/sdm   2d96d1c2c86f4f6d26c9ce90079a4df08
+[1:0:1:4]    disk    Nimble   Server           1.0   /dev/sdn   2086fa4c938d839c66c9ce90079a4df08
+[1:0:1:5]    disk    Nimble   Server           1.0   /dev/sdo   27b44daa76accbc526c9ce90079a4df08
+[1:0:1:6]    disk    Nimble   Server           1.0   /dev/sdp   2aa67dbb0c9c0573b6c9ce90079a4df08
+[2:0:0:0]    enclosu HPE      Smart Adapter    3.53  -          -
+[2:1:0:0]    disk    HPE      LOGICAL VOLUME   3.53  /dev/sda   3600508b1001c18a54136918e59858bef
+[2:2:0:0]    storage HPE      P408i-a SR Gen10 3.53  -          -
+[3:0:0:0]    disk    Nimble   Server           1.0   /dev/sdq   24c740a67e89393fa6c9ce90079a4df08
+[3:0:0:1]    disk    Nimble   Server           1.0   /dev/sdr   2bf57071b2488dae06c9ce90079a4df08
+[3:0:0:2]    disk    Nimble   Server           1.0   /dev/sds   2ee6c414e797cb16f6c9ce90079a4df08
+[3:0:0:3]    disk    Nimble   Server           1.0   /dev/sdt   2d96d1c2c86f4f6d26c9ce90079a4df08
+[3:0:0:4]    disk    Nimble   Server           1.0   /dev/sdu   2086fa4c938d839c66c9ce90079a4df08
+[3:0:0:5]    disk    Nimble   Server           1.0   /dev/sdv   27b44daa76accbc526c9ce90079a4df08
+[3:0:0:6]    disk    Nimble   Server           1.0   /dev/sdw   2aa67dbb0c9c0573b6c9ce90079a4df08
+[3:0:1:0]    disk    Nimble   Server           1.0   /dev/sdx   24c740a67e89393fa6c9ce90079a4df08
+[3:0:1:1]    disk    Nimble   Server           1.0   /dev/sdy   2bf57071b2488dae06c9ce90079a4df08
+[3:0:1:2]    disk    Nimble   Server           1.0   /dev/sdz   2ee6c414e797cb16f6c9ce90079a4df08
+[3:0:1:3]    disk    Nimble   Server           1.0   /dev/sdaa  2d96d1c2c86f4f6d26c9ce90079a4df08
+[3:0:1:4]    disk    Nimble   Server           1.0   /dev/sdab  2086fa4c938d839c66c9ce90079a4df08
+[3:0:1:5]    disk    Nimble   Server           1.0   /dev/sdac  27b44daa76accbc526c9ce90079a4df08
+[3:0:1:6]    disk    Nimble   Server           1.0   /dev/sdad  2aa67dbb0c9c0573b6c9ce90079a4df08
+[root@zhongtaidb1 ~]#
 ```
 
 #配置多路径配置
@@ -721,39 +1258,37 @@ yum install device-mapper-multipath
 systemctl enable multipathd
 
 cat >> /etc/multipath.conf  <<EOF
+blacklist {
+}
 multipaths {
-           multipath {
-                      wwid 211e8f142da86728d6c9ce900b6fab6bc
-                      alias ocr1
-           }
-           multipath {
-                      wwid 2c95d9e2bbe0ff5906c9ce900b6fab6bc
-                      alias ocr2
-           }
-		   multipath {
-                      wwid 2b38e62246b6fc4fb6c9ce900b6fab6bc
-                      alias ocr3
-           }
-           multipath {
-                      wwid 26f1134c7f5aeac0d6c9ce900b6fab6bc
-                      alias log1
-           }
-		   multipath {
-                      wwid 2f8505ff366f3732a6c9ce900b6fab6bc
-                      alias log2
-           }
-           multipath {
-                      wwid 2e25b665dc06369916c9ce900b6fab6bc
-                      alias data1
-           }
-		   multipath {
-                      wwid 2cdc2ff0f5bc698456c9ce900b6fab6bc
-                      alias data2
-           }
-           multipath {
-                      wwid 2fc7ffd18baba312e6c9ce900b6fab6bc
-                      alias fra
-           }
+    multipath {
+            wwid                    24c740a67e89393fa6c9ce90079a4df08
+            alias                   mpatha
+    }
+    multipath {
+            wwid                    2bf57071b2488dae06c9ce90079a4df08
+            alias                   mpathb
+    }
+    multipath {
+            wwid                    2ee6c414e797cb16f6c9ce90079a4df08
+            alias                   mpathc
+    }
+    multipath {
+            wwid                    2d96d1c2c86f4f6d26c9ce90079a4df08
+            alias                   mpathd
+    }
+    multipath {
+            wwid                    2086fa4c938d839c66c9ce90079a4df08
+            alias                   mpathe
+    }
+    multipath {
+            wwid                    27b44daa76accbc526c9ce90079a4df08
+            alias                   mpathf
+    }
+    multipath {
+            wwid                    2aa67dbb0c9c0573b6c9ce90079a4df08
+            alias                   mpathg
+    }
 }
 EOF
 
@@ -762,10 +1297,10 @@ cat >> /etc/udev/rules.d/12-dm-permissions.rules <<'EOF'
 ENV{DM_NAME}=="ocr1",OWNER:="grid",GROUP:="asmadmin",MODE:="660"
 ENV{DM_NAME}=="ocr2",OWNER:="grid",GROUP:="asmadmin",MODE:="660"
 ENV{DM_NAME}=="ocr3",OWNER:="grid",GROUP:="asmadmin",MODE:="660"
-ENV{DM_NAME}=="log1",OWNER:="grid",GROUP:="asmadmin",MODE:="660"
-ENV{DM_NAME}=="log2",OWNER:="grid",GROUP:="asmadmin",MODE:="660"
 ENV{DM_NAME}=="data1",OWNER:="grid",GROUP:="asmadmin",MODE:="660"
 ENV{DM_NAME}=="data2",OWNER:="grid",GROUP:="asmadmin",MODE:="660"
+ENV{DM_NAME}=="data3",OWNER:="grid",GROUP:="asmadmin",MODE:="660"
+ENV{DM_NAME}=="data4",OWNER:="grid",GROUP:="asmadmin",MODE:="660"
 ENV{DM_NAME}=="fra",OWNER:="grid",GROUP:="asmadmin",MODE:="660"
 EOF
 
@@ -794,24 +1329,28 @@ ssh-keygen -t rsa
 
 ssh-keygen -t dsa
 
-#以下只在oracle1执行，逐条执行
+#以下只在zhongtaidb1执行，逐条执行
 cat ~/.ssh/id_rsa.pub >>~/.ssh/authorized_keys
 cat ~/.ssh/id_dsa.pub >>~/.ssh/authorized_keys
 
-ssh oracle2 cat ~/.ssh/id_rsa.pub >>~/.ssh/authorized_keys
+ssh zhongtaidb2 cat ~/.ssh/id_rsa.pub >>~/.ssh/authorized_keys
 
-ssh oracle2 cat ~/.ssh/id_dsa.pub >>~/.ssh/authorized_keys
+ssh zhongtaidb2 cat ~/.ssh/id_dsa.pub >>~/.ssh/authorized_keys
 
-scp ~/.ssh/authorized_keys oracle2:~/.ssh/authorized_keys
+scp ~/.ssh/authorized_keys zhongtaidb2:~/.ssh/authorized_keys
 
-ssh oracle1 date;ssh oracle2 date;ssh oracle1-prv date;ssh oracle2-prv date
+ssh zhongtaidb1 date;ssh zhongtaidb2 date;ssh zhongtaidb1-prv date;ssh zhongtaidb2-prv date
 
-ssh oracle1 date;ssh oracle2 date;ssh oracle1-prv date;ssh oracle2-prv date
+ssh zhongtaidb1 date;ssh zhongtaidb2 date;ssh zhongtaidb1-prv date;ssh zhongtaidb2-prv date
 
-#在oracle2执行
-ssh oracle1 date;ssh oracle2 date;ssh oracle1-prv date;ssh oracle2-prv date
+ssh zhongtaidb1 date -Ins;ssh zhongtaidb2 date -Ins;ssh zhongtaidb1-prv date -Ins;ssh zhongtaidb2-prv date -Ins
 
-ssh oracle1 date;ssh oracle2 date;ssh oracle1-prv date;ssh oracle2-prv date
+#在zhongtaidb2执行
+ssh zhongtaidb1 date;ssh zhongtaidb2 date;ssh zhongtaidb1-prv date;ssh zhongtaidb2-prv date
+
+ssh zhongtaidb1 date;ssh zhongtaidb2 date;ssh zhongtaidb1-prv date;ssh zhongtaidb2-prv date
+
+ssh zhongtaidb1 date -Ins;ssh zhongtaidb2 date -Ins;ssh zhongtaidb1-prv date -Ins;ssh zhongtaidb2-prv date -Ins
 ```
 #oracle用户
 ```bash
@@ -825,245 +1364,310 @@ ssh-keygen -t rsa
 
 ssh-keygen -t dsa
 
-#以下只在oracle1执行，逐条执行
+#以下只在zhongtaidb1执行，逐条执行
 cat ~/.ssh/id_rsa.pub >>~/.ssh/authorized_keys
 cat ~/.ssh/id_dsa.pub >>~/.ssh/authorized_keys
 
-ssh oracle2 cat ~/.ssh/id_rsa.pub >>~/.ssh/authorized_keys
+ssh zhongtaidb2 cat ~/.ssh/id_rsa.pub >>~/.ssh/authorized_keys
 
-ssh oracle2 cat ~/.ssh/id_dsa.pub >>~/.ssh/authorized_keys
+ssh zhongtaidb2 cat ~/.ssh/id_dsa.pub >>~/.ssh/authorized_keys
 
-scp ~/.ssh/authorized_keys oracle2:~/.ssh/authorized_keys
+scp ~/.ssh/authorized_keys zhongtaidb2:~/.ssh/authorized_keys
 
-ssh oracle1 date;ssh oracle2 date;ssh oracle1-prv date;ssh oracle2-prv date
+ssh zhongtaidb1 date;ssh zhongtaidb2 date;ssh zhongtaidb1-prv date;ssh zhongtaidb2-prv date
 
-ssh oracle1 date;ssh oracle2 date;ssh oracle1-prv date;ssh oracle2-prv date
+ssh zhongtaidb1 date;ssh zhongtaidb2 date;ssh zhongtaidb1-prv date;ssh zhongtaidb2-prv date
 
-#在oracle2上执行
-ssh oracle1 date;ssh oracle2 date;ssh oracle1-prv date;ssh oracle2-prv date
+ssh zhongtaidb1 date -Ins;ssh zhongtaidb2 date -Ins;ssh zhongtaidb1-prv date -Ins;ssh zhongtaidb2-prv date -Ins
 
-ssh oracle1 date;ssh oracle2 date;ssh oracle1-prv date;ssh oracle2-prv date
+#在zhongtaidb2上执行
+ssh zhongtaidb1 date;ssh zhongtaidb2 date;ssh zhongtaidb1-prv date;ssh zhongtaidb2-prv date
+
+ssh zhongtaidb1 date;ssh zhongtaidb2 date;ssh zhongtaidb1-prv date;ssh zhongtaidb2-prv date
+
+ssh zhongtaidb1 date -Ins;ssh zhongtaidb2 date -Ins;ssh zhongtaidb1-prv date -Ins;ssh zhongtaidb2-prv date -Ins
 ```
 ### 2.11. 在 grid 安装文件中安装 cvuqdisk
 
 ```bash
-[root@oracle1 rpm]# pwd
-/u01/app/11.2.0/grid/cv/rpm
-[root@oracle1 rpm]# ls
+[root@zhongtaidb1 rpm]# pwd
+/u01/app/19.0.0/grid/cv/rpm
+[root@zhongtaidb1 rpm]# ls
 cvuqdisk-1.0.10-1.rpm
-[root@oracle1 rpm]# rpm -ivh cvuqdisk-1.0.10-1.rpm
+[root@zhongtaidb1 rpm]# rpm -ivh cvuqdisk-1.0.10-1.rpm
 ```
 ## 3 开始安装 grid
 
 ### 3.1. 上传集群软件包
+```bash
+[root@zhongtaidb1 storage]# ll
+-rwxr-xr-x 1 grid oinstall 5.1G Jan 28 15:58 LINUX.X64_193000_grid_home.zip
+```
+### 3.2. 解压 grid 安装包
 
-[root@oracle1 grid]# ll
--rwxr-xr-x 1 grid oinstall 5.1G Jan 28 15:58 LINUX.X64_180000_grid_home.zip
-3.2. 解压 grid 安装包
-在 19C 中需要把 grid 包解压放到 grid 用户下 ORACLE_HOME 目录内
-解压文件到/u01/app/11.2.0/grid
-[grid@oracle2 grid]$ cd /u01/app/11.2.0/grid
-[grid@oracle2 grid]$ unzip LINUX.X64_193000_grid_home.zip
-cd /u01/app/11.2.0/grid/cv/rpm
+```bash
+#在 19C 中需要把 grid 包解压放到 grid 用户下 ORACLE_HOME 目录内(/u01/app/19.0.0/grid)
+[grid@zhongtaidb2 ~]$ cd /u01/app/19.0.0/grid
+[grid@zhongtaidb2 grid]$ unzip -oq /u01/storage/LINUX.X64_193000_grid_home.zip
+
+#安装cvuqdisk包
+cd /u01/app/19.0.0/grid/cv/rpm
 cp cvuqdisk-1.0.10-1.rpm /u01
-scp cvuqdisk-1.0.10-1.rpm oracle2:/u01
+scp cvuqdisk-1.0.10-1.rpm zhongtaidb2:/u01
+
+#两台服务器都安装
 su - root
 cd /u01
 rpm -ivh cvuqdisk-1.0.10-1.rpm
-su - grid
-安装前检查：
- [grid@oracle1 ~]$ cd /u01/app/12.2.0/grid/
-[grid@oracle1 grid]$ ./runcluvfy.sh stage -pre crsinst -n oracle1,oracle2 -verbose
-3.3. 进入 grid 集群软件目录执行安装
-cd /u01/app/12.2.0/grid/
-[grid@oracle1 grid]$ ./gridSetup.sh
-3.4. GUI 安装步骤
-1. 创建新的集群
-2. 配置集群名称以及 scan 名称3. 节点互信
-4. 公网、私网网段选择5. 选择 asm 存储
-6. 选择配置 GIMR7. 这里选择 ocr、 voting file 与 gimr 放在一起
-8. 选择 asm 磁盘组
-9. 输入密码10. 保持默认
-11. 保持默认12. 确认 base 目录13. 这里可以选择自动 root 执行脚本14. 预安装检查
-15. 解决相关依赖后，忽略如下报错16. 如下警告可以忽略-警告是由于没有使用 DNS 解析造成可忽略
-17. 执行 root 脚本[root@oracle1 oraInventory]# sh /u01/app/oraInventory/orainstRoot.sh Changing
-permissions of /u01/app/oraInventory.
-Adding read,write permissions for group.
-Removing read,write,execute permissions for world.
-[root@oracle2 ~]# sh /u01/app/oraInventory/orainstRoot.sh
+
+#节点一安装前检查：
+[grid@zhongtaidb1 ~]$ cd /u01/app/19.0.0/grid/
+[grid@zhongtaidb1 grid]$ ./runcluvfy.sh stage -pre crsinst -n zhongtaidb1,zhongtaidb2 -verbose
+```
+
+#安装xterm
+```bash
+yum install -y xterm*
+#或者本地镜像需挨着安装包
+yum install -y xorg-x11-xkb-utils
+rpm -ivh xorg-x11-xkb-utils-7.7-14.el7.x86_64.rpm
+rpm -ivh xorg-x11-xauth-1.0.9-1.el7.x86_64.rpm
+rpm -ivh xterm-295-3.el7.x86_64.rpm
+
+#本地打开xstart
+#用grid账户通过ssh登录
+#命令为/usr/bin/xterm -ls -display $DISPLAY
+```
+### 3.3. 进入 grid 集群软件目录执行安装
+```bash
+cd /u01/app/19.0.0/grid/
+[grid@zhongtaidb1 grid]$ ./gridSetup.sh
+```
+### 3.4. GUI 安装步骤
+#安装过程如下
+```
+1. 为新的集群配置GI
+2. 配置集群名称以及 scan 名称(rac-cluster/rac-scan/1521)
+3. 节点互信
+4. 公网、私网网段选择(eno8-10.10.10.0-ASM&private/team0-192.168.203.0-public)
+5. 选择 asm 存储
+6. 选择不单独为GIMR配置磁盘组
+7. 选择 asm 磁盘组(ORC/normal/100G三块磁盘)
+9. 输入密码
+10. 保持默认
+11. 保持默认
+12. 确认 base 目录
+13. 这里可以选择自动 root 执行脚本
+14. 预安装检查
+15. 解决相关依赖后，忽略如下报错
+16. 如下警告可以忽略-警告是由于没有使用 DNS 解析造成可忽略
+17. 执行 root 脚本
+```
+#日志如下
+```
+[root@zhongtaidb1 ~]# /u01/app/oraInventory/orainstRoot.sh
 Changing permissions of /u01/app/oraInventory.
 Adding read,write permissions for group.
 Removing read,write,execute permissions for world.
+
 Changing groupname of /u01/app/oraInventory to oinstall.
 The execution of the script is complete.
-[root@oracle1 oraInventory]# sh /u01/app/11.2.0/grid/root.sh
+[root@zhongtaidb1 ~]# /u01/app/19.0.0/grid/root.sh
 Performing root user operation.
+
 The following environment variables are set as:
-ORACLE_OWNER= grid
-ORACLE_HOME= /u01/app/11.2.0/grid
-Enter the full pathname of the local bin directory: [/usr/local/bin]:Copying dbhome to /usr/local/bin ...
-Copying oraenv to /usr/local/bin ...
-Copying coraenv to /usr/local/bin ...
+    ORACLE_OWNER= grid
+    ORACLE_HOME=  /u01/app/19.0.0/grid
+
+Enter the full pathname of the local bin directory: [/usr/local/bin]:
+   Copying dbhome to /usr/local/bin ...
+   Copying oraenv to /usr/local/bin ...
+   Copying coraenv to /usr/local/bin ...
+
+
 Creating /etc/oratab file...
 Entries will be added to the /etc/oratab file as needed by
 Database Configuration Assistant when a database is created
 Finished running generic part of root script.
 Now product-specific root actions will be performed.
 Relinking oracle with rac_on option
-Using configuration parameter file: /u01/app/11.2.0/grid/crs/install/crsconfig_params
+Using configuration parameter file: /u01/app/19.0.0/grid/crs/install/crsconfig_params
 The log of current session can be found at:
-/u01/app/grid/crsdata/oracle1/crsconfig/rootcrs_oracle1_2020-03-26_09-37-
-30PM.log
-2020/03/26 21:37:41 CLSRSC-594: Executing installation step 1 of 19: 'SetupTFA'.
-2020/03/26 21:37:41 CLSRSC-594: Executing installation step 2 of 19: 'ValidateEnv'.
-2020/03/26 21:37:41 CLSRSC-363: User ignored prerequisites during installation
-2020/03/26 21:37:41 CLSRSC-594: Executing installation step 3 of 19: 'CheckFirstNode'.
-2020/03/26 21:37:44 CLSRSC-594: Executing installation step 4 of 19: 'GenSiteGUIDs'.
-2020/03/26 21:37:44 CLSRSC-594: Executing installation step 5 of 19: 'SetupOSD'.
-2020/03/26 21:37:45 CLSRSC-594: Executing installation step 6 of 19: 'CheckCRSConfig'.
-2020/03/26 21:37:45 CLSRSC-594: Executing installation step 7 of 19: 'SetupLocalGPNP'.
-2020/03/26 21:38:15 CLSRSC-4002: Successfully installed Oracle Trace File Analyzer (TFA)
-Collector.
-2020/03/26 21:38:15 CLSRSC-594: Executing installation step 8 of 19: 'CreateRootCert'.
-2020/03/26 21:38:18 CLSRSC-594: Executing installation step 9 of 19: 'ConfigOLR'.
-2020/03/26 21:38:25 CLSRSC-594: Executing installation step 10 of 19: 'ConfigCHMOS'.
-2020/03/26 21:38:25 CLSRSC-594: Executing installation step 11 of 19: 'CreateOHASD'.
-2020/03/26 21:38:29 CLSRSC-594: Executing installation step 12 of 19: 'ConfigOHASD'.
-2020/03/26 21:38:29 CLSRSC-330: Adding Clusterware entries to file 'oracle-ohasd.service'
-2020/03/26 21:38:50 CLSRSC-594: Executing installation step 13 of 19: 'InstallAFD'.
-2020/03/26 21:38:54 CLSRSC-594: Executing installation step 14 of 19: 'InstallACFS'.
-2020/03/26 21:38:58 CLSRSC-594: Executing installation step 15 of 19: 'InstallKA'.
-2020/03/26 21:39:02 CLSRSC-594: Executing installation step 16 of 19: 'InitConfig'.
+  /u01/app/grid/crsdata/zhongtaidb1/crsconfig/rootcrs_zhongtaidb1_2022-03-09_06-11-06PM.log
+2022/03/09 18:11:12 CLSRSC-594: Executing installation step 1 of 19: 'SetupTFA'.
+2022/03/09 18:11:12 CLSRSC-594: Executing installation step 2 of 19: 'ValidateEnv'.
+2022/03/09 18:11:12 CLSRSC-363: User ignored prerequisites during installation
+2022/03/09 18:11:12 CLSRSC-594: Executing installation step 3 of 19: 'CheckFirstNode'.
+2022/03/09 18:11:14 CLSRSC-594: Executing installation step 4 of 19: 'GenSiteGUIDs'.
+2022/03/09 18:11:14 CLSRSC-594: Executing installation step 5 of 19: 'SetupOSD'.
+2022/03/09 18:11:15 CLSRSC-594: Executing installation step 6 of 19: 'CheckCRSConfig'.
+2022/03/09 18:11:15 CLSRSC-594: Executing installation step 7 of 19: 'SetupLocalGPNP'.
+2022/03/09 18:11:25 CLSRSC-594: Executing installation step 8 of 19: 'CreateRootCert'.
+2022/03/09 18:11:28 CLSRSC-594: Executing installation step 9 of 19: 'ConfigOLR'.
+2022/03/09 18:11:34 CLSRSC-4002: Successfully installed Oracle Trace File Analyzer (TFA) Collector.
+2022/03/09 18:11:40 CLSRSC-594: Executing installation step 10 of 19: 'ConfigCHMOS'.
+2022/03/09 18:11:40 CLSRSC-594: Executing installation step 11 of 19: 'CreateOHASD'.
+2022/03/09 18:11:44 CLSRSC-594: Executing installation step 12 of 19: 'ConfigOHASD'.
+2022/03/09 18:11:44 CLSRSC-330: Adding Clusterware entries to file 'oracle-ohasd.service'
+2022/03/09 18:12:05 CLSRSC-594: Executing installation step 13 of 19: 'InstallAFD'.
+2022/03/09 18:12:09 CLSRSC-594: Executing installation step 14 of 19: 'InstallACFS'.
+2022/03/09 18:12:13 CLSRSC-594: Executing installation step 15 of 19: 'InstallKA'.
+2022/03/09 18:12:17 CLSRSC-594: Executing installation step 16 of 19: 'InitConfig'.
+
 ASM has been created and started successfully.
-[DBT-30001] Disk groups created successfully. Check
-/u01/app/grid/cfgtoollogs/asmca/asmca-200326PM093934.log for details.
-2020/03/26 21:40:24 CLSRSC-482: Running command:
-'/u01/app/11.2.0/grid/bin/ocrconfig -upgrade grid oinstall'
-CRS-4256: Updating the profileSuccessful addition of voting disk 737d53ea5a884f5abfd465a0e1f0e6f4.
-Successfully replaced voting disk group with +CRS.
+
+[DBT-30001] Disk groups created successfully. Check /u01/app/grid/cfgtoollogs/asmca/asmca-220309PM061249.log for details.
+
+2022/03/09 18:13:35 CLSRSC-482: Running command: '/u01/app/19.0.0/grid/bin/ocrconfig -upgrade grid oinstall'
+CRS-4256: Updating the profile
+Successful addition of voting disk 963be5e020964f73bfc4e8810d4d2d72.
+Successful addition of voting disk 0cad1112ce4a4f21bf7fb68c81659713.
+Successful addition of voting disk 37518f8cb4ed4fd5bf79d54a331cec28.
+Successfully replaced voting disk group with +OCR.
 CRS-4256: Updating the profile
 CRS-4266: Voting file(s) successfully replaced
-## STATE File Universal Id File Name Disk group
--- ----- ----------------- --------- ---------
-1. ONLINE 737d53ea5a884f5abfd465a0e1f0e6f4 (/dev/sdc) [CRS]
-Located 1 voting disk(s).
-2020/03/26 21:41:28 CLSRSC-594: Executing installation step 17 of 19: 'StartCluster'.
-2020/03/26 21:42:53 CLSRSC-343: Successfully started Oracle Clusterware stack
-2020/03/26 21:42:53 CLSRSC-594: Executing installation step 18 of 19: 'ConfigNode'.
-2020/03/26 21:44:01 CLSRSC-594: Executing installation step 19 of 19: 'PostConfig'.
-2020/03/26 21:44:22 CLSRSC-325: Configure Oracle Grid Infrastructure for a Cluster ...
-succeeded
-[root@oracle1 oraInventory]#
-[root@oracle2 ~]# sh /u01/app/11.2.0/grid/root.sh
+##  STATE    File Universal Id                File Name Disk group
+--  -----    -----------------                --------- ---------
+ 1. ONLINE   963be5e020964f73bfc4e8810d4d2d72 (/dev/dm-2) [OCR]
+ 2. ONLINE   0cad1112ce4a4f21bf7fb68c81659713 (/dev/dm-3) [OCR]
+ 3. ONLINE   37518f8cb4ed4fd5bf79d54a331cec28 (/dev/dm-4) [OCR]
+Located 3 voting disk(s).
+2022/03/09 18:14:58 CLSRSC-594: Executing installation step 17 of 19: 'StartCluster'.
+2022/03/09 18:16:04 CLSRSC-343: Successfully started Oracle Clusterware stack
+2022/03/09 18:16:04 CLSRSC-594: Executing installation step 18 of 19: 'ConfigNode'.
+2022/03/09 18:17:06 CLSRSC-594: Executing installation step 19 of 19: 'PostConfig'.
+2022/03/09 18:17:27 CLSRSC-325: Configure Oracle Grid Infrastructure for a Cluster ... succeeded
+
+[root@zhongtaidb2 ~]# /u01/app/oraInventory/orainstRoot.sh
+Changing permissions of /u01/app/oraInventory.
+Adding read,write permissions for group.
+Removing read,write,execute permissions for world.
+
+Changing groupname of /u01/app/oraInventory to oinstall.
+The execution of the script is complete.
+You have new mail in /var/spool/mail/root
+[root@zhongtaidb2 ~]# /u01/app/19.0.0/grid/root.sh
 Performing root user operation.
+
 The following environment variables are set as:
-ORACLE_OWNER= grid
-ORACLE_HOME= /u01/app/11.2.0/grid
+    ORACLE_OWNER= grid
+    ORACLE_HOME=  /u01/app/19.0.0/grid
+
 Enter the full pathname of the local bin directory: [/usr/local/bin]:
-Copying dbhome to /usr/local/bin ...
-Copying oraenv to /usr/local/bin ...
-Copying coraenv to /usr/local/bin ...
+   Copying dbhome to /usr/local/bin ...
+   Copying oraenv to /usr/local/bin ...
+   Copying coraenv to /usr/local/bin ...
+
+
 Creating /etc/oratab file...
 Entries will be added to the /etc/oratab file as needed by
 Database Configuration Assistant when a database is created
 Finished running generic part of root script.
 Now product-specific root actions will be performed.
 Relinking oracle with rac_on option
-Using configuration parameter file: /u01/app/11.2.0/grid/crs/install/crsconfig_params
+Using configuration parameter file: /u01/app/19.0.0/grid/crs/install/crsconfig_params
 The log of current session can be found at:
-/u01/app/grid/crsdata/oracle2/crsconfig/rootcrs_oracle2_2020-03-26_09-45-
-21PM.log
-2020/03/26 21:45:26 CLSRSC-594: Executing installation step 1 of 19: 'SetupTFA'.
-2020/03/26 21:45:26 CLSRSC-594: Executing installation step 2 of 19: 'ValidateEnv'.
-2020/03/26 21:45:26 CLSRSC-363: User ignored prerequisites during installation2020/03/26 21:45:26 CLSRSC-594: Executing installation step 3 of 19: 'CheckFirstNode'.
-2020/03/26 21:45:27 CLSRSC-594: Executing installation step 4 of 19: 'GenSiteGUIDs'.
-2020/03/26 21:45:27 CLSRSC-594: Executing installation step 5 of 19: 'SetupOSD'.
-2020/03/26 21:45:27 CLSRSC-594: Executing installation step 6 of 19: 'CheckCRSConfig'.
-2020/03/26 21:45:27 CLSRSC-594: Executing installation step 7 of 19: 'SetupLocalGPNP'.
-2020/03/26 21:45:29 CLSRSC-594: Executing installation step 8 of 19: 'CreateRootCert'.
-2020/03/26 21:45:29 CLSRSC-594: Executing installation step 9 of 19: 'ConfigOLR'.
-2020/03/26 21:45:31 CLSRSC-594: Executing installation step 10 of 19: 'ConfigCHMOS'.
-2020/03/26 21:45:31 CLSRSC-594: Executing installation step 11 of 19: 'CreateOHASD'.
-2020/03/26 21:45:33 CLSRSC-594: Executing installation step 12 of 19: 'ConfigOHASD'.
-2020/03/26 21:45:33 CLSRSC-330: Adding Clusterware entries to file 'oracle-ohasd.service'
-2020/03/26 21:45:51 CLSRSC-4002: Successfully installed Oracle Trace File Analyzer (TFA)
-Collector.
-2020/03/26 21:45:54 CLSRSC-594: Executing installation step 13 of 19: 'InstallAFD'.
-2020/03/26 21:45:55 CLSRSC-594: Executing installation step 14 of 19: 'InstallACFS'.
-2020/03/26 21:45:57 CLSRSC-594: Executing installation step 15 of 19: 'InstallKA'.
-2020/03/26 21:45:58 CLSRSC-594: Executing installation step 16 of 19: 'InitConfig'.
-2020/03/26 21:46:06 CLSRSC-594: Executing installation step 17 of 19: 'StartCluster'.
-2020/03/26 21:46:50 CLSRSC-343: Successfully started Oracle Clusterware stack
-2020/03/26 21:46:50 CLSRSC-594: Executing installation step 18 of 19: 'ConfigNode'.
-2020/03/26 21:47:02 CLSRSC-594: Executing installation step 19 of 19: 'PostConfig'.
-2020/03/26 21:47:10 CLSRSC-325: Configure Oracle Grid Infrastructure for a Cluster ...
-succeeded
-[root@oracle2 ~]#
-3.5. 查看状态
-[grid@oracle2 ~]$ crsctl stat res -t
-----------------------------------------------------------------------------
-----
-Name Target State Server State details
-----------------------------------------------------------------------------
-----
+  /u01/app/grid/crsdata/zhongtaidb2/crsconfig/rootcrs_zhongtaidb2_2022-03-09_06-18-12PM.log
+2022/03/09 18:18:15 CLSRSC-594: Executing installation step 1 of 19: 'SetupTFA'.
+2022/03/09 18:18:15 CLSRSC-594: Executing installation step 2 of 19: 'ValidateEnv'.
+2022/03/09 18:18:15 CLSRSC-363: User ignored prerequisites during installation
+2022/03/09 18:18:15 CLSRSC-594: Executing installation step 3 of 19: 'CheckFirstNode'.
+2022/03/09 18:18:16 CLSRSC-594: Executing installation step 4 of 19: 'GenSiteGUIDs'.
+2022/03/09 18:18:16 CLSRSC-594: Executing installation step 5 of 19: 'SetupOSD'.
+2022/03/09 18:18:16 CLSRSC-594: Executing installation step 6 of 19: 'CheckCRSConfig'.
+2022/03/09 18:18:16 CLSRSC-594: Executing installation step 7 of 19: 'SetupLocalGPNP'.
+2022/03/09 18:18:17 CLSRSC-594: Executing installation step 8 of 19: 'CreateRootCert'.
+2022/03/09 18:18:17 CLSRSC-594: Executing installation step 9 of 19: 'ConfigOLR'.
+2022/03/09 18:18:25 CLSRSC-594: Executing installation step 10 of 19: 'ConfigCHMOS'.
+2022/03/09 18:18:25 CLSRSC-594: Executing installation step 11 of 19: 'CreateOHASD'.
+2022/03/09 18:18:26 CLSRSC-594: Executing installation step 12 of 19: 'ConfigOHASD'.
+2022/03/09 18:18:26 CLSRSC-330: Adding Clusterware entries to file 'oracle-ohasd.service'
+2022/03/09 18:18:37 CLSRSC-4002: Successfully installed Oracle Trace File Analyzer (TFA) Collector.
+2022/03/09 18:18:44 CLSRSC-594: Executing installation step 13 of 19: 'InstallAFD'.
+2022/03/09 18:18:45 CLSRSC-594: Executing installation step 14 of 19: 'InstallACFS'.
+2022/03/09 18:18:46 CLSRSC-594: Executing installation step 15 of 19: 'InstallKA'.
+2022/03/09 18:18:47 CLSRSC-594: Executing installation step 16 of 19: 'InitConfig'.
+2022/03/09 18:18:55 CLSRSC-594: Executing installation step 17 of 19: 'StartCluster'.
+2022/03/09 18:19:41 CLSRSC-343: Successfully started Oracle Clusterware stack
+2022/03/09 18:19:41 CLSRSC-594: Executing installation step 18 of 19: 'ConfigNode'.
+2022/03/09 18:19:50 CLSRSC-594: Executing installation step 19 of 19: 'PostConfig'.
+2022/03/09 18:19:55 CLSRSC-325: Configure Oracle Grid Infrastructure for a Cluster ... succeeded
+```
+### 3.5. 查看状态
+
+```
+[grid@zhongtaidb1 ~]$ crsctl status resource -t
+--------------------------------------------------------------------------------
+Name           Target  State        Server                   State details
+--------------------------------------------------------------------------------
 Local Resources
-----------------------------------------------------------------------------
-----
+--------------------------------------------------------------------------------
 ora.LISTENER.lsnr
-ONLINE ONLINE oracle1 STABLE
-ONLINE ONLINE oracle2 STABLE
+               ONLINE  ONLINE       zhongtaidb1              STABLE
+               ONLINE  ONLINE       zhongtaidb2              STABLE
 ora.chad
-ONLINE ONLINE oracle1 STABLE
-ONLINE ONLINE oracle2 STABLE
-ora.net1.networkONLINE ONLINE oracle1 STABLE
-ONLINE ONLINE oracle2 STABLE
+               ONLINE  ONLINE       zhongtaidb1              STABLE
+               ONLINE  ONLINE       zhongtaidb2              STABLE
+ora.net1.network
+               ONLINE  ONLINE       zhongtaidb1              STABLE
+               ONLINE  ONLINE       zhongtaidb2              STABLE
 ora.ons
-ONLINE ONLINE oracle1 STABLE
-ONLINE ONLINE oracle2 STABLE
-----------------------------------------------------------------------------
-----
+               ONLINE  ONLINE       zhongtaidb1              STABLE
+               ONLINE  ONLINE       zhongtaidb2              STABLE
+--------------------------------------------------------------------------------
 Cluster Resources
-----------------------------------------------------------------------------
-----
+--------------------------------------------------------------------------------
 ora.ASMNET1LSNR_ASM.lsnr(ora.asmgroup)
-1 ONLINE ONLINE oracle1 STABLE
-2 ONLINE ONLINE oracle2 STABLE
-3 OFFLINE OFFLINE STABLE
-ora.CRS.dg(ora.asmgroup)
-1 ONLINE ONLINE oracle1 STABLE
-2 ONLINE ONLINE oracle2 STABLE
-3 OFFLINE OFFLINE STABLE
+      1        ONLINE  ONLINE       zhongtaidb1              STABLE
+      2        ONLINE  ONLINE       zhongtaidb2              STABLE
+      3        OFFLINE OFFLINE                               STABLE
+ora.DATA.dg(ora.asmgroup)
+      1        ONLINE  ONLINE       zhongtaidb1              STABLE
+      2        ONLINE  ONLINE       zhongtaidb2              STABLE
+      3        ONLINE  OFFLINE                               STABLE
+ora.FRA.dg(ora.asmgroup)
+      1        ONLINE  ONLINE       zhongtaidb1              STABLE
+      2        ONLINE  ONLINE       zhongtaidb2              STABLE
+      3        ONLINE  OFFLINE                               STABLE
 ora.LISTENER_SCAN1.lsnr
-1 ONLINE ONLINE oracle1 STABLE
+      1        ONLINE  ONLINE       zhongtaidb1              STABLE
+ora.OCR.dg(ora.asmgroup)
+      1        ONLINE  ONLINE       zhongtaidb1              STABLE
+      2        ONLINE  ONLINE       zhongtaidb2              STABLE
+      3        OFFLINE OFFLINE                               STABLE
 ora.asm(ora.asmgroup)
-1 ONLINE ONLINE oracle1 Started,STABLE
-2 ONLINE ONLINE oracle2 Started,STABLE
-3 OFFLINE OFFLINE STABLE
+      1        ONLINE  ONLINE       zhongtaidb1              Started,STABLE
+      2        ONLINE  ONLINE       zhongtaidb2              Started,STABLE
+      3        OFFLINE OFFLINE                               STABLE
 ora.asmnet1.asmnetwork(ora.asmgroup)
-1 ONLINE ONLINE oracle1 STABLE
-2 ONLINE ONLINE oracle2 STABLE
-3 OFFLINE OFFLINE STABLE
+      1        ONLINE  ONLINE       zhongtaidb1              STABLE
+      2        ONLINE  ONLINE       zhongtaidb2              STABLE
+      3        OFFLINE OFFLINE                               STABLE
 ora.cvu
-1 ONLINE ONLINE oracle1 STABLE
+      1        ONLINE  ONLINE       zhongtaidb1              STABLE
 ora.qosmserver
-1 ONLINE ONLINE oracle1 STABLE
-ora.oracle1.vip
-1 ONLINE ONLINE oracle1 STABLE
-ora.oracle2.vip
-1 ONLINE ONLINE oracle2 STABLE
+      1        ONLINE  ONLINE       zhongtaidb1              STABLE
 ora.scan1.vip
-1 ONLINE ONLINE oracle1 STABLE
-4 以 Oracle 用户登录图形化界面将数据库软件解压至$ORACLE_HOME 安装 Oracle 数据库软件
-[oracle@oracle1 db_1]$ pwd
-/u01/app/oracle/product/11.2.0/db_1
-[oracle@oracle1 db_1]$ unzip /opt/LINUX.X64_193000_db_home.zip
-[oracle@oracle1 db_1]$ ./runInstaller
-4.1. 执行安装预安装前检查忽略如下警告4.2. 执行 root 脚本
-[root@oracle1 db_1]# sh /u01/app/oracle/product/11.2.0/db_1/root.sh
+      1        ONLINE  ONLINE       zhongtaidb1              STABLE
+ora.zhongtaidb1.vip
+      1        ONLINE  ONLINE       zhongtaidb1              STABLE
+ora.zhongtaidb2.vip
+      1        ONLINE  ONLINE       zhongtaidb2              STABLE
+--------------------------------------------------------------------------------
+
+```
+## 4 安装 Oracle 数据库软件
+#以 Oracle 用户登录图形化界面，将数据库软件解压至$ORACLE_HOME 
+[oracle@zhongtaidb1 db_1]$ pwd
+/u01/app/oracle/product/19.0.0/db_1
+[oracle@zhongtaidb1 db_1]$ unzip /opt/LINUX.X64_193000_db_home.zip
+[oracle@zhongtaidb1 db_1]$ ./runInstaller
+### 4.1. 执行安装预安装前检查忽略如下警告4.2. 执行 root 脚本
+[root@zhongtaidb1 db_1]# sh /u01/app/oracle/product/19.0.0/db_1/root.sh
 Performing root user operation.
 The following environment variables are set as:
 ORACLE_OWNER= oracle
-ORACLE_HOME= /u01/app/oracle/product/11.2.0/db_1
+ORACLE_HOME= /u01/app/oracle/product/19.0.0/db_1
 Enter the full pathname of the local bin directory: [/usr/local/bin]:
 The contents of "dbhome" have not changed. No need to overwrite.
 The contents of "oraenv" have not changed. No need to overwrite.
@@ -1072,11 +1676,11 @@ Entries will be added to the /etc/oratab file as needed by
 Database Configuration Assistant when a database is created
 Finished running generic part of root script.
 Now product-specific root actions will be performed.
-[root@oracle2 ~]# sh /u01/app/oracle/product/11.2.0/db_1/root.sh
+[root@zhongtaidb2 ~]# sh /u01/app/oracle/product/19.0.0/db_1/root.sh
 Performing root user operation.
 The following environment variables are set as:
 ORACLE_OWNER= oracle
-ORACLE_HOME= /u01/app/oracle/product/11.2.0/db_1
+ORACLE_HOME= /u01/app/oracle/product/19.0.0/db_1
 Enter the full pathname of the local bin directory: [/usr/local/bin]:
 The contents of "dbhome" have not changed. No need to overwrite.
 The contents of "oraenv" have not changed. No need to overwrite.
@@ -1085,9 +1689,14 @@ Entries will be added to the /etc/oratab file as needed by
 Database Configuration Assistant when a database is created
 Finished running generic part of root script.
 Now product-specific root actions will be performed.
-5 创建 ASM 数据磁盘5.1. grid 账户登录图形化界面，执行 asmca6 建立数据库
-以 oracle 账户登录。6.1. 执行建库 dbca6.2. 查看集群状态
-[root@oracle1 ~]# crsctl stat res -t
+## 5 创建 ASM 数据磁盘
+### 5.1. grid 账户登录图形化界面，执行 asmca
+## 6 建立数据库
+以 oracle 账户登录。
+### 6.1. 执行建库 dbca
+### 6.2. 查看集群状态
+```
+[root@zhongtaidb1 ~]# crsctl stat res -t
 ----------------------------------------------------------------------------
 ----
 Name Target State Server State details
@@ -1097,83 +1706,85 @@ Local Resources
 ----------------------------------------------------------------------------
 ----
 ora.CRS_GIMR.GHCHKPT.advm
-OFFLINE OFFLINE oracle1 STABLE
-OFFLINE OFFLINE oracle2 STABLE
+OFFLINE OFFLINE zhongtaidb1 STABLE
+OFFLINE OFFLINE zhongtaidb2 STABLE
 ora.LISTENER.lsnr
-ONLINE ONLINE oracle1 STABLE
-ONLINE ONLINE oracle2 STABLE
+ONLINE ONLINE zhongtaidb1 STABLE
+ONLINE ONLINE zhongtaidb2 STABLE
 ora.chad
-ONLINE ONLINE oracle1 STABLE
-ONLINE ONLINE oracle2 STABLE
+ONLINE ONLINE zhongtaidb1 STABLE
+ONLINE ONLINE zhongtaidb2 STABLE
 ora.crs_gimr.ghchkpt.acfs
-OFFLINE OFFLINE oracle1 STABLE
-OFFLINE OFFLINE oracle2 STABLE
+OFFLINE OFFLINE zhongtaidb1 STABLE
+OFFLINE OFFLINE zhongtaidb2 STABLE
 ora.helper
-OFFLINE OFFLINE oracle1 IDLE,STABLE
-OFFLINE OFFLINE oracle2 IDLE,STABLE
+OFFLINE OFFLINE zhongtaidb1 IDLE,STABLE
+OFFLINE OFFLINE zhongtaidb2 IDLE,STABLE
 ora.net1.network
-ONLINE ONLINE oracle1 STABLE
-ONLINE ONLINE oracle2 STABLE
+ONLINE ONLINE zhongtaidb1 STABLE
+ONLINE ONLINE zhongtaidb2 STABLE
 ora.ons
-ONLINE ONLINE oracle1 STABLE
-ONLINE ONLINE oracle2 STABLE
+ONLINE ONLINE zhongtaidb1 STABLE
+ONLINE ONLINE zhongtaidb2 STABLE
 ora.proxy_advm
-OFFLINE OFFLINE oracle1 STABLE
-OFFLINE OFFLINE oracle2 STABLE
+OFFLINE OFFLINE zhongtaidb1 STABLE
+OFFLINE OFFLINE zhongtaidb2 STABLE
 ----------------------------------------------------------------------------
 ----
 Cluster Resources
 ----------------------------------------------------------------------------
 ----
 ora.ASMNET1LSNR_ASM.lsnr(ora.asmgroup)
-1 ONLINE ONLINE oracle1 STABLE
-2 ONLINE ONLINE oracle2 STABLE3 ONLINE OFFLINE STABLE
+1 ONLINE ONLINE zhongtaidb1 STABLE
+2 ONLINE ONLINE zhongtaidb2 STABLE3 ONLINE OFFLINE STABLE
 ora.CRS_GIMR.dg(ora.asmgroup)
-1 ONLINE ONLINE oracle1 STABLE
-2 ONLINE ONLINE oracle2 STABLE
+1 ONLINE ONLINE zhongtaidb1 STABLE
+2 ONLINE ONLINE zhongtaidb2 STABLE
 3 OFFLINE OFFLINE STABLE
 ora.DATA.dg(ora.asmgroup)
-1 ONLINE ONLINE oracle1 STABLE
-2 ONLINE ONLINE oracle2 STABLE
+1 ONLINE ONLINE zhongtaidb1 STABLE
+2 ONLINE ONLINE zhongtaidb2 STABLE
 3 OFFLINE OFFLINE STABLE
 ora.LISTENER_SCAN1.lsnr
-1 ONLINE ONLINE oracle1 STABLE
+1 ONLINE ONLINE zhongtaidb1 STABLE
 ora.MGMTLSNR
-1 ONLINE ONLINE oracle1 169.254.11.15
+1 ONLINE ONLINE zhongtaidb1 169.254.11.15
 10.10.
 10.211,STABLE
 ora.asm(ora.asmgroup)
-1 ONLINE ONLINE oracle1 Started,STABLE
-2 ONLINE ONLINE oracle2 Started,STABLE
+1 ONLINE ONLINE zhongtaidb1 Started,STABLE
+2 ONLINE ONLINE zhongtaidb2 Started,STABLE
 3 OFFLINE OFFLINE STABLE
 ora.asmnet1.asmnetwork(ora.asmgroup)
-1 ONLINE ONLINE oracle1 STABLE
-2 ONLINE ONLINE oracle2 STABLE
+1 ONLINE ONLINE zhongtaidb1 STABLE
+2 ONLINE ONLINE zhongtaidb2 STABLE
 3 OFFLINE OFFLINE STABLE
 ora.cvu
-1 ONLINE ONLINE oracle1 STABLE
+1 ONLINE ONLINE zhongtaidb1 STABLE
 ora.mgmtdb
-1 ONLINE ONLINE oracle1 Open,STABLE
+1 ONLINE ONLINE zhongtaidb1 Open,STABLE
 ora.orcl.db
-1 ONLINE ONLINE oracle1
+1 ONLINE ONLINE zhongtaidb1
 Open,HOME=/u01/app/o
 racle/product/19.0.0
 /db_1,STABLE
-2 ONLINE ONLINE oracle2
+2 ONLINE ONLINE zhongtaidb2
 Open,HOME=/u01/app/o
 racle/product/19.0.0
 /db_1,STABLE
 ora.qosmserver
-1 ONLINE ONLINE oracle1 STABLE
-ora.oracle1.vip
-1 ONLINE ONLINE oracle1 STABLE
-ora.oracle2.vip
-1 ONLINE ONLINE oracle2 STABLEora.rhpserver
+1 ONLINE ONLINE zhongtaidb1 STABLE
+ora.zhongtaidb1.vip
+1 ONLINE ONLINE zhongtaidb1 STABLE
+ora.zhongtaidb2.vip
+1 ONLINE ONLINE zhongtaidb2 STABLEora.rhpserver
 1 OFFLINE OFFLINE STABLE
 ora.scan1.vip
-1 ONLINE ONLINE oracle1 STABLE
-6.3. 查看数据库版本
-[oracle@oracle1 db_1]$ sqlplus / as sysdba
+1 ONLINE ONLINE zhongtaidb1 STABLE
+```
+### 6.3. 查看数据库版本
+```
+[oracle@zhongtaidb1 db_1]$ sqlplus / as sysdba
 SQL> col banner_full for a120
 SQL> select BANNER_FULL from v$version;
 BANNER_FULL
@@ -1261,13 +1872,13 @@ grant select any table to cwuser;
 
 sqlplus cwuser/dGl6cHdkMTIzIUAj@10.8.14.15:1521/s_cwpdb
 
-[oracle@oracle1 ~]$ srvctl add service -d xydb -s s_cwpdb -r xydb1,xydb2 -P basic -e select -m basic -z 180 -w 5 -pdb cwpdb
-[oracle@oracle1 ~]$ srvctl status service -d xydb -s s_cwpdb
+[oracle@zhongtaidb1 ~]$ srvctl add service -d xydb -s s_cwpdb -r xydb1,xydb2 -P basic -e select -m basic -z 180 -w 5 -pdb cwpdb
+[oracle@zhongtaidb1 ~]$ srvctl status service -d xydb -s s_cwpdb
 Service s_cwpdb is not running.
-[oracle@oracle1 ~]$ srvctl start service -d xydb -s s_cwpdb
-[oracle@oracle1 ~]$ srvctl status service -d xydb -s s_cwpdb
+[oracle@zhongtaidb1 ~]$ srvctl start service -d xydb -s s_cwpdb
+[oracle@zhongtaidb1 ~]$ srvctl status service -d xydb -s s_cwpdb
 Service s_cwpdb is running on instance(s) xydb1,xydb2
-[oracle@oracle1 ~]$ lsnrctl status 
+[oracle@zhongtaidb1 ~]$ lsnrctl status 
 
 LSNRCTL for Linux: Version 19.0.0.0.0 - Production on 22-JUL-2021 17:04:23
 
@@ -1283,11 +1894,11 @@ Uptime                    189 days 5 hr. 16 min. 45 sec
 Trace Level               off
 Security                  ON: Local OS Authentication
 SNMP                      OFF
-Listener Parameter File   /u01/app/11.2.0/grid/network/admin/listener.ora
-Listener Log File         /u01/app/grid/diag/tnslsnr/oracle1/listener/alert/log.xml
+Listener Parameter File   /u01/app/19.0.0/grid/network/admin/listener.ora
+Listener Log File         /u01/app/grid/diag/tnslsnr/zhongtaidb1/listener/alert/log.xml
 Listening Endpoints Summary...
   (DESCRIPTION=(ADDRESS=(PROTOCOL=ipc)(KEY=LISTENER)))
-  (DESCRIPTION=(ADDRESS=(PROTOCOL=tcp)(HOST=210.46.97.93)(PORT=1521)))
+  (DESCRIPTION=(ADDRESS=(PROTOCOL=tcp)(HOST=192.168.203.106)(PORT=1521)))
   (DESCRIPTION=(ADDRESS=(PROTOCOL=tcp)(HOST=10.8.14.12)(PORT=1521)))
 Services Summary...
 Service "+ASM" has 1 instance(s).
@@ -1337,7 +1948,7 @@ Service "xydb" has 1 instance(s).
 Service "xydbXDB" has 1 instance(s).
   Instance "xydb1", status READY, has 1 handler(s) for this service...
 The command completed successfully
-[oracle@oracle1 ~]$ 
+[oracle@zhongtaidb1 ~]$ 
 
 
 create tablespace users datafile '/u01/app/oracle/oradata/ORCL/CAE7CB8D19BB039FE053C90D080A6738/datafile/users01.dbf' size 1G autoextend on next 1G maxsize 31G extent management local segment space management auto;
@@ -1358,14 +1969,14 @@ imp eotqv2_jm/H2DHiH9yRSx24wK@s_eotq  file=eotq0610.dmp  log=eotq0611.log fromus
 imp system/manager file=seapark log=seapark fromuser=seapark
 
 srvctl add service -d xydb  -s s_eotq -r xydb1,xydb2 -P basic -e select -m basic -z 180 -w 5 -pdb eotqpdb
-[oracle@oracle1 ~]$ srvctl status service -d xydb  -s s_eotq
+[oracle@zhongtaidb1 ~]$ srvctl status service -d xydb  -s s_eotq
 Service s_eotq is not running.
-[oracle@oracle1 ~]$ srvctl start service -d xydb  -s s_eotq
-[oracle@oracle1 ~]$ srvctl status service -d xydb  -s s_eotq
+[oracle@zhongtaidb1 ~]$ srvctl start service -d xydb  -s s_eotq
+[oracle@zhongtaidb1 ~]$ srvctl status service -d xydb  -s s_eotq
 Service s_eotq is running on instance(s) xydb1,xydb2
-[oracle@oracle1 ~]$ 
+[oracle@zhongtaidb1 ~]$ 
 
-expdp eotqv2_jm/H2DHiH9yRSx24wK@210.46.97.93:1521/s_eotq schemas=eotqv2_jm directory=expdir dumpfile=eotqv2_jm_20210901.dmp logfile=eotqv2_jm_20210901.log cluster=n compression=data_only version=12.2.0.1.0
+expdp eotqv2_jm/H2DHiH9yRSx24wK@192.168.203.106:1521/s_eotq schemas=eotqv2_jm directory=expdir dumpfile=eotqv2_jm_20210901.dmp logfile=eotqv2_jm_20210901.log cluster=n compression=data_only version=12.2.0.1.0
 sqlplus eotqv2_jm/H2DHiH9yRSx24wK@10.8.14.15:1521/s_eotq
 sqlplus eotqv2_jm/\"jmzlxt@2021\"@10.8.14.15:1521/s_eotq
 
@@ -1453,16 +2064,16 @@ create user hruser1 identified by H2D3JHiH9Sx24wK default tablespace hrpdb accou
 grant dba to hruser1;
 
 
-[oracle@oracle1 ~]$ srvctl add service -d xydb -s s_hrpdb -r xydb1,xydb2 -P basic -e select -m basic -z 180 -w 5 -pdb hrpdb
+[oracle@zhongtaidb1 ~]$ srvctl add service -d xydb -s s_hrpdb -r xydb1,xydb2 -P basic -e select -m basic -z 180 -w 5 -pdb hrpdb
 srvctl start service -d xydb -s s_hrpdb
 
-impdp  hruser/H2D3JHiH9Sx24wK@210.46.97.93:1521/s_hrpdb schemas=hruser directory=data_pump_dir dumpfile=eamscce210816.dpdmp logfile=hruser.log remap_tablespace=users:hruser cluster=n  transform=oid:n TABLE_EXISTS_ACTION=replace
+impdp  hruser/H2D3JHiH9Sx24wK@192.168.203.106:1521/s_hrpdb schemas=hruser directory=data_pump_dir dumpfile=eamscce210816.dpdmp logfile=hruser.log remap_tablespace=users:hruser cluster=n  transform=oid:n TABLE_EXISTS_ACTION=replace
 
 
-impdp directory=expdir dumpfile=GXYS_ORACLE11201_20200921.DMP   schemas=hruser logfile=hruser.log cluster=n  transform=oid:n TABLE_EXISTS_ACTION=replace
+impdp directory=expdir dumpfile=GXYS_zhongtaidb11201_20200921.DMP   schemas=hruser logfile=hruser.log cluster=n  transform=oid:n TABLE_EXISTS_ACTION=replace
 
- impdp  hruser/H2D3JHiH9Sx24wK@210.46.97.93:1521/s_hrpdb  directory=expdir dumpfile=GXYS_ORACLE11201_20200921.DMP   remap_schema=gxys:hruser remap_tablespace=ykspace:hrpdb  logfile=hruser0823001.log cluster=n  TABLE_EXISTS_ACTION=replace
- impdp  hruser/H2D3JHiH9Sx24wK@210.46.97.93:1521/s_hrpdb  directory=expdir dumpfile=GXYS_ORACLE11201_20200921.DMP   remap_schema=gxys:hruser remap_tablespace=ykspace:hrpdb  logfile=hruser0823001.log cluster=n  TABLE_EXISTS_ACTION=replace
+ impdp  hruser/H2D3JHiH9Sx24wK@192.168.203.106:1521/s_hrpdb  directory=expdir dumpfile=GXYS_zhongtaidb11201_20200921.DMP   remap_schema=gxys:hruser remap_tablespace=ykspace:hrpdb  logfile=hruser0823001.log cluster=n  TABLE_EXISTS_ACTION=replace
+ impdp  hruser/H2D3JHiH9Sx24wK@192.168.203.106:1521/s_hrpdb  directory=expdir dumpfile=GXYS_zhongtaidb11201_20200921.DMP   remap_schema=gxys:hruser remap_tablespace=ykspace:hrpdb  logfile=hruser0823001.log cluster=n  TABLE_EXISTS_ACTION=replace
 
  GXYS
  CREATE USER "GXYS" IDENTIFIED BY VALUES 'S:E2506CB6369F3CF1D4EE2E1B08AABD2C6426472D3550AA809C860277156E;B7971FDB00AC4053'
@@ -1492,7 +2103,9 @@ ORA-12899: value too large for column PARAMNAME (actual: 36, maximum: 30)
 
 ORA-02372: data for row: PARAMNAME : 0X'C1AACFB5B5E7BBB0A3A8B0FCC0A8B5D8C7F8BAC5C2EBA3A9'
 
-
+```
+## oracle 19C rac 基本操作
+```
 
  SQL> show pdbs;
 
@@ -1655,7 +2268,7 @@ grant select any table to rpt;
 
 sqlplus rpt/J3dx0J3HH29LmH9S@10.8.14.15:1521/s_rpt
 
-[oracle@oracle1 ~]$ srvctl add service -d xydb -s s_rpt -r xydb1,xydb2 -P basic -e select -m basic -z 180 -w 5 -pdb rptpdb
+[oracle@zhongtaidb1 ~]$ srvctl add service -d xydb -s s_rpt -r xydb1,xydb2 -P basic -e select -m basic -z 180 -w 5 -pdb rptpdb
 srvctl start service -d xydb -s s_rptpdb
 
 
@@ -1835,7 +2448,7 @@ find $bakDir -name 'mysql_*.sql.tgz' -mtime +30 -exec rm {} \;
 
 /home/oracle/eotqv2_jm_20210915.dmp
 SveQg977EHrD
-expdp eotqv2_jm/H2DHiH9yRSx24wK@210.46.97.93:1521/s_eotq schemas=eotqv2_jm directory=expdir dumpfile=eotqv2_jm_20210915.dmp logfile=eotqv2_jm_20210915.log cluster=n
+expdp eotqv2_jm/H2DHiH9yRSx24wK@192.168.203.106:1521/s_eotq schemas=eotqv2_jm directory=expdir dumpfile=eotqv2_jm_20210915.dmp logfile=eotqv2_jm_20210915.log cluster=n
 
 impdp eotqv2_jm/H2DHiH9yRSx24wK@10.8.13.201:1521/eotqpdb schemas=eotqv2_jm directory=expdir dumpfile=eotqv2_jm_20210915.dmp logfile=eotqv2_jm_20210915.log cluster=n TABLE_EXISTS_ACTION=replace
 
@@ -1982,7 +2595,7 @@ SADDR			SID    SERIAL# PADDR		USERNAME		       STATUS
 SQL> 
 /home/oracle/eotqv2_jm_20210915.dmp
 SveQg977EHrD
-expdp eotqv2_jm/H2DHiH9yRSx24wK@210.46.97.93:1521/s_eotq schemas=eotqv2_jm directory=expdir dumpfile=eotqv2_jm_20210915.dmp logfile=eotqv2_jm_20210915.log cluster=n
+expdp eotqv2_jm/H2DHiH9yRSx24wK@192.168.203.106:1521/s_eotq schemas=eotqv2_jm directory=expdir dumpfile=eotqv2_jm_20210915.dmp logfile=eotqv2_jm_20210915.log cluster=n
 
 impdp eotqv2_jm/H2DHiH9yRSx24wK@10.8.13.201:1521/eotqpdb schemas=eotqv2_jm directory=expdir dumpfile=eotqv2_jm_20210915.dmp logfile=eotqv2_jm_20210915.log cluster=n TABLE_EXISTS_ACTION=replace
 
@@ -2185,13 +2798,13 @@ grant select any table to wsuser;
 
 sqlplus wsuser/L2dcjjxx111UAj@10.8.14.15:1521/s_wspdb
 
-[oracle@oracle1 ~]$ srvctl add service -d xydb -s s_wspdb -r xydb1,xydb2 -P basic -e select -m basic -z 180 -w 5 -pdb wspdb
-[oracle@oracle1 ~]$ srvctl status service -d xydb -s s_wspdb
+[oracle@zhongtaidb1 ~]$ srvctl add service -d xydb -s s_wspdb -r xydb1,xydb2 -P basic -e select -m basic -z 180 -w 5 -pdb wspdb
+[oracle@zhongtaidb1 ~]$ srvctl status service -d xydb -s s_wspdb
 Service s_wspdb is not running.
-[oracle@oracle1 ~]$ srvctl start service -d xydb -s s_wspdb
-[oracle@oracle1 ~]$ srvctl status service -d xydb -s s_wspdb
+[oracle@zhongtaidb1 ~]$ srvctl start service -d xydb -s s_wspdb
+[oracle@zhongtaidb1 ~]$ srvctl status service -d xydb -s s_wspdb
 Service s_wspdb is running on instance(s) xydb1,xydb2
-[oracle@oracle1 ~]$ lsnrctl status 
+[oracle@zhongtaidb1 ~]$ lsnrctl status 
 
 -------------------
 
@@ -2212,13 +2825,13 @@ grant select any table to urpuser;
 
 sqlplus urpuser/J3nmmAAb6EYn@10.8.14.15:1521/s_urpdb
 
-[oracle@oracle1 ~]$ srvctl add service -d xydb -s s_urpdb -r xydb1,xydb2 -P basic -e select -m basic -z 180 -w 5 -pdb urpdb
-[oracle@oracle1 ~]$ srvctl status service -d xydb -s s_urpdb
+[oracle@zhongtaidb1 ~]$ srvctl add service -d xydb -s s_urpdb -r xydb1,xydb2 -P basic -e select -m basic -z 180 -w 5 -pdb urpdb
+[oracle@zhongtaidb1 ~]$ srvctl status service -d xydb -s s_urpdb
 Service s_urpdb is not running.
-[oracle@oracle1 ~]$ srvctl start service -d xydb -s s_urpdb
-[oracle@oracle1 ~]$ srvctl status service -d xydb -s s_urpdb
+[oracle@zhongtaidb1 ~]$ srvctl start service -d xydb -s s_urpdb
+[oracle@zhongtaidb1 ~]$ srvctl status service -d xydb -s s_urpdb
 Service s_urpdb is running on instance(s) xydb1,xydb2
-[oracle@oracle1 ~]$ lsnrctl status 
+[oracle@zhongtaidb1 ~]$ lsnrctl status 
 
 ---------------
 create tablespace flow datafile '+DATA' size 1G autoextend on next 1G maxsize 31G extent management local segment space management auto;
@@ -2234,13 +2847,13 @@ grant select any table to urpuser;
 
 sqlplus sharedb_flow/Yab004Jmaleu@10.8.14.15:1521/s_flow
 
-[oracle@oracle1 ~]$ srvctl add service -d xydb -s s_flow -r xydb1,xydb2 -P basic -e select -m basic -z 180 -w 5 -pdb dataassets 
-[oracle@oracle1 ~]$ srvctl status service -d xydb -s s_flow
+[oracle@zhongtaidb1 ~]$ srvctl add service -d xydb -s s_flow -r xydb1,xydb2 -P basic -e select -m basic -z 180 -w 5 -pdb dataassets 
+[oracle@zhongtaidb1 ~]$ srvctl status service -d xydb -s s_flow
 Service s_flow is not running.
-[oracle@oracle1 ~]$ srvctl start service -d xydb -s s_flow
-[oracle@oracle1 ~]$ srvctl status service -d xydb -s s_flow
+[oracle@zhongtaidb1 ~]$ srvctl start service -d xydb -s s_flow
+[oracle@zhongtaidb1 ~]$ srvctl status service -d xydb -s s_flow
 Service s_flow is running on instance(s) xydb1,xydb2
-[oracle@oracle1 ~]$ lsnrctl status 
+[oracle@zhongtaidb1 ~]$ lsnrctl status 
 
 -------------------
 
@@ -2261,13 +2874,13 @@ grant select any table to cwkyuser;
 
 sqlplus cwkyuser/Y3nGwjZbeljy2@10.8.14.15:1521/s_cwkyuser
 
-[oracle@oracle1 ~]$ srvctl add service -d xydb -s s_cwkyuser -r xydb1,xydb2 -P basic -e select -m basic -z 180 -w 5 -pdb cwkyuser
-[oracle@oracle1 ~]$ srvctl status service -d xydb -s s_cwkyuser
+[oracle@zhongtaidb1 ~]$ srvctl add service -d xydb -s s_cwkyuser -r xydb1,xydb2 -P basic -e select -m basic -z 180 -w 5 -pdb cwkyuser
+[oracle@zhongtaidb1 ~]$ srvctl status service -d xydb -s s_cwkyuser
 Service s_cwkyuser is not running.
-[oracle@oracle1 ~]$ srvctl start service -d xydb -s s_cwkyuser
-[oracle@oracle1 ~]$ srvctl status service -d xydb -s s_cwkyuser
+[oracle@zhongtaidb1 ~]$ srvctl start service -d xydb -s s_cwkyuser
+[oracle@zhongtaidb1 ~]$ srvctl status service -d xydb -s s_cwkyuser
 Service s_cwkyuser is running on instance(s) xydb1,xydb2
-[oracle@oracle1 ~]$ lsnrctl status 
+[oracle@zhongtaidb1 ~]$ lsnrctl status 
 
 ---------------
 -----------------
@@ -2282,7 +2895,7 @@ Service s_cwkyuser is running on instance(s) xydb1,xydb2
 
 01-NOV-2021 17:32:16 * (CONNECT_DATA=(SERVICE_NAME=s_hrpdb)(CID=(PROGRAM=sqlplus)(HOST=jcpt-oracletest)(USER=oracle))) * (ADDRESS=(PROTOCOL=tcp)(HOST=10.8.13.201)(PORT=38004)) * establish * s_hrpdb * 0
 
-[oracle@oracle2 trace]$ tail -f listener.log |grep s_data
+[oracle@zhongtaidb2 trace]$ tail -f listener.log |grep s_data
 
 
 01-NOV-2021 17:34:07 * (CONNECT_DATA=(SERVICE_NAME=s_dataassets)(CID=(PROGRAM=C:\Program?Files\PremiumSoft\Navicat?Premium?12\navicat.exe)(HOST=JCPT-JUMPBOX)(USER=Administrator))) * (ADDRESS=(PROTOCOL=tcp)(HOST=10.8.13.2)(PORT=59446)) * establish * s_dataassets * 0
@@ -2290,8 +2903,9 @@ Service s_cwkyuser is running on instance(s) xydb1,xydb2
 
 
 ^C
-[oracle@oracle2 trace]$ tail -f listener.log |grep s_hrpdb
+[oracle@zhongtaidb2 trace]$ tail -f listener.log |grep s_hrpdb
 01-NOV-2021 17:34:29 * (CONNECT_DATA=(SERVICE_NAME=s_hrpdb)(CID=(PROGRAM=C:\Program?Files\PremiumSoft\Navicat?Premium?12\navicat.exe)(HOST=JCPT-JUMPBOX)(USER=Administrator))(SERVER=dedicated)(INSTANCE_NAME=xydb2)) * (ADDRESS=(PROTOCOL=tcp)(HOST=10.8.13.2)(PORT=59451)) * establish * s_hrpdb * 0
 
 
 01-NOV-2021 17:39:19 * (CONNECT_DATA=(SERVICE_NAME=s_hrpdb)(CID=(PROGRAM=C:\Program?Files\PremiumSoft\Navicat?Premium?12\navicat.exe)(HOST=JCPT-JUMPBOX)(USER=Administrator))(SERVER=dedicated)(INSTANCE_NAME=xydb2)) * (ADDRESS=(PROTOCOL=tcp)(HOST=10.8.13.2)(PORT=59463)) * establish * s_hrpdb * 0
+```
