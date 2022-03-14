@@ -833,6 +833,8 @@ cat >> /etc/security/limits.conf <<EOF
 *            hard    nproc           90000
 *            soft    stack           90000
 *            hard    stack           90000
+*            soft    memlock         unlimited
+*            hard    memlock         unlimited
 
 EOF
 
@@ -1443,7 +1445,7 @@ rpm -ivh xterm-295-3.el7.x86_64.rpm
 cd /u01/app/19.0.0/grid/
 [grid@zhongtaidb1 grid]$ ./gridSetup.sh
 ```
-### 3.4. GUI 安装步骤
+### 3.4. GI 安装步骤
 #安装过程如下
 ```
 1. 为新的集群配置GI
@@ -1593,8 +1595,17 @@ The log of current session can be found at:
 2022/03/09 18:19:50 CLSRSC-594: Executing installation step 19 of 19: 'PostConfig'.
 2022/03/09 18:19:55 CLSRSC-325: Configure Oracle Grid Infrastructure for a Cluster ... succeeded
 ```
-### 3.5. 查看状态
-
+## 创建 ASM 数据磁盘
+### 4.1. grid 账户登录图形化界面，执行 asmca
+#创建asm磁盘组步骤
+```
+1. DiskGroups界面点击Create
+2. DATA/External/(/dev/dm-5、/dev/dm-6、/dev/dm-7)，点击OK
+3. 继续点击Create
+4. FRA/External/(/dev/dm-8)，点击OK
+5. Exit
+```
+### 4.2 查看状态
 ```
 [grid@zhongtaidb1 ~]$ crsctl status resource -t
 --------------------------------------------------------------------------------
@@ -1656,457 +1667,467 @@ ora.zhongtaidb2.vip
 --------------------------------------------------------------------------------
 
 ```
-## 4 安装 Oracle 数据库软件
+## 5 安装 Oracle 数据库软件
 #以 Oracle 用户登录图形化界面，将数据库软件解压至$ORACLE_HOME 
+```bash
 [oracle@zhongtaidb1 db_1]$ pwd
 /u01/app/oracle/product/19.0.0/db_1
-[oracle@zhongtaidb1 db_1]$ unzip /opt/LINUX.X64_193000_db_home.zip
+[oracle@zhongtaidb1 db_1]$ unzip -oq /u01/storage/LINUX.X64_193000_db_home.zip
+```
+#通过xstart图形化连接服务器，通Grid连接方式
+```bash
 [oracle@zhongtaidb1 db_1]$ ./runInstaller
-### 4.1. 执行安装预安装前检查忽略如下警告4.2. 执行 root 脚本
-[root@zhongtaidb1 db_1]# sh /u01/app/oracle/product/19.0.0/db_1/root.sh
+```
+### 5.1. oracle software安装步骤
+#安装过程如下
+```
+1. 仅设置software
+2. oracle RAC
+3. SSH互信测试
+4. Enterprise Edition
+5. $ORACLE_BASE(/u01/app/oracle)
+6. 用户组，保持默认
+7. 不执行配置脚本，保持默认
+8. 忽略全部--->Yes
+9. Install
+10. root账户先在zhongtaidb1执行完毕后再在zhongtaidb2上执行脚本(/u01/app/oracle/product/19.0.0/db_1/root.sh)，然后点击OK
+11. Close
+```
+#执行root.sh脚本记录
+```
+[root@zhongtaidb1 ~]# /u01/app/oracle/product/19.0.0/db_1/root.sh
 Performing root user operation.
+
 The following environment variables are set as:
-ORACLE_OWNER= oracle
-ORACLE_HOME= /u01/app/oracle/product/19.0.0/db_1
+    ORACLE_OWNER= oracle
+    ORACLE_HOME=  /u01/app/oracle/product/19.0.0/db_1
+
 Enter the full pathname of the local bin directory: [/usr/local/bin]:
 The contents of "dbhome" have not changed. No need to overwrite.
 The contents of "oraenv" have not changed. No need to overwrite.
 The contents of "coraenv" have not changed. No need to overwrite.
+
 Entries will be added to the /etc/oratab file as needed by
 Database Configuration Assistant when a database is created
 Finished running generic part of root script.
 Now product-specific root actions will be performed.
-[root@zhongtaidb2 ~]# sh /u01/app/oracle/product/19.0.0/db_1/root.sh
+
+[root@zhongtaidb2 ~]# /u01/app/oracle/product/19.0.0/db_1/root.sh
 Performing root user operation.
+
 The following environment variables are set as:
-ORACLE_OWNER= oracle
-ORACLE_HOME= /u01/app/oracle/product/19.0.0/db_1
+    ORACLE_OWNER= oracle
+    ORACLE_HOME=  /u01/app/oracle/product/19.0.0/db_1
+
 Enter the full pathname of the local bin directory: [/usr/local/bin]:
 The contents of "dbhome" have not changed. No need to overwrite.
 The contents of "oraenv" have not changed. No need to overwrite.
 The contents of "coraenv" have not changed. No need to overwrite.
+
 Entries will be added to the /etc/oratab file as needed by
 Database Configuration Assistant when a database is created
 Finished running generic part of root script.
 Now product-specific root actions will be performed.
-## 5 创建 ASM 数据磁盘
-### 5.1. grid 账户登录图形化界面，执行 asmca
+```
+
 ## 6 建立数据库
 以 oracle 账户登录。
 ### 6.1. 执行建库 dbca
+#创建RAC数据库步骤
+```
+1. Create a database
+2. Advanced Configuration
+3. RAC/Admin Managed/General Purpose
+4. Select All
+5. xydb/xydb/Create as Container database/Use Local Undo tbs for PDBs/pdb:1/pdbname:dataassets
+6. AMS:+DATA/{DB_UNIQUE_NAME}/Use OMF
+7. ASM/+FRA/+FRA free space(点击Browse查看：2097012)/Enable archiving
+8. 数据库组件，保持默认不选
+9. ASMM自动共享内存管理
+       sga=memory*65%*75%=512G*65%*75%=249.6G(向下十位取整为240G)
+       pga=memory*65%*25%=512G*65%*25%=83.2G(向下十位取整为80G)
+10. Sizing: block size: 8192/processes: 3840
+11. Character Sets: AL32UTF8
+12. Connection mode: Dadicated server mode--->Next
+13. 运行CVU和开启EM
+14. 使用相同密码
+15. 勾选：create database
+16. Ignore all--->Yes
+17. Finish
+18. Close
+
+```
 ### 6.2. 查看集群状态
 ```
-[root@zhongtaidb1 ~]# crsctl stat res -t
-----------------------------------------------------------------------------
-----
-Name Target State Server State details
-----------------------------------------------------------------------------
-----
+[grid@zhongtaidb1 ~]$ crsctl status resource -t
+--------------------------------------------------------------------------------
+Name           Target  State        Server                   State details
+--------------------------------------------------------------------------------
 Local Resources
-----------------------------------------------------------------------------
-----
-ora.CRS_GIMR.GHCHKPT.advm
-OFFLINE OFFLINE zhongtaidb1 STABLE
-OFFLINE OFFLINE zhongtaidb2 STABLE
+--------------------------------------------------------------------------------
 ora.LISTENER.lsnr
-ONLINE ONLINE zhongtaidb1 STABLE
-ONLINE ONLINE zhongtaidb2 STABLE
+               ONLINE  ONLINE       zhongtaidb1              STABLE
+               ONLINE  ONLINE       zhongtaidb2              STABLE
 ora.chad
-ONLINE ONLINE zhongtaidb1 STABLE
-ONLINE ONLINE zhongtaidb2 STABLE
-ora.crs_gimr.ghchkpt.acfs
-OFFLINE OFFLINE zhongtaidb1 STABLE
-OFFLINE OFFLINE zhongtaidb2 STABLE
-ora.helper
-OFFLINE OFFLINE zhongtaidb1 IDLE,STABLE
-OFFLINE OFFLINE zhongtaidb2 IDLE,STABLE
+               ONLINE  ONLINE       zhongtaidb1              STABLE
+               ONLINE  ONLINE       zhongtaidb2              STABLE
 ora.net1.network
-ONLINE ONLINE zhongtaidb1 STABLE
-ONLINE ONLINE zhongtaidb2 STABLE
+               ONLINE  ONLINE       zhongtaidb1              STABLE
+               ONLINE  ONLINE       zhongtaidb2              STABLE
 ora.ons
-ONLINE ONLINE zhongtaidb1 STABLE
-ONLINE ONLINE zhongtaidb2 STABLE
-ora.proxy_advm
-OFFLINE OFFLINE zhongtaidb1 STABLE
-OFFLINE OFFLINE zhongtaidb2 STABLE
-----------------------------------------------------------------------------
-----
+               ONLINE  ONLINE       zhongtaidb1              STABLE
+               ONLINE  ONLINE       zhongtaidb2              STABLE
+--------------------------------------------------------------------------------
 Cluster Resources
-----------------------------------------------------------------------------
-----
+--------------------------------------------------------------------------------
 ora.ASMNET1LSNR_ASM.lsnr(ora.asmgroup)
-1 ONLINE ONLINE zhongtaidb1 STABLE
-2 ONLINE ONLINE zhongtaidb2 STABLE3 ONLINE OFFLINE STABLE
-ora.CRS_GIMR.dg(ora.asmgroup)
-1 ONLINE ONLINE zhongtaidb1 STABLE
-2 ONLINE ONLINE zhongtaidb2 STABLE
-3 OFFLINE OFFLINE STABLE
+      1        ONLINE  ONLINE       zhongtaidb1              STABLE
+      2        ONLINE  ONLINE       zhongtaidb2              STABLE
+      3        OFFLINE OFFLINE                               STABLE
 ora.DATA.dg(ora.asmgroup)
-1 ONLINE ONLINE zhongtaidb1 STABLE
-2 ONLINE ONLINE zhongtaidb2 STABLE
-3 OFFLINE OFFLINE STABLE
+      1        ONLINE  ONLINE       zhongtaidb1              STABLE
+      2        ONLINE  ONLINE       zhongtaidb2              STABLE
+      3        ONLINE  OFFLINE                               STABLE
+ora.FRA.dg(ora.asmgroup)
+      1        ONLINE  ONLINE       zhongtaidb1              STABLE
+      2        ONLINE  ONLINE       zhongtaidb2              STABLE
+      3        ONLINE  OFFLINE                               STABLE
 ora.LISTENER_SCAN1.lsnr
-1 ONLINE ONLINE zhongtaidb1 STABLE
-ora.MGMTLSNR
-1 ONLINE ONLINE zhongtaidb1 169.254.11.15
-10.10.
-10.211,STABLE
+      1        ONLINE  ONLINE       zhongtaidb1              STABLE
+ora.OCR.dg(ora.asmgroup)
+      1        ONLINE  ONLINE       zhongtaidb1              STABLE
+      2        ONLINE  ONLINE       zhongtaidb2              STABLE
+      3        OFFLINE OFFLINE                               STABLE
 ora.asm(ora.asmgroup)
-1 ONLINE ONLINE zhongtaidb1 Started,STABLE
-2 ONLINE ONLINE zhongtaidb2 Started,STABLE
-3 OFFLINE OFFLINE STABLE
+      1        ONLINE  ONLINE       zhongtaidb1              Started,STABLE
+      2        ONLINE  ONLINE       zhongtaidb2              Started,STABLE
+      3        OFFLINE OFFLINE                               STABLE
 ora.asmnet1.asmnetwork(ora.asmgroup)
-1 ONLINE ONLINE zhongtaidb1 STABLE
-2 ONLINE ONLINE zhongtaidb2 STABLE
-3 OFFLINE OFFLINE STABLE
+      1        ONLINE  ONLINE       zhongtaidb1              STABLE
+      2        ONLINE  ONLINE       zhongtaidb2              STABLE
+      3        OFFLINE OFFLINE                               STABLE
 ora.cvu
-1 ONLINE ONLINE zhongtaidb1 STABLE
-ora.mgmtdb
-1 ONLINE ONLINE zhongtaidb1 Open,STABLE
-ora.orcl.db
-1 ONLINE ONLINE zhongtaidb1
-Open,HOME=/u01/app/o
-racle/product/19.0.0
-/db_1,STABLE
-2 ONLINE ONLINE zhongtaidb2
-Open,HOME=/u01/app/o
-racle/product/19.0.0
-/db_1,STABLE
+      1        ONLINE  ONLINE       zhongtaidb1              STABLE
 ora.qosmserver
-1 ONLINE ONLINE zhongtaidb1 STABLE
-ora.zhongtaidb1.vip
-1 ONLINE ONLINE zhongtaidb1 STABLE
-ora.zhongtaidb2.vip
-1 ONLINE ONLINE zhongtaidb2 STABLEora.rhpserver
-1 OFFLINE OFFLINE STABLE
+      1        ONLINE  ONLINE       zhongtaidb1              STABLE
 ora.scan1.vip
-1 ONLINE ONLINE zhongtaidb1 STABLE
+      1        ONLINE  ONLINE       zhongtaidb1              STABLE
+ora.xydb.db
+      1        ONLINE  ONLINE       zhongtaidb1              Open,HOME=/u01/app/o
+                                                             racle/product/19.0.0
+                                                             /db_1,STABLE
+      2        ONLINE  ONLINE       zhongtaidb2              Open,HOME=/u01/app/o
+                                                             racle/product/19.0.0
+                                                             /db_1,STABLE
+ora.zhongtaidb1.vip
+      1        ONLINE  ONLINE       zhongtaidb1              STABLE
+ora.zhongtaidb2.vip
+      1        ONLINE  ONLINE       zhongtaidb2              STABLE
+--------------------------------------------------------------------------------
+
+
+[grid@zhongtaidb1 ~]$ srvctl config database -d xydb
+Database unique name: xydb
+Database name: xydb
+Oracle home: /u01/app/oracle/product/19.0.0/db_1
+Oracle user: oracle
+Spfile: +DATA/XYDB/PARAMETERFILE/spfile.272.1098977945
+Password file: +DATA/XYDB/PASSWORD/pwdxydb.256.1098977053
+Domain:
+Start options: open
+Stop options: immediate
+Database role: PRIMARY
+Management policy: AUTOMATIC
+Server pools:
+Disk Groups: FRA,DATA
+Mount point paths:
+Services:
+Type: RAC
+Start concurrency:
+Stop concurrency:
+OSDBA group: dba
+OSOPER group: oper
+Database instances: xydb1,xydb2
+Configured nodes: zhongtaidb1,zhongtaidb2
+CSS critical: no
+CPU count: 0
+Memory target: 0
+Maximum memory: 0
+Default network number for database services:
+Database is administrator managed
+
 ```
 ### 6.3. 查看数据库版本
 ```
 [oracle@zhongtaidb1 db_1]$ sqlplus / as sysdba
 SQL> col banner_full for a120
 SQL> select BANNER_FULL from v$version;
+
 BANNER_FULL
-----------------------------------------------------------------------------
-----
+--------------------------------------------------------------------------------
 Oracle Database 19c Enterprise Edition Release 19.0.0.0.0 - Production
-cdb:
+Version 19.3.0.0.0
+
+SQL> select INST_NUMBER,INST_NAME FROM v$active_instances;
+
+INST_NUMBER INST_NAME
+----------- ----------------------------------------------
+	  1 zhongtaidb1:xydb1
+	  2 zhongtaidb2:xydb2
+
+SQL> SELECT instance_name, host_name FROM gv$instance;
+
+INSTANCE_NAME	 HOST_NAME
+---------------- --------------------------------
+xydb1		 zhongtaidb1
+xydb2		 zhongtaidb2
+
+SQL> 
+
 SQL> select file_name ,tablespace_name from dba_temp_files;
+
 FILE_NAME									 TABLESPACE_NAME
--------------------------------------------------------------------------------- ------------------------------
-+DATA/XYDB/TEMPFILE/temp.265.1061760325 					 TEMP
+------------------------------------------- ------------------------------
++DATA/XYDB/TEMPFILE/temp.264.1098977211 					 TEMP
 
+SQL> select file_name,tablespace_name from dba_data_files;
 
-FILE_NAME										   TABLESPACE_NAME		      CON_ID
------------------------------------------------------------------------------------------- ------------------------------ ----------
-+DATA/XYDB/TEMPFILE/dataassets_tmp.305.1061836669					   DATAASSETS_TMP			   1
-+DATA/XYDB/TEMPFILE/dataassets_tmp.306.1061836699					   DATAASSETS_TMP			   1
-+DATA/XYDB/TEMPFILE/temp.265.1061760325 						   TEMP 				   1
-+DATA/XYDB/TEMPFILE/temp.304.1061836561 						   TEMP 				   1
-+DATA/XYDB/B8D87A7C092DF3ECE0530B0E080AA526/TEMPFILE/temp.277.1061826499		   TEMP 				   3
-+DATA/XYDB/B8DA7D139F9E58F8E0530B0E080A13FD/TEMPFILE/temp.288.1061835131		   TEMP 				   4
-+DATA/XYDB/B8DA7D139F9E58F8E0530B0E080A13FD/TEMPFILE/temp.307.1061836917		   TEMP 				   4
-
-7 rows selected.
+FILE_NAME									 TABLESPACE_NAME
+-------------------------------------------- ------------------------------
++DATA/XYDB/DATAFILE/system.257.1098977073					 SYSTEM
++DATA/XYDB/DATAFILE/sysaux.258.1098977107					 SYSAUX
++DATA/XYDB/DATAFILE/undotbs1.259.1098977123					 UNDOTBS1
++DATA/XYDB/DATAFILE/users.260.1098977123					 USERS
++DATA/XYDB/DATAFILE/undotbs2.269.1098977625					 UNDOTBS2
 
 SQL> 
 
+SQL> show pdbs;
+
+    CON_ID CON_NAME			  OPEN MODE  RESTRICTED
+---------- ------------------------------ ---------- ----------
+	 2 PDB$SEED			  READ ONLY  NO
+	 3 DATAASSETS			  READ WRITE NO
+SQL> alter session set container=dataassets;
+
+Session altered.
+
+SQL> select file_name ,tablespace_name from dba_temp_files;
+
+FILE_NAME									 TABLESPACE_NAME
+-------------------------------------------- ------------------------------
++DATA/XYDB/D9D95AD26C416301E0536ACBA8C0985D/TEMPFILE/temp.276.1098978145	 TEMP
+
+SQL> select file_name,tablespace_name from dba_data_files;
+
+FILE_NAME									 TABLESPACE_NAME
+-------------------------------------------  ------------------------------
++DATA/XYDB/D9D95AD26C416301E0536ACBA8C0985D/DATAFILE/system.274.1098978145	 SYSTEM
++DATA/XYDB/D9D95AD26C416301E0536ACBA8C0985D/DATAFILE/sysaux.275.1098978145	 SYSAUX
++DATA/XYDB/D9D95AD26C416301E0536ACBA8C0985D/DATAFILE/undotbs1.273.1098978145	 UNDOTBS1
++DATA/XYDB/D9D95AD26C416301E0536ACBA8C0985D/DATAFILE/undo_2.277.1098978155	 UNDO_2
++DATA/XYDB/D9D95AD26C416301E0536ACBA8C0985D/DATAFILE/users.278.1098978155	 USERS
+
 SQL> 
-alter tablespace temp add tempfile '+DATA' size 1G autoextend on next 1G maxsize 31G;
-create temporary tablespace dataassets_tmp tempfile '+DATA' size 1G autoextend on next 1G maxsize 31G extent management local ;
-alter tablespace dataassets_tmp add tempfile '+DATA' size 1G autoextend on next 1G maxsize 31G;
+```
+### 6.4. Oracle RAC数据库优化
+#user password life修改，一个节点修改即可(CDB/PDB)
+```oracle
+select resource_name,limit from dba_profiles where profile='DEFAULT';
+alter profile default limit password_life_time unlimited;
+ALTER PROFILE DEFAULT limit FAILED_LOGIN_ATTEMPTS unlimited;
 
-==========================
-  852   sqlplus IDC_DATA_SWOP/H2DHiH9yRSx24wK@10.8.13.201:1521/dataassets
-  853  sqlplus IDC_DATA_SWOP/H2DHiH9yRSx24wK@10.8.14.15:1521/s_dataassets
-  854  expdp eamsadm/eaEr56uLms@s_eamspdb schemas=eams_jmu directory=home/oracle/zd_dump dumpfile=eams_jmu_210610.dmp logfile=eams_jmu_210610.log cluster=n compression=data_only version=12.2.0.1.0
-  855  expdp eamsadm/eaEr56uLms@s_eamspdb schemas=eams_jmu directory=zd_dump dumpfile=eams_jmu_210610.dmp logfile=eams_jmu_210610.log cluster=n compression=data_only version=12.2.0.1.0
-  856  expdp eamsadm/eaEr56uLms@s_eamspdb schemas=eams_jmu directory=zd_dump dumpfile=eams_jmu_210610.dmp  cluster=n compression=data_only version=12.2.0.1.0
-  857  expdp eamsadm/eaEr56uLms@s_eamspdb schemas=eams_jmu directory=zd_dump dumpfile=eams_jmu_2106101.dmp  cluster=n compression=data_only version=12.2.0.1.0
-  858  expdp eamsadm/eaEr56uLms@s_eamspdb schemas=eams_jmu directory=zd_dump dumpfile=eams0610.dmp  cluster=n compression=data_only version=12.2.0.1.0
-  859  ll
-  860  cd zd_dump/
-  861  ll
-  862  expdp eamsadm/eaEr56uLms@s_eamspdb schemas=eams_jmu directory=zd_dump dumpfile=eams_jmu_210610.dmp logfile=eams_jmu_210610.log cluster=n compression=data_only version=12.2.0.1.0
-  863  expdp eamsadm/eaEr56uLms@s_eamspdb schemas=eams_jmu directory=home/oracle/zd_dump dumpfile=eams_jmu_210610.dmp logfile=eams_jmu_210610.log cluster=n compression=data_only version=12.2.0.1.0
+select resource_name,limit from dba_profiles where profile='DEFAULT';
+```
+#允许oracle低版本连接，两个节点都要修改
+```
+su - oracle
+cd $ORACLE_HOME/network/admin
+vi sqlnet.ora
 
-  693  impdp eamsadm/eaEr56uLms@s_eamspdb schemas=eams_jmu_b2 directory=data_pump_dir dumpfile=eams_jmu_210330.dmp logfile=eams_jmu_210330.log remap_schema=eams_jmu_b2:eams remap_tablespace=users:eams cluster=n transform=oid:n
-  695  impdp eamsadm/eaEr56uLms@s_eamspdb schemas=eams_jmu_b2 directory=zd_dump dumpfile=eams_jmu_210330.dmp logfile=eams_jmu_210330.log remap_schema=eams_jmu_b2:eams remap_tablespace=users:eams cluster=n transform=oid:n
-  700  impdp eamsadm/eaEr56uLms@s_eamspdb schemas=eams_jmu_b2 directory=data_pump_dir dumpfile=eams_jmu_210330.dmp logfile=eams_jmu_210330.log remap_schema=eams_jmu_b2:eams remap_tablespace=users:eams cluster=n transform=oid:n
-  701  impdp eamsadm/eaEr56uLms@s_eamspdb schemas=eams_jmu_b2 directory=data_pump_dir dumpfile=eams_jmu_210330.dmp logfile=eams_jmu_210330.log remap_schema=eams_jmu_b2:eams_jmu remap_tablespace=users:eams cluster=n transform=oid:n
-  753  history|grep impdp
-  775  impdp eamsadm/eaEr56uLms@s_eamspdb tabless=EAMS_JMU_XC210427.YJS_COURSE,EAMS_JMU_XC210427.STANDERD_CODE,EAMS_JMU_XC210427.PY_XS,EAMS_JMU_XC210427.ZD_YJS_MAJOR directory=data_pump_dir dumpfile=eams_jmu_yjs_210505.dmp logfile=eams_jmu_yjs_210505.log remap_schema=EAMS_JMU_XC210427:eams_jmu remap_tablespace=users:eams cluster=n
-  776  impdp eamsadm/eaEr56uLms@s_eamspdb tables=EAMS_JMU_XC210427.YJS_COURSE,EAMS_JMU_XC210427.STANDERD_CODE,EAMS_JMU_XC210427.PY_XS,EAMS_JMU_XC210427.ZD_YJS_MAJOR directory=data_pump_dir dumpfile=eams_jmu_yjs_210505.dmp logfile=eams_jmu_yjs_210505.log remap_schema=EAMS_JMU_XC210427:eams_jmu remap_tablespace=users:eams cluster=n
-  778  impdp eamsadm/eaEr56uLms@s_eamspdb tables=EAMS_JMU_XC210427.YJS_COURSE,EAMS_JMU_XC210427.STANDERD_CODE,EAMS_JMU_XC210427.PY_XS,EAMS_JMU_XC210427.ZD_YJS_MAJOR directory=data_pump_dir dumpfile=eams_jmu_yjs_210505.dmp logfile=eams_jmu_yjs_210505.log remap_schema=EAMS_JMU_XC210427:eams_jmu remap_tablespace=users:eams cluster=n
-  781  impdp eamsadm/eaEr56uLms@s_eamspdb tables=EAMS_JMU_XC210427.YJS_COURSE,EAMS_JMU_XC210427.STANDERD_CODE,EAMS_JMU_XC210427.PY_XS,EAMS_JMU_XC210427.ZD_YJS_MAJOR directory=data_pump_dir dumpfile=eams_jmu_yjs_210505.dmp logfile=eams_jmu_yjs_210505.log remap_schema=EAMS_JMU_XC210427:eams_jmu remap_tablespace=users:eams cluster=n
-  801  impdp eamsadm/eaEr56uLms@s_eamspdb tables=EAMS_JMU_XC210427.PY_XS,EAMS_JMU_XC210427.xj,EAMS_JMU_XC210427.zd_yjs_major,EAMS_JMU_XC210427.PY_TABTERM,EAMS_JMU_XC210427.STANDERD_CODE,EAMS_JMU_XC210427.yjs_course,EAMS_JMU_XC210427.PY_PYFA_M,EAMS_JMU_XC210427.PY_PYFA,EAMS_JMU_XC210427.PY_PYJH directory=data_pump_dir dumpfile=eams_jmu_yjs_210518.dmp logfile=eams_jmu_yjs_210518.log remap_schema=EAMS_JMU_XC210427:eams_jmu remap_tablespace=users:eams TABLE_EXISTS_ACTION=REPLACE cluster=n
-
-====================================
-  /u01/app/oracle/oradata/ORCL/CAE7CB8D19BB039FE053C90D080A6738/datafile/EOTQ03.db
-
-
-scp -P 20622 101.231.81.202:/root/eotq0610.zip ./
-
-create pluggable database eotqpdb admin user eotq identified by H2DHiH9yRSx24wK roles=(dba);
-create tablespace EOTQ datafile '+DATA' size 1G autoextend on next 1G maxsize 31G extent management local segment space management auto;
-alter tablespace EOTQ add datafile '+DATA' size 1G autoextend on next 1G maxsize 31G;
-alter tablespace EOTQ add datafile '+DATA' size 1G autoextend on next 1G maxsize 31G;
-alter tablespace EOTQ add datafile '+DATA' size 1G autoextend on next 1G maxsize 31G;
-alter tablespace EOTQ add datafile '+DATA' size 1G autoextend on next 1G maxsize 31G;
-
-create pluggable database cwpdb admin user cwpdb identified by dGl6cHdkMTIzIUAj roles=(dba);
-alter pluggable database cwpdb open;
-alter session set container=cwpdb;
-
-create tablespace cwpdb datafile '+DATA' size 1G autoextend on next 1G maxsize 31G extent management local segment space management auto;
-alter tablespace cwpdb add datafile '+DATA' size 1G autoextend on next 1G maxsize 31G;
-alter tablespace cwpdb add datafile '+DATA' size 1G autoextend on next 1G maxsize 31G;
-alter tablespace cwpdb add datafile '+DATA' size 1G autoextend on next 1G maxsize 31G;
-alter tablespace cwpdb add datafile '+DATA' size 1G autoextend on next 1G maxsize 31G;
-
-create user cwuser identified by dGl6cHdkMTIzIUAj default tablespace cwpdb account unlock;
-
-grant dba to cwuser;
-grant select any table to cwuser;
-
-sqlplus cwuser/dGl6cHdkMTIzIUAj@10.8.14.15:1521/s_cwpdb
-
-[oracle@zhongtaidb1 ~]$ srvctl add service -d xydb -s s_cwpdb -r xydb1,xydb2 -P basic -e select -m basic -z 180 -w 5 -pdb cwpdb
-[oracle@zhongtaidb1 ~]$ srvctl status service -d xydb -s s_cwpdb
-Service s_cwpdb is not running.
-[oracle@zhongtaidb1 ~]$ srvctl start service -d xydb -s s_cwpdb
-[oracle@zhongtaidb1 ~]$ srvctl status service -d xydb -s s_cwpdb
-Service s_cwpdb is running on instance(s) xydb1,xydb2
-[oracle@zhongtaidb1 ~]$ lsnrctl status 
-
-LSNRCTL for Linux: Version 19.0.0.0.0 - Production on 22-JUL-2021 17:04:23
-
-Copyright (c) 1991, 2019, Oracle.  All rights reserved.
-
-Connecting to (ADDRESS=(PROTOCOL=tcp)(HOST=)(PORT=1521))
-STATUS of the LISTENER
-------------------------
-Alias                     LISTENER
-Version                   TNSLSNR for Linux: Version 19.0.0.0.0 - Production
-Start Date                14-JAN-2021 11:47:38
-Uptime                    189 days 5 hr. 16 min. 45 sec
-Trace Level               off
-Security                  ON: Local OS Authentication
-SNMP                      OFF
-Listener Parameter File   /u01/app/19.0.0/grid/network/admin/listener.ora
-Listener Log File         /u01/app/grid/diag/tnslsnr/zhongtaidb1/listener/alert/log.xml
-Listening Endpoints Summary...
-  (DESCRIPTION=(ADDRESS=(PROTOCOL=ipc)(KEY=LISTENER)))
-  (DESCRIPTION=(ADDRESS=(PROTOCOL=tcp)(HOST=192.168.203.106)(PORT=1521)))
-  (DESCRIPTION=(ADDRESS=(PROTOCOL=tcp)(HOST=10.8.14.12)(PORT=1521)))
-Services Summary...
-Service "+ASM" has 1 instance(s).
-  Instance "+ASM1", status READY, has 1 handler(s) for this service...
-Service "+ASM_DATA" has 1 instance(s).
-  Instance "+ASM1", status READY, has 1 handler(s) for this service...
-Service "+ASM_FRA" has 1 instance(s).
-  Instance "+ASM1", status READY, has 1 handler(s) for this service...
-Service "+ASM_LOG" has 1 instance(s).
-  Instance "+ASM1", status READY, has 1 handler(s) for this service...
-Service "+ASM_OCR" has 1 instance(s).
-  Instance "+ASM1", status READY, has 1 handler(s) for this service...
-Service "86b637b62fdf7a65e053f706e80a27ca" has 1 instance(s).
-  Instance "xydb1", status READY, has 1 handler(s) for this service...
-Service "b8d87a7c092df3ece0530b0e080aa526" has 1 instance(s).
-  Instance "xydb1", status READY, has 1 handler(s) for this service...
-Service "b8da7d139f9e58f8e0530b0e080a13fd" has 1 instance(s).
-  Instance "xydb1", status READY, has 1 handler(s) for this service...
-Service "bcc591d8d5bb080ae0530d0e080ac943" has 1 instance(s).
-  Instance "xydb1", status READY, has 1 handler(s) for this service...
-Service "c474f1e25d5e9735e0530b0e080ac7b9" has 1 instance(s).
-  Instance "xydb1", status READY, has 1 handler(s) for this service...
-Service "c7b37f1e6557092fe0530b0e080a2ef1" has 1 instance(s).
-  Instance "xydb1", status READY, has 1 handler(s) for this service...
-Service "cwpdb" has 1 instance(s).
-  Instance "xydb1", status READY, has 1 handler(s) for this service...
-Service "dataassets" has 1 instance(s).
-  Instance "xydb1", status READY, has 1 handler(s) for this service...
-Service "eamspdb" has 1 instance(s).
-  Instance "xydb1", status READY, has 1 handler(s) for this service...
-Service "eotqpdb" has 1 instance(s).
-  Instance "xydb1", status READY, has 1 handler(s) for this service...
-Service "jmupdb" has 1 instance(s).
-  Instance "xydb1", status READY, has 1 handler(s) for this service...
-Service "s_cwpdb" has 1 instance(s).
-  Instance "xydb1", status READY, has 1 handler(s) for this service...
-Service "s_dataassets" has 1 instance(s).
-  Instance "xydb1", status READY, has 1 handler(s) for this service...
-Service "s_eamspdb" has 1 instance(s).
-  Instance "xydb1", status READY, has 1 handler(s) for this service...
-Service "s_eotq" has 1 instance(s).
-  Instance "xydb1", status READY, has 1 handler(s) for this service...
-Service "s_jmupdb" has 1 instance(s).
-  Instance "xydb1", status READY, has 1 handler(s) for this service...
-Service "xydb" has 1 instance(s).
-  Instance "xydb1", status READY, has 1 handler(s) for this service...
-Service "xydbXDB" has 1 instance(s).
-  Instance "xydb1", status READY, has 1 handler(s) for this service...
-The command completed successfully
-[oracle@zhongtaidb1 ~]$ 
-
-
-create tablespace users datafile '/u01/app/oracle/oradata/ORCL/CAE7CB8D19BB039FE053C90D080A6738/datafile/users01.dbf' size 1G autoextend on next 1G maxsize 31G extent management local segment space management auto;
-alter tablespace users add datafile '/u01/app/oracle/oradata/ORCL/CAE7CB8D19BB039FE053C90D080A6738/datafile/users02.dbf' size 1G autoextend on next 1G maxsize 31G;
-
-
-create tablespace users datafile '+DATA' size 1G autoextend on next 1G maxsize 31G extent management local segment space management auto;
-alter tablespace users add datafile '+DATA' size 1G autoextend on next 1G maxsize 31G;
-
-
-create user eotqv2_jm identified by H2DHiH9yRSx24wK default tablespace EOTQ account unlock;
-
-grant dba to eotqv2_jm;
-grant select any table to eotqv2_jm;
-
-impdp eotqv2_jm/H2DHiH9yRSx24wK@s_eotq  schemas=eotqv2_jm directory=eotq_exp dumpfile=eotq0610.dmp 
-imp eotqv2_jm/H2DHiH9yRSx24wK@s_eotq  file=eotq0610.dmp  log=eotq0611.log fromuser=eotqv2_jm
-imp system/manager file=seapark log=seapark fromuser=seapark
-
-srvctl add service -d xydb  -s s_eotq -r xydb1,xydb2 -P basic -e select -m basic -z 180 -w 5 -pdb eotqpdb
-[oracle@zhongtaidb1 ~]$ srvctl status service -d xydb  -s s_eotq
-Service s_eotq is not running.
-[oracle@zhongtaidb1 ~]$ srvctl start service -d xydb  -s s_eotq
-[oracle@zhongtaidb1 ~]$ srvctl status service -d xydb  -s s_eotq
-Service s_eotq is running on instance(s) xydb1,xydb2
-[oracle@zhongtaidb1 ~]$ 
-
-expdp eotqv2_jm/H2DHiH9yRSx24wK@192.168.203.106:1521/s_eotq schemas=eotqv2_jm directory=expdir dumpfile=eotqv2_jm_20210901.dmp logfile=eotqv2_jm_20210901.log cluster=n compression=data_only version=12.2.0.1.0
-sqlplus eotqv2_jm/H2DHiH9yRSx24wK@10.8.14.15:1521/s_eotq
-sqlplus eotqv2_jm/\"jmzlxt@2021\"@10.8.14.15:1521/s_eotq
-
-impdp eotqv2_jm/H2DHiH9yRSx24wK@10.8.13.201:1521/eotqpdb schemas=eotqv2_jm directory=expdir dumpfile=eotqv2_jm_20210901.dmp logfile=eotqv2_jm_20210901.log cluster=n
-
-sqlplus eotqv2_jm/H2DHiH9yRSx24wK@10.8.13.201:1521/eotqpdb
-sqlplus idc_u_stu/\"idcustu@sufe1917\"@ecard
-
-sqlplus eotq/H2DHiH9yRSx24wK@10.8.14.15:1521/s_eotq
-
-================================
- srvctl add service -d xydb  -s s_jmupdb -r xydb1,xydb2 -P basic -e select -m basic -z 180 -w 5 -pdb jmupdb
-
-
-create pluggable database jmupdb admin user jmu identified by H2DHiH9yRSx24wK roles=(dba);
-
-
-
-
+SQLNET.ALLOWED_LOGON_VERSION_SERVER=8
+SQLNET.ALLOWED_LOGON_VERSION_CLIENT=8
+```
+#数据库自启动
+```
+su - root
+cd /u01/app/19.0.0/grid/bin
+./crsctl enable crs
+```
+#PDB自启动
+#方法一
+```oracle
 CREATE OR REPLACE TRIGGER open_pdbs
   AFTER STARTUP ON DATABASE
 BEGIN
    EXECUTE IMMEDIATE 'ALTER PLUGGABLE DATABASE ALL OPEN';
 END open_pdbs;
 /
-
-pdb
-
-sqlplus jmu/H2DHiH9yRSx24wK@10.8.14.15:1521/s_jmupdb
-SQL> select file_name from dba_data_files;
-
-FILE_NAME
---------------------------------------------------------------------------------
-+DATA/XYDB/B8D87A7C092DF3ECE0530B0E080AA526/DATAFILE/system.275.1061826497
-+DATA/XYDB/B8D87A7C092DF3ECE0530B0E080AA526/DATAFILE/sysaux.276.1061826497
-+DATA/XYDB/B8D87A7C092DF3ECE0530B0E080AA526/DATAFILE/undotbs1.274.1061826497
-+DATA/XYDB/B8D87A7C092DF3ECE0530B0E080AA526/DATAFILE/undo_2.278.1061832441
-
-cdb  
-SQL> select file_name from dba_data_files;
-+DATA/XYDB/DATAFILE/system.258.1061760187
-+DATA/XYDB/DATAFILE/sysaux.259.1061760223
-+DATA/XYDB/DATAFILE/undotbs1.260.1061760237
-+DATA/XYDB/DATAFILE/users.261.1061760239
-+DATA/XYDB/DATAFILE/undotbs2.270.1061760773
-
-
-create tablespace portal_service datafile '+DATA' size 1G autoextend on next 1G maxsize 31G extent management local segment space management auto;
-alter tablespace portal_service add datafile '+DATA' size 1G autoextend on next 1G maxsize 31G;
-alter tablespace portal_service add datafile '+DATA' size 1G autoextend on next 1G maxsize 31G;
-alter tablespace portal_service add datafile '+DATA' size 1G autoextend on next 1G maxsize 31G;
-alter tablespace portal_service add datafile '+DATA' size 1G autoextend on next 1G maxsize 31G;
-
-create user portal_service identified by H2DHiH9yRSx24wK default tablespace portal_service account unlock;
-
-grant dba to portal_service;
-grant select any table to portal_service;
-
-
- =========================
-
-create pluggable database hrpdb admin user hrpdb identified by H2D3JHiH9Sx24wK roles=(dba);
-alter pluggable database hrpdb open;
-alter session set container=hrpdb;
-
-create tablespace hrpdb datafile '+DATA' size 1G autoextend on next 1G maxsize 31G extent management local segment space management auto;
-alter tablespace hrpdb add datafile '+DATA' size 1G autoextend on next 1G maxsize 31G;
-
-alter tablespace hrpdb add datafile '+DATA' size 1G autoextend on next 1G maxsize 31G;
-
-alter tablespace hrpdb add datafile '+DATA' size 1G autoextend on next 1G maxsize 31G;
-
-alter tablespace hrpdb add datafile '+DATA' size 1G autoextend on next 1G maxsize 31G;
-
-
-create user hruser identified by H2D3JHiH9Sx24wK default tablespace hrpdb account unlock;
-
-grant dba to hruser;
-grant select any table to hruser;
-
-sqlplus hruser/H2D3JHiH9Sx24wK@10.8.14.15:1521/s_hrpdb
-IP:  10.8.14.15
-sqlplus hruser/H2D3JHiH9Sx24wK@10.8.14.15:1521/s_hrpdb
-create user hruser1 identified by H2D3JHiH9Sx24wK default tablespace hrpdb account unlock;
-grant dba to hruser1;
-
-
-[oracle@zhongtaidb1 ~]$ srvctl add service -d xydb -s s_hrpdb -r xydb1,xydb2 -P basic -e select -m basic -z 180 -w 5 -pdb hrpdb
-srvctl start service -d xydb -s s_hrpdb
-
-impdp  hruser/H2D3JHiH9Sx24wK@192.168.203.106:1521/s_hrpdb schemas=hruser directory=data_pump_dir dumpfile=eamscce210816.dpdmp logfile=hruser.log remap_tablespace=users:hruser cluster=n  transform=oid:n TABLE_EXISTS_ACTION=replace
-
-
-impdp directory=expdir dumpfile=GXYS_zhongtaidb11201_20200921.DMP   schemas=hruser logfile=hruser.log cluster=n  transform=oid:n TABLE_EXISTS_ACTION=replace
-
- impdp  hruser/H2D3JHiH9Sx24wK@192.168.203.106:1521/s_hrpdb  directory=expdir dumpfile=GXYS_zhongtaidb11201_20200921.DMP   remap_schema=gxys:hruser remap_tablespace=ykspace:hrpdb  logfile=hruser0823001.log cluster=n  TABLE_EXISTS_ACTION=replace
- impdp  hruser/H2D3JHiH9Sx24wK@192.168.203.106:1521/s_hrpdb  directory=expdir dumpfile=GXYS_zhongtaidb11201_20200921.DMP   remap_schema=gxys:hruser remap_tablespace=ykspace:hrpdb  logfile=hruser0823001.log cluster=n  TABLE_EXISTS_ACTION=replace
-
- GXYS
- CREATE USER "GXYS" IDENTIFIED BY VALUES 'S:E2506CB6369F3CF1D4EE2E1B08AABD2C6426472D3550AA809C860277156E;B7971FDB00AC4053'
-      DEFAULT TABLESPACE "YKSPACE"
-      TEMPORARY TABLESPACE "TEMP";
-
- ORA-02374: conversion error loading table "HRUSER"."TPARAM"
-ORA-12899: value too large for column PARAMNAME (actual: 37, maximum: 30)
-
-ORA-02372: data for row: PARAMNAME : 0X'B5A5CEBBB5D8D6B75FB5D8A3A8CAD0A1A2D6DDA1A2C3CBA3A9'
-
-
-ORA-02374: conversion error loading table "HRUSER"."TPARAM"
-ORA-12899: value too large for column PARAMNAME (actual: 37, maximum: 30)
-
-ORA-02372: data for row: PARAMNAME : 0X'B5A5CEBBB5D8D6B75FCFD8A3A8CAD0A1A2C7F8A1A2C6ECA3A9'
-
-
-ORA-02374: conversion error loading table "HRUSER"."TPARAM"
-ORA-12899: value too large for column PARAMNAME (actual: 43, maximum: 30)
-
-ORA-02372: data for row: PARAMNAME : 0X'B5A5CEBBB5D8D6B75FCAA1A3A8D7D4D6CEC7F8A1A2D6B1CFBD'
-
-
-ORA-02374: conversion error loading table "HRUSER"."TPARAM"
-ORA-12899: value too large for column PARAMNAME (actual: 36, maximum: 30)
-
-ORA-02372: data for row: PARAMNAME : 0X'C1AACFB5B5E7BBB0A3A8B0FCC0A8B5D8C7F8BAC5C2EBA3A9'
-
 ```
-## oracle 19C rac 基本操作
+#方法二
+```oracle
+alter pluggable database all open instances=all;
+alter pluggable database all save state instances=all;
+```
+##创建service
+```oracle
+su - oracle
+
+srvctl add service -d xydb -s s_dataassets -r xydb1,xydb2 -P basic -e select -m basic -z 180 -w 5 -pdb dataassets
+
+srvctl start service -d xydb -s s_dataassets
+
+lsnrctl status 
 ```
 
+##连接方式
+```oracle
+SQL> show pdbs;
+
+    CON_ID CON_NAME			  OPEN MODE  RESTRICTED
+---------- ------------------------------ ---------- ----------
+	 2 PDB$SEED			  READ ONLY  NO
+	 3 DATAASSETS			  READ WRITE NO
+SQL> alter session set container=DATAASSETS;
+
+Session altered.
+
+SQL> grant dba to pdbadmin;
+
+Grant succeeded.
+
+SQL> exit
+#sqlplus pdbadmin/pdbadmin@192.168.203.111:1521/s_dataassets
+[oracle@zhongtaidb2 ~]$ sqlplus pdbadmin/pdbadmin@192.168.203.111:1521/s_dataassets
+
+SQL*Plus: Release 19.0.0.0.0 - Production on Mon Mar 14 15:54:42 2022
+Version 19.3.0.0.0
+
+Copyright (c) 1982, 2019, Oracle.  All rights reserved.
+
+Last Successful login time: Mon Mar 14 2022 15:54:30 +08:00
+
+Connected to:
+Oracle Database 19c Enterprise Edition Release 19.0.0.0.0 - Production
+Version 19.3.0.0.0
+
+SQL> select count(*) from dba_objects;
+
+  COUNT(*)
+----------
+     72490
+
+SQL> exit
+
+```
+
+#rman备份
+#创建脚本目录
+```bash
+su - oracle
+mkdir /home/oracle/rmanbak
+```
+#/home/oracle/rmanbak/rmanbak.sh
+```bash
+#!/bin/bash
+
+time=$(date +"%Y%m%d")
+rman_dir=/home/oracle/rmanbak
+
+if [ -f $HOME/.bash_profile ]; then
+    . $HOME/.bash_profile
+elif [ -f $HOME/.profile ]; then
+        . $HOME/.profile
+fi
+
+echo `date` > $rman_dir/rmanrun.log
+  
+rman target / log=$rman_dir/rmanfullbak_$time.log append <<EOF
+run{
+   CONFIGURE CONTROLFILE AUTOBACKUP ON;
+   CONFIGURE BACKUP OPTIMIZATION ON;
+   allocate channel c1 type disk;
+   allocate channel c2 type disk;
+   allocate channel c3 type disk;
+   allocate channel c4 type disk;
+   alter system archive log current;
+   backup as compressed backupset database plus archivelog delete all input; 
+   alter system archive log current;
+   backup archivelog all;
+   crosscheck backup;
+   delete noprompt obsolete;
+   delete noprompt expired backup;
+   release channel c1;
+   release channel c2;
+   release channel c3;
+   release channel c4;
+}
+exit;
+EOF
+ >> $rman_dir/rmanrun.log
+#delete 7days before log 
+find $rman_dir -name 'rmanfullbak_*.log' -mtime +7 -exec rm {} \;
+echo `date ` >> $rman_dir/rmanrun.log
+```
+#定时脚本crontab -l
+```bash
+30 0 * * * /home/oracle/rmanbak/rmanbak.sh
+```
+#数据泵导出、导入
+```bash
+#创建目录，两个节点都必须创建该目录
+mkdir /home/oracle/expdir
+```
+```oracle
+#创建directory
+create directory expdir as '/home/oracle/expdir';
+grant read,write on directory expdir to public;
+
+##expdp
+#导出某个用户,IP地址用scanIP时，注意导出文件在哪一个节点
+expdp test1/test1@192.168.203.111:1521/s_dataassets schemas=test1 directory=expdir dumpfile=test1_20220314.dmp logfile=test1_20220314.log cluster=n
+#导出全库
+expdp pdbadmin/pdbadmin@192.168.203.111:1521/s_dataassets full=y directory=expdir dumpfile=test1_20220314.dmp logfile=test1_20220314.log cluster=n
+
+##impdp
+impdp est1/test1@192.168.203.111:1521/s_dataassets schemas=test1 directory=expdir dumpfile=test1_20220314.dmp logfile=test1_20220314.log cluster=n
+
+##impdp--remap
+impdp  est1/test1@192.168.203.111:1521/s_dataassets schemas=test1 directory=expdir dumpfile=test1_20220314.dmp logfile=test1_20220314.log cluster=n   remap_schema=test2:test1 remap_tablespace=test2:test1  logfile=test01.log cluster=n
+
+#expdp-12.2.0.1.0
+expdp test1/test1@192.168.203.111:1521/s_dataassets schemas=test1 directory=expdir dumpfile=test1_20220314.dmp logfile=test1_20220314.log cluster=n compression=data_only version=12.2.0.1.0
+```
+### 6.5. Oracle RAC其他操作
+#创建pdb
+```oracle
+create pluggable database pdb1 admin user pdb1user identified by pdb1user roles=(dba);
+
+alter pluggable database pdb1 open;
+alter session set container=pdb1;
+
+create tablespace pdb1user datafile '+DATA' size 1G autoextend on next 1G maxsize 31G extent management local segment space management auto;
+
+alter tablespace pdb1user add datafile '+DATA' size 1G autoextend on next 1G maxsize 31G;
+
+
+create user user1 identified by user1 default tablespace pdb1user account unlock;
+
+grant dba to user1;
+grant select any table to user1;
+```
+#连接方式
+```bash
+srvctl add service -d xydb -s s_pdb1 -r xydb1,xydb2 -P basic -e select -m basic -z 180 -w 5 -pdb pdb1
+
+srvctl start service -d xydb -s s_pdb1
+srvctl status service -d xydb -s s_pdb1
+
+sqlplus user1/user1@192.168.203.111:1521/s_pdb1
+```
+
+### 6.8. Oracle RAC更改PDB的字符集
+```
  SQL> show pdbs;
 
     CON_ID CON_NAME			  OPEN MODE  RESTRICTED
@@ -2119,20 +2140,7 @@ ORA-02372: data for row: PARAMNAME : 0X'C1AACFB5B5E7BBB0A3A8B0FCC0A8B5D8C7F8BAC5
 	 7 CWPDB			  READ WRITE NO
 	 8 RPTPDB			  READ WRITE NO
 	 9 HRPDB			  READ WRITE NO
-SQL> 
 
-SQL> show pdbs;
-
-    CON_ID CON_NAME			  OPEN MODE  RESTRICTED
----------- ------------------------------ ---------- ----------
-	 2 PDB$SEED			  READ ONLY  NO
-	 3 JMUPDB			  READ WRITE NO
-	 4 DATAASSETS			  READ WRITE NO
-	 5 EOTQPDB			  READ WRITE NO
-	 6 EAMSPDB			  READ WRITE NO
-	 7 CWPDB			  READ WRITE NO
-	 8 RPTPDB			  READ WRITE NO
-	 9 HRPDB			  MOUNTED
 SQL> alter pluggable database hrpdb close immediate instances=all;
 
 Pluggable database altered.
@@ -2216,696 +2224,4 @@ AMERICAN_AMERICA.AL32UTF8
 
 SQL> 
 
- create pluggable database jwpdb1 admin user jwpdb identified by supwisdom210831 roles=(dba);
-alter alter pluggable database jwpdb1 open;
-alter session set container=jwpdb1;
-
-
-
-create tablespace users datafile '+DATA' size 1G autoextend on next 1G maxsize 31G extent management local segment space management auto;
-alter tablespace users add datafile '+DATA' size 1G autoextend on next 1G maxsize 31G;
-
-alter tablespace users add datafile '+DATA' size 1G autoextend on next 1G maxsize 31G;
-
-alter tablespace users add datafile '+DATA' size 1G autoextend on next 1G maxsize 31G;
-
-alter tablespace users add datafile '+DATA' size 1G autoextend on next 1G maxsize 31G;
-
-
-create tablespace eams datafile '+DATA' size 1G autoextend on next 1G maxsize 31G extent management local segment space management auto;
-alter tablespace eams add datafile '+DATA' size 1G autoextend on next 1G maxsize 31G;
-
-alter tablespace eams add datafile '+DATA' size 1G autoextend on next 1G maxsize 31G;
-
-alter tablespace eams add datafile '+DATA' size 1G autoextend on next 1G maxsize 31G;
-
-alter tablespace eams add datafile '+DATA' size 1G autoextend on next 1G maxsize 31G;
-
-alter user system identified by supwisdom210831 account unlock;
-
-
-
- 
-
- create pluggable database rptpdb admin user rptpdb identified by J3dx0J3HH29LmH9S roles=(dba);
-alter pluggable database rptpdb open;
-alter session set container=rptpdb;
-
-create tablespace rptpdb datafile '+DATA' size 1G autoextend on next 1G maxsize 31G extent management local segment space management auto;
-alter tablespace rptpdb add datafile '+DATA' size 1G autoextend on next 1G maxsize 31G;
-
-alter tablespace rptpdb add datafile '+DATA' size 1G autoextend on next 1G maxsize 31G;
-
-alter tablespace rptpdb add datafile '+DATA' size 1G autoextend on next 1G maxsize 31G;
-
-alter tablespace rptpdb add datafile '+DATA' size 1G autoextend on next 1G maxsize 31G;
-
-
-create user rpt identified by J3dx0J3HH29LmH9S default tablespace rptpdb account unlock;
-
-grant dba to rpt;
-grant select any table to rpt;
-
-sqlplus rpt/J3dx0J3HH29LmH9S@10.8.14.15:1521/s_rpt
-
-[oracle@zhongtaidb1 ~]$ srvctl add service -d xydb -s s_rpt -r xydb1,xydb2 -P basic -e select -m basic -z 180 -w 5 -pdb rptpdb
-srvctl start service -d xydb -s s_rptpdb
-
-
-
-cdb
-create pluggable database dataassets admin user jmu identified by H2DHiH9yRSx24wK roles=(dba);
-
-oracle
-srvctl add service -d xydb  -s s_dataassets -r xydb1,xydb2 -P basic -e select -m basic -z 180 -w 5 -pdb dataassets
-srvctl status service -d xydb  -s s_dataassets
-srvctl start service -d xydb  -s s_dataassets
-grid
-crsctl status resource -t
-
-pdb
-sqlplus jmu/H2DHiH9yRSx24wK@10.8.14.15:1521/s_dataassets
---查询表空间
-select file_name,tablespace_name from dba_data_files order by tablespace_name;
-+DATA/XYDB/B8DA7D139F9E58F8E0530B0E080A13FD/DATAFILE/undotbs1.285.1061835129	 UNDOTBS1
-
-SELECT T.FILE_NAME FROM DBA_DATA_FILES T  --查询表空间创建物理位置，查询结果替换创建表空间‘/home/u01/app/oracle/oradata/xydb/’部分
-
---创建表空间
-
-create tablespace IDC_DATA_ASSETS datafile '+DATA' size 1G autoextend on next 1G maxsize unlimited extent management local segment space management auto; 
-
-
-create tablespace IDC_DATA_SHAREDB datafile '+DATA' size 1G autoextend on next 1G maxsize unlimited extent management local segment space management auto; 
-
-create tablespace IDC_DATA_STANDCODE datafile '+DATA' size 1G autoextend on next 1G maxsize unlimited extent management local segment space management auto; 
-
-create tablespace IDC_DATA_SWOP datafile '+DATA' size 1G autoextend on next 1G maxsize unlimited extent management local segment space management auto; 
-
-alter tablespace IDC_DATA_ASSETS add datafile '+DATA' size 1G autoextend on next 1G maxsize 31G;
-alter tablespace IDC_DATA_ASSETS add datafile '+DATA' size 1G autoextend on next 1G maxsize 31G;
-alter tablespace IDC_DATA_ASSETS add datafile '+DATA' size 1G autoextend on next 1G maxsize 31G;
-alter tablespace IDC_DATA_ASSETS add datafile '+DATA' size 1G autoextend on next 1G maxsize 31G;
-alter tablespace IDC_DATA_ASSETS add datafile '+DATA' size 1G autoextend on next 1G maxsize 31G;
-alter tablespace IDC_DATA_ASSETS add datafile '+DATA' size 1G autoextend on next 1G maxsize 31G;
-alter tablespace IDC_DATA_SHAREDB add datafile '+DATA' size 1G autoextend on next 1G maxsize 31G;
-alter tablespace IDC_DATA_SHAREDB add datafile '+DATA' size 1G autoextend on next 1G maxsize 31G;
-alter tablespace IDC_DATA_STANDCODE add datafile '+DATA' size 1G autoextend on next 1G maxsize 31G;
-alter tablespace IDC_DATA_SWOP add datafile '+DATA' size 1G autoextend on next 1G maxsize 31G;
-
-
-alter tablespace IDC_DATA_ASSETS add datafile '+DATA' size 1G autoextend on next 1G maxsize 31G;
-alter tablespace IDC_DATA_ASSETS add datafile '+DATA' size 1G autoextend on next 1G maxsize 31G;
-alter tablespace IDC_DATA_ASSETS add datafile '+DATA' size 1G autoextend on next 1G maxsize 31G;
-alter tablespace IDC_DATA_ASSETS add datafile '+DATA' size 1G autoextend on next 1G maxsize 31G;
-
-sqlplus IDC_DATA_ASSETS/H2DHiH9yRSx24wK@10.8.14.15:1521/s_dataassets
-sqlplus IDC_DATA_STANDCODE/H2DHiH9yRSx24wK@10.8.14.15:1521/s_dataassets
-sqlplus IDC_DATA_SHAREDB/H2DHiH9yRSx24wK@10.8.14.15:1521/s_dataassets
- idc_data_standcode
---创建 IDC_DATA_ASSETS 用户
-
-create user IDC_DATA_ASSETS identified by H2DHiH9yRSx24wK
-default tablespace IDC_DATA_ASSETS
-temporary tablespace TEMP
-profile DEFAULT;
-grant dba to IDC_DATA_ASSETS;
-grant connect to IDC_DATA_ASSETS;
-grant select any table to IDC_DATA_ASSETS;
-
-create user IDC_DATA_API identified by H2DHiH9yRSx24wK
-default tablespace IDC_DATA_ASSETS
-temporary tablespace TEMP
-profile DEFAULT;
-grant dba to IDC_DATA_API;
-grant connect to IDC_DATA_API;
-grant select any table to IDC_DATA_API; 
-
-
-
-
-
-alter user IDC_DATA_ASSETS default tablespace IDC_DATA_ASSETS temporary tablespace TEMP;
-
---创建 IDC_DATA_SHAREDB 用户
-
-create user IDC_DATA_SHAREDB identified by H2DHiH9yRSx24wK
-default tablespace IDC_DATA_SHAREDB
-temporary tablespace TEMP
-profile DEFAULT;
-grant dba to IDC_DATA_SHAREDB;
-grant connect to IDC_DATA_SHAREDB;
-grant select any table to IDC_DATA_SHAREDB;
-
---创建 IDC_DATA_STANDCODE 用户
-
-create user IDC_DATA_STANDCODE identified by H2DHiH9yRSx24wK
-default tablespace IDC_DATA_STANDCODE
-temporary tablespace TEMP
-profile DEFAULT;
-grant dba to IDC_DATA_STANDCODE;
-grant connect to IDC_DATA_STANDCODE;
-grant select any table to IDC_DATA_STANDCODE;
-
---创建 IDC_DATA_SWOP 用户
-
-create user IDC_DATA_SWOP identified by H2DHiH9yRSx24wK
-default tablespace IDC_DATA_SWOP
-temporary tablespace TEMP
-profile DEFAULT;
-grant dba to IDC_DATA_SWOP;
-grant connect to IDC_DATA_SWOP;
-grant select any table to IDC_DATA_SWOP;
-
-select username,account_status from dba_users order by account_status;
-SYSKM			       LOCKED
-JMU			          OPEN
-
-USERNAME		       ACCOUNT_STATUS
------------------------------- --------------------------------
-IDC_DATA_SHAREDB	       OPEN
-SYS			       OPEN
-IDC_DATA_STANDCODE	       OPEN
-SYSTEM			       OPEN
-IDC_DATA_SWOP		       OPEN
-IDC_DATA_ASSETS 	       OPEN
-DBSNMP			       OPEN
-
-40 rows selected.
-
-
---mysql创建用户、数据库的语句
-
-   set global validate_password.policy=0;
-   set global validate_password.length=1;
-
-create user 'dataassets_api'@'%' identified with mysql_native_password  by '2PxmfuqBZnf6%@#';
-
-create database `dataassets_api` DEFAULT CHARSET utf8 COLLATE utf8_general_ci;
-
-grant all privileges on `dataassets_api`.* to 'dataassets_api'@'%' with grant option;
-
-grant SUPER on *.* to 'dataassets_api'@'%';
-
-==========================
-mysqldump --all-databases --master-data=2 --single-transaction --set-gtid-purged=OFF -u root -p -P 3306 > dbdump.db
-
-#!/bin/bash
-# mysql 数据库全量备份
-
-# 用户名、密码、数据库名
-username="root"
-password="Sup123!@#"
-dbName="goodthing"
-
-beginTime=`date +"%Y年%m月%d日 %H:%M:%S"`
-# 备份目录
-bakDir=/home/mysql/backup
-# 日志文件
-logFile=/home/mysql/backup/bak.log
-# 备份文件
-nowDate=`date +%Y%m%d`
-dumpFile="${dbName}_${nowDate}.sql"
-gzDumpFile="${dbName}_${nowDate}.sql.tgz"
-
-cd $bakDir
-# 全量备份（对所有数据库备份，除了数据库goodthing里的village表）
-/usr/local/mysql/bin/mysqldump -u${username} -p${password} --quick --events --databases ${dbName} --ignore-table=goodthing.village --ignore-table=goodthing.area --flush-logs --delete-master-logs --single-transaction > $dumpFile
-# 打包
-/bin/tar -zvcf $gzDumpFile $dumpFile
-/bin/rm $dumpFile
-
-endTime=`date +"%Y年%m月%d日 %H:%M:%S"`
-echo 开始:$beginTime 结束:$endTime $gzDumpFile succ >> $logFile
-
-# 删除所有增量备份
-cd $bakDir/daily
-/bin/rm -f *
-
-##删除过期备份
-find $bakDir -name 'mysql_*.sql.tgz' -mtime +30 -exec rm {} \;
-==========================
-
-/home/oracle/eotqv2_jm_20210915.dmp
-SveQg977EHrD
-expdp eotqv2_jm/H2DHiH9yRSx24wK@192.168.203.106:1521/s_eotq schemas=eotqv2_jm directory=expdir dumpfile=eotqv2_jm_20210915.dmp logfile=eotqv2_jm_20210915.log cluster=n
-
-impdp eotqv2_jm/H2DHiH9yRSx24wK@10.8.13.201:1521/eotqpdb schemas=eotqv2_jm directory=expdir dumpfile=eotqv2_jm_20210915.dmp logfile=eotqv2_jm_20210915.log cluster=n TABLE_EXISTS_ACTION=replace
-
-SQL>  select saddr,sid,serial#,paddr,username,status from v$session where username = 'EOTQV2_JM';
-
-SADDR			SID    SERIAL# PADDR		USERNAME		       STATUS
----------------- ---------- ---------- ---------------- ------------------------------ --------
-00000000E07D3C10	  7	 59647 00000000E45198A8 EOTQV2_JM		       INACTIVE
-00000000E87E91C8	127	 58287 00000000E05388E8 EOTQV2_JM		       INACTIVE
-00000000E8824F88	151	  4844 00000000E052DDE8 EOTQV2_JM		       INACTIVE
-00000000E08F7918	245	 44135 00000000DC637B40 EOTQV2_JM		       INACTIVE
-00000000E0924768	263	 29375 00000000DC64D140 EOTQV2_JM		       INACTIVE
-00000000E092BF20	266	 64259 00000000DC642640 EOTQV2_JM		       INACTIVE
-00000000E8920E10	373	 38263 00000000E853A900 EOTQV2_JM		       INACTIVE
-00000000E892ADB0	377	 61344 00000000E8545400 EOTQV2_JM		       INACTIVE
-00000000E0A2F560	491	 46002 00000000E451AE08 EOTQV2_JM		       INACTIVE
-00000000E0A54BF8	506	 20509 00000000E4505808 EOTQV2_JM		       INACTIVE
-00000000E0A573E0	507	 48545 00000000E4510308 EOTQV2_JM		       INACTIVE
-
-SADDR			SID    SERIAL# PADDR		USERNAME		       STATUS
----------------- ---------- ---------- ---------------- ------------------------------ --------
-00000000E8A651E0	624	 42203 00000000E0539E48 EOTQV2_JM		       INACTIVE
-00000000E8B7EF48	858	 10240 00000000E853BE60 EOTQV2_JM		       INACTIVE
-00000000E8B81730	859	  5939 00000000E8531360 EOTQV2_JM		       INACTIVE
-00000000E0CB7D00	993	 14393 00000000E4511868 EOTQV2_JM		       INACTIVE
-00000000E0DB13A0       1214	  5915 00000000DC645100 EOTQV2_JM		       INACTIVE
-00000000E0DEF948       1239	 58464 00000000DC63A600 EOTQV2_JM		       INACTIVE
-00000000E8DDA898       1342	 12234 00000000E85127C0 EOTQV2_JM		       INACTIVE
-00000000E8DF5F90       1353	   349 00000000E853D3C0 EOTQV2_JM		       INACTIVE
-00000000E0F27590       1485	 41417 00000000E4512DC8 EOTQV2_JM		       INACTIVE
-00000000E8F28C08       1597	 23236 00000000E053C908 EOTQV2_JM		       INACTIVE
-00000000E10144A8       1701	 65319 00000000DC631060 EOTQV2_JM		       INACTIVE
-
-SADDR			SID    SERIAL# PADDR		USERNAME		       STATUS
----------------- ---------- ---------- ---------------- ------------------------------ --------
-00000000E1032388       1713	  7772 00000000DC626560 EOTQV2_JM		       INACTIVE
-00000000E1037358       1715	 51254 00000000DC646660 EOTQV2_JM		       INACTIVE
-00000000E103EB10       1718	 27981 00000000DC63BB60 EOTQV2_JM		       INACTIVE
-00000000E903B1B8       1828	 13833 00000000E8533E20 EOTQV2_JM		       INACTIVE
-00000000E113F968       1942	 23131 00000000E4509828 EOTQV2_JM		       INACTIVE
-00000000E9195CB0       2088	 16616 00000000E053DE68 EOTQV2_JM		       INACTIVE
-00000000E127C580       2190	 63392 00000000DC63D0C0 EOTQV2_JM		       INACTIVE
-00000000E129A460       2202	  8839 00000000DC647BC0 EOTQV2_JM		       INACTIVE
-00000000E92AD230       2321	 23031 00000000E853FE80 EOTQV2_JM		       INACTIVE
-00000000E92AFA18       2322	 47005 00000000E8535380 EOTQV2_JM		       INACTIVE
-00000000E1391318       2422	  6095 00000000E4515888 EOTQV2_JM		       INACTIVE
-
-SADDR			SID    SERIAL# PADDR		USERNAME		       STATUS
----------------- ---------- ---------- ---------------- ------------------------------ --------
-00000000E13BB980       2439	 34987 00000000E450AD88 EOTQV2_JM		       INACTIVE
-00000000E93B5840       2548	 21532 00000000E05348C8 EOTQV2_JM		       INACTIVE
-00000000E93CBF68       2557	 61341 00000000E053F3C8 EOTQV2_JM		       INACTIVE
-00000000E14C17A8       2665	 20836 00000000DC63E620 EOTQV2_JM		       INACTIVE
-00000000E14DCEA0       2676	  7136 00000000DC649120 EOTQV2_JM		       INACTIVE
-00000000E94E5CD0       2791	 13790 00000000E85413E0 EOTQV2_JM		       INACTIVE
-00000000E15FBBD8       2912	 21392 00000000E450C2E8 EOTQV2_JM		       INACTIVE
-00000000E160D330       2919	 46789 00000000E4516DE8 EOTQV2_JM		       INACTIVE
-00000000E962A0A0       3042	 44110 00000000E0540928 EOTQV2_JM		       INACTIVE
-00000000E9631858       3045	 13439 00000000E04B5A28 EOTQV2_JM		       INACTIVE
-00000000E173AFD8       3161	 24378 00000000DC63FB80 EOTQV2_JM		       INACTIVE
-
-SADDR			SID    SERIAL# PADDR		USERNAME		       STATUS
----------------- ---------- ---------- ---------------- ------------------------------ --------
-00000000E18485B8       3390	 59486 00000000E4518348 EOTQV2_JM		       INACTIVE
-00000000E1859D10       3397	 55713 00000000E4502D48 EOTQV2_JM		       INACTIVE
-00000000E18932E8       3420	 27203 00000000E450D848 EOTQV2_JM		       INACTIVE
-00000000E98A10E8       3537	 25910 00000000E0541E88 EOTQV2_JM		       INACTIVE
-00000000E19829E8       3637	 62793 00000000DC64BBE0 EOTQV2_JM		       INACTIVE
-00000000E999F758       3760	 30976 00000000E8543EA0 EOTQV2_JM		       INACTIVE
-
-50 rows selected.
-
-SQL> 
-
-SQL> /
-
-SADDR			SID    SERIAL# PADDR		USERNAME		       STATUS
----------------- ---------- ---------- ---------------- ------------------------------ --------
-00000000E07D3C10	  7	 59647 00000000E45198A8 EOTQV2_JM		       INACTIVE
-00000000E87E91C8	127	 58287 00000000E05388E8 EOTQV2_JM		       INACTIVE
-00000000E8824F88	151	  4844 00000000E052DDE8 EOTQV2_JM		       INACTIVE
-00000000E08F7918	245	 44135 00000000DC637B40 EOTQV2_JM		       INACTIVE
-00000000E0924768	263	 29375 00000000DC64D140 EOTQV2_JM		       INACTIVE
-00000000E092BF20	266	 64259 00000000DC642640 EOTQV2_JM		       INACTIVE
-00000000E8920E10	373	 38263 00000000E853A900 EOTQV2_JM		       INACTIVE
-00000000E892ADB0	377	 61344 00000000E8545400 EOTQV2_JM		       INACTIVE
-00000000E0A2F560	491	 46002 00000000E451AE08 EOTQV2_JM		       INACTIVE
-00000000E0A54BF8	506	 20509 00000000E4505808 EOTQV2_JM		       INACTIVE
-00000000E0A573E0	507	 48545 00000000E4510308 EOTQV2_JM		       INACTIVE
-
-SADDR			SID    SERIAL# PADDR		USERNAME		       STATUS
----------------- ---------- ---------- ---------------- ------------------------------ --------
-00000000E8A651E0	624	 42203 00000000E0539E48 EOTQV2_JM		       INACTIVE
-00000000E8B7EF48	858	 10240 00000000E853BE60 EOTQV2_JM		       INACTIVE
-00000000E8B81730	859	  5939 00000000E8531360 EOTQV2_JM		       INACTIVE
-00000000E0CB7D00	993	 14393 00000000E4511868 EOTQV2_JM		       INACTIVE
-00000000E0DB13A0       1214	  5915 00000000DC645100 EOTQV2_JM		       INACTIVE
-00000000E0DEF948       1239	 58464 00000000DC63A600 EOTQV2_JM		       INACTIVE
-00000000E8DDA898       1342	 12234 00000000E85127C0 EOTQV2_JM		       INACTIVE
-00000000E8DF5F90       1353	   349 00000000E853D3C0 EOTQV2_JM		       INACTIVE
-00000000E0F27590       1485	 41417 00000000E4512DC8 EOTQV2_JM		       INACTIVE
-00000000E8F28C08       1597	 23236 00000000E053C908 EOTQV2_JM		       INACTIVE
-00000000E10144A8       1701	 65319 00000000DC631060 EOTQV2_JM		       INACTIVE
-
-SADDR			SID    SERIAL# PADDR		USERNAME		       STATUS
----------------- ---------- ---------- ---------------- ------------------------------ --------
-00000000E1032388       1713	  7772 00000000DC626560 EOTQV2_JM		       INACTIVE
-00000000E1037358       1715	 51254 00000000DC646660 EOTQV2_JM		       INACTIVE
-00000000E103EB10       1718	 27981 00000000DC63BB60 EOTQV2_JM		       INACTIVE
-00000000E903B1B8       1828	 13833 00000000E8533E20 EOTQV2_JM		       INACTIVE
-00000000E113F968       1942	 23131 00000000E4509828 EOTQV2_JM		       INACTIVE
-00000000E9195CB0       2088	 16616 00000000E053DE68 EOTQV2_JM		       INACTIVE
-00000000E127C580       2190	 63392 00000000DC63D0C0 EOTQV2_JM		       INACTIVE
-00000000E129A460       2202	  8839 00000000DC647BC0 EOTQV2_JM		       INACTIVE
-00000000E92AD230       2321	 23031 00000000E853FE80 EOTQV2_JM		       INACTIVE
-00000000E92AFA18       2322	 47005 00000000E8535380 EOTQV2_JM		       INACTIVE
-00000000E1391318       2422	  6095 00000000E4515888 EOTQV2_JM		       INACTIVE
-
-SADDR			SID    SERIAL# PADDR		USERNAME		       STATUS
----------------- ---------- ---------- ---------------- ------------------------------ --------
-00000000E13BB980       2439	 34987 00000000E450AD88 EOTQV2_JM		       INACTIVE
-00000000E93B5840       2548	 21532 00000000E05348C8 EOTQV2_JM		       INACTIVE
-00000000E93CBF68       2557	 61341 00000000E053F3C8 EOTQV2_JM		       INACTIVE
-00000000E14C17A8       2665	 20836 00000000DC63E620 EOTQV2_JM		       INACTIVE
-00000000E14DCEA0       2676	  7136 00000000DC649120 EOTQV2_JM		       INACTIVE
-00000000E94E5CD0       2791	 13790 00000000E85413E0 EOTQV2_JM		       INACTIVE
-00000000E15FBBD8       2912	 21392 00000000E450C2E8 EOTQV2_JM		       INACTIVE
-00000000E160D330       2919	 46789 00000000E4516DE8 EOTQV2_JM		       INACTIVE
-00000000E962A0A0       3042	 44110 00000000E0540928 EOTQV2_JM		       INACTIVE
-00000000E9631858       3045	 13439 00000000E04B5A28 EOTQV2_JM		       INACTIVE
-00000000E173AFD8       3161	 24378 00000000DC63FB80 EOTQV2_JM		       INACTIVE
-
-SADDR			SID    SERIAL# PADDR		USERNAME		       STATUS
----------------- ---------- ---------- ---------------- ------------------------------ --------
-00000000E18485B8       3390	 59486 00000000E4518348 EOTQV2_JM		       INACTIVE
-00000000E1859D10       3397	 55713 00000000E4502D48 EOTQV2_JM		       INACTIVE
-00000000E18932E8       3420	 27203 00000000E450D848 EOTQV2_JM		       INACTIVE
-00000000E98A10E8       3537	 25910 00000000E0541E88 EOTQV2_JM		       INACTIVE
-00000000E19829E8       3637	 62793 00000000DC64BBE0 EOTQV2_JM		       INACTIVE
-00000000E999F758       3760	 30976 00000000E8543EA0 EOTQV2_JM		       INACTIVE
-
-50 rows selected.
-
-SQL> 
-/home/oracle/eotqv2_jm_20210915.dmp
-SveQg977EHrD
-expdp eotqv2_jm/H2DHiH9yRSx24wK@192.168.203.106:1521/s_eotq schemas=eotqv2_jm directory=expdir dumpfile=eotqv2_jm_20210915.dmp logfile=eotqv2_jm_20210915.log cluster=n
-
-impdp eotqv2_jm/H2DHiH9yRSx24wK@10.8.13.201:1521/eotqpdb schemas=eotqv2_jm directory=expdir dumpfile=eotqv2_jm_20210915.dmp logfile=eotqv2_jm_20210915.log cluster=n TABLE_EXISTS_ACTION=replace
-
-SQL>  select saddr,sid,serial#,paddr,username,status from v$session where username = 'EOTQV2_JM';
-
-SADDR			SID    SERIAL# PADDR		USERNAME		       STATUS
----------------- ---------- ---------- ---------------- ------------------------------ --------
-00000000E07D3C10	  7	 59647 00000000E45198A8 EOTQV2_JM		       INACTIVE
-00000000E87E91C8	127	 58287 00000000E05388E8 EOTQV2_JM		       INACTIVE
-00000000E8824F88	151	  4844 00000000E052DDE8 EOTQV2_JM		       INACTIVE
-00000000E08F7918	245	 44135 00000000DC637B40 EOTQV2_JM		       INACTIVE
-00000000E0924768	263	 29375 00000000DC64D140 EOTQV2_JM		       INACTIVE
-00000000E092BF20	266	 64259 00000000DC642640 EOTQV2_JM		       INACTIVE
-00000000E8920E10	373	 38263 00000000E853A900 EOTQV2_JM		       INACTIVE
-00000000E892ADB0	377	 61344 00000000E8545400 EOTQV2_JM		       INACTIVE
-00000000E0A2F560	491	 46002 00000000E451AE08 EOTQV2_JM		       INACTIVE
-00000000E0A54BF8	506	 20509 00000000E4505808 EOTQV2_JM		       INACTIVE
-00000000E0A573E0	507	 48545 00000000E4510308 EOTQV2_JM		       INACTIVE
-
-SADDR			SID    SERIAL# PADDR		USERNAME		       STATUS
----------------- ---------- ---------- ---------------- ------------------------------ --------
-00000000E8A651E0	624	 42203 00000000E0539E48 EOTQV2_JM		       INACTIVE
-00000000E8B7EF48	858	 10240 00000000E853BE60 EOTQV2_JM		       INACTIVE
-00000000E8B81730	859	  5939 00000000E8531360 EOTQV2_JM		       INACTIVE
-00000000E0CB7D00	993	 14393 00000000E4511868 EOTQV2_JM		       INACTIVE
-00000000E0DB13A0       1214	  5915 00000000DC645100 EOTQV2_JM		       INACTIVE
-00000000E0DEF948       1239	 58464 00000000DC63A600 EOTQV2_JM		       INACTIVE
-00000000E8DDA898       1342	 12234 00000000E85127C0 EOTQV2_JM		       INACTIVE
-00000000E8DF5F90       1353	   349 00000000E853D3C0 EOTQV2_JM		       INACTIVE
-00000000E0F27590       1485	 41417 00000000E4512DC8 EOTQV2_JM		       INACTIVE
-00000000E8F28C08       1597	 23236 00000000E053C908 EOTQV2_JM		       INACTIVE
-00000000E10144A8       1701	 65319 00000000DC631060 EOTQV2_JM		       INACTIVE
-
-SADDR			SID    SERIAL# PADDR		USERNAME		       STATUS
----------------- ---------- ---------- ---------------- ------------------------------ --------
-00000000E1032388       1713	  7772 00000000DC626560 EOTQV2_JM		       INACTIVE
-00000000E1037358       1715	 51254 00000000DC646660 EOTQV2_JM		       INACTIVE
-00000000E103EB10       1718	 27981 00000000DC63BB60 EOTQV2_JM		       INACTIVE
-00000000E903B1B8       1828	 13833 00000000E8533E20 EOTQV2_JM		       INACTIVE
-00000000E113F968       1942	 23131 00000000E4509828 EOTQV2_JM		       INACTIVE
-00000000E9195CB0       2088	 16616 00000000E053DE68 EOTQV2_JM		       INACTIVE
-00000000E127C580       2190	 63392 00000000DC63D0C0 EOTQV2_JM		       INACTIVE
-00000000E129A460       2202	  8839 00000000DC647BC0 EOTQV2_JM		       INACTIVE
-00000000E92AD230       2321	 23031 00000000E853FE80 EOTQV2_JM		       INACTIVE
-00000000E92AFA18       2322	 47005 00000000E8535380 EOTQV2_JM		       INACTIVE
-00000000E1391318       2422	  6095 00000000E4515888 EOTQV2_JM		       INACTIVE
-
-SADDR			SID    SERIAL# PADDR		USERNAME		       STATUS
----------------- ---------- ---------- ---------------- ------------------------------ --------
-00000000E13BB980       2439	 34987 00000000E450AD88 EOTQV2_JM		       INACTIVE
-00000000E93B5840       2548	 21532 00000000E05348C8 EOTQV2_JM		       INACTIVE
-00000000E93CBF68       2557	 61341 00000000E053F3C8 EOTQV2_JM		       INACTIVE
-00000000E14C17A8       2665	 20836 00000000DC63E620 EOTQV2_JM		       INACTIVE
-00000000E14DCEA0       2676	  7136 00000000DC649120 EOTQV2_JM		       INACTIVE
-00000000E94E5CD0       2791	 13790 00000000E85413E0 EOTQV2_JM		       INACTIVE
-00000000E15FBBD8       2912	 21392 00000000E450C2E8 EOTQV2_JM		       INACTIVE
-00000000E160D330       2919	 46789 00000000E4516DE8 EOTQV2_JM		       INACTIVE
-00000000E962A0A0       3042	 44110 00000000E0540928 EOTQV2_JM		       INACTIVE
-00000000E9631858       3045	 13439 00000000E04B5A28 EOTQV2_JM		       INACTIVE
-00000000E173AFD8       3161	 24378 00000000DC63FB80 EOTQV2_JM		       INACTIVE
-
-SADDR			SID    SERIAL# PADDR		USERNAME		       STATUS
----------------- ---------- ---------- ---------------- ------------------------------ --------
-00000000E18485B8       3390	 59486 00000000E4518348 EOTQV2_JM		       INACTIVE
-00000000E1859D10       3397	 55713 00000000E4502D48 EOTQV2_JM		       INACTIVE
-00000000E18932E8       3420	 27203 00000000E450D848 EOTQV2_JM		       INACTIVE
-00000000E98A10E8       3537	 25910 00000000E0541E88 EOTQV2_JM		       INACTIVE
-00000000E19829E8       3637	 62793 00000000DC64BBE0 EOTQV2_JM		       INACTIVE
-00000000E999F758       3760	 30976 00000000E8543EA0 EOTQV2_JM		       INACTIVE
-
-50 rows selected.
-
-SQL> 
-
-SQL> /
-
-SADDR			SID    SERIAL# PADDR		USERNAME		       STATUS
----------------- ---------- ---------- ---------------- ------------------------------ --------
-00000000E07D3C10	  7	 59647 00000000E45198A8 EOTQV2_JM		       INACTIVE
-00000000E87E91C8	127	 58287 00000000E05388E8 EOTQV2_JM		       INACTIVE
-00000000E8824F88	151	  4844 00000000E052DDE8 EOTQV2_JM		       INACTIVE
-00000000E08F7918	245	 44135 00000000DC637B40 EOTQV2_JM		       INACTIVE
-00000000E0924768	263	 29375 00000000DC64D140 EOTQV2_JM		       INACTIVE
-00000000E092BF20	266	 64259 00000000DC642640 EOTQV2_JM		       INACTIVE
-00000000E8920E10	373	 38263 00000000E853A900 EOTQV2_JM		       INACTIVE
-00000000E892ADB0	377	 61344 00000000E8545400 EOTQV2_JM		       INACTIVE
-00000000E0A2F560	491	 46002 00000000E451AE08 EOTQV2_JM		       INACTIVE
-00000000E0A54BF8	506	 20509 00000000E4505808 EOTQV2_JM		       INACTIVE
-00000000E0A573E0	507	 48545 00000000E4510308 EOTQV2_JM		       INACTIVE
-
-SADDR			SID    SERIAL# PADDR		USERNAME		       STATUS
----------------- ---------- ---------- ---------------- ------------------------------ --------
-00000000E8A651E0	624	 42203 00000000E0539E48 EOTQV2_JM		       INACTIVE
-00000000E8B7EF48	858	 10240 00000000E853BE60 EOTQV2_JM		       INACTIVE
-00000000E8B81730	859	  5939 00000000E8531360 EOTQV2_JM		       INACTIVE
-00000000E0CB7D00	993	 14393 00000000E4511868 EOTQV2_JM		       INACTIVE
-00000000E0DB13A0       1214	  5915 00000000DC645100 EOTQV2_JM		       INACTIVE
-00000000E0DEF948       1239	 58464 00000000DC63A600 EOTQV2_JM		       INACTIVE
-00000000E8DDA898       1342	 12234 00000000E85127C0 EOTQV2_JM		       INACTIVE
-00000000E8DF5F90       1353	   349 00000000E853D3C0 EOTQV2_JM		       INACTIVE
-00000000E0F27590       1485	 41417 00000000E4512DC8 EOTQV2_JM		       INACTIVE
-00000000E8F28C08       1597	 23236 00000000E053C908 EOTQV2_JM		       INACTIVE
-00000000E10144A8       1701	 65319 00000000DC631060 EOTQV2_JM		       INACTIVE
-
-SADDR			SID    SERIAL# PADDR		USERNAME		       STATUS
----------------- ---------- ---------- ---------------- ------------------------------ --------
-00000000E1032388       1713	  7772 00000000DC626560 EOTQV2_JM		       INACTIVE
-00000000E1037358       1715	 51254 00000000DC646660 EOTQV2_JM		       INACTIVE
-00000000E103EB10       1718	 27981 00000000DC63BB60 EOTQV2_JM		       INACTIVE
-00000000E903B1B8       1828	 13833 00000000E8533E20 EOTQV2_JM		       INACTIVE
-00000000E113F968       1942	 23131 00000000E4509828 EOTQV2_JM		       INACTIVE
-00000000E9195CB0       2088	 16616 00000000E053DE68 EOTQV2_JM		       INACTIVE
-00000000E127C580       2190	 63392 00000000DC63D0C0 EOTQV2_JM		       INACTIVE
-00000000E129A460       2202	  8839 00000000DC647BC0 EOTQV2_JM		       INACTIVE
-00000000E92AD230       2321	 23031 00000000E853FE80 EOTQV2_JM		       INACTIVE
-00000000E92AFA18       2322	 47005 00000000E8535380 EOTQV2_JM		       INACTIVE
-00000000E1391318       2422	  6095 00000000E4515888 EOTQV2_JM		       INACTIVE
-
-SADDR			SID    SERIAL# PADDR		USERNAME		       STATUS
----------------- ---------- ---------- ---------------- ------------------------------ --------
-00000000E13BB980       2439	 34987 00000000E450AD88 EOTQV2_JM		       INACTIVE
-00000000E93B5840       2548	 21532 00000000E05348C8 EOTQV2_JM		       INACTIVE
-00000000E93CBF68       2557	 61341 00000000E053F3C8 EOTQV2_JM		       INACTIVE
-00000000E14C17A8       2665	 20836 00000000DC63E620 EOTQV2_JM		       INACTIVE
-00000000E14DCEA0       2676	  7136 00000000DC649120 EOTQV2_JM		       INACTIVE
-00000000E94E5CD0       2791	 13790 00000000E85413E0 EOTQV2_JM		       INACTIVE
-00000000E15FBBD8       2912	 21392 00000000E450C2E8 EOTQV2_JM		       INACTIVE
-00000000E160D330       2919	 46789 00000000E4516DE8 EOTQV2_JM		       INACTIVE
-00000000E962A0A0       3042	 44110 00000000E0540928 EOTQV2_JM		       INACTIVE
-00000000E9631858       3045	 13439 00000000E04B5A28 EOTQV2_JM		       INACTIVE
-00000000E173AFD8       3161	 24378 00000000DC63FB80 EOTQV2_JM		       INACTIVE
-
-SADDR			SID    SERIAL# PADDR		USERNAME		       STATUS
----------------- ---------- ---------- ---------------- ------------------------------ --------
-00000000E18485B8       3390	 59486 00000000E4518348 EOTQV2_JM		       INACTIVE
-00000000E1859D10       3397	 55713 00000000E4502D48 EOTQV2_JM		       INACTIVE
-00000000E18932E8       3420	 27203 00000000E450D848 EOTQV2_JM		       INACTIVE
-00000000E98A10E8       3537	 25910 00000000E0541E88 EOTQV2_JM		       INACTIVE
-00000000E19829E8       3637	 62793 00000000DC64BBE0 EOTQV2_JM		       INACTIVE
-00000000E999F758       3760	 30976 00000000E8543EA0 EOTQV2_JM		       INACTIVE
-
-50 rows selected.
-
-SQL> 
-
-SELECT owner, object_name, object_type,status 
-FROM dba_objects 
-WHERE status = 'INVALID';
-
-alter user EOTQV2_JM account lock;
-select saddr,sid,serial#,paddr,username,status from v$session where username = 'EOTQV2_JM';
-alter system kill session '124,12343';
-
-
-
-
-
-
-
-
-
-
-
-
-
-alter user EOTQV2_JM account lock;
-select saddr,sid,serial#,paddr,username,status from v$session where username = 'EOTQV2_JM';
-alter system kill session '124,12343';
-
-
-
-
-
-=====================
-1、外事系统 数据库名：s_flow   用户urpuser               (  新建租户 ) 
-2、旧平台：                  s_flow    用户 urpuser             (  新建租户 ) 
-3、流程填报数据库：    s_flow       用户 sharedb_flow   (  跟 sharedb  是同一个实例 ) 
-4、财务科研对接：  数据库名   s_cwkyuser       用户   cwkyuser 
-
-sqlplus wsuser/L2dcjjxx111UAj@10.8.14.15:1521/s_wspdb
-sqlplus urpuser/J3nmmAAb6EYn@10.8.14.15:1521/s_urpdb
-sqlplus sharedb_flow/Yab004Jmaleu@10.8.14.15:1521/s_flow
-
-
-
-create pluggable database wspdb admin user wspdb identified by dGl6cLgemxq12ed roles=(dba);
-alter pluggable database wspdb open;
-alter session set container=wspdb;
-
-create tablespace wspdb datafile '+DATA' size 1G autoextend on next 1G maxsize 31G extent management local segment space management auto;
-alter tablespace wspdb add datafile '+DATA' size 1G autoextend on next 1G maxsize 31G;
-alter tablespace wspdb add datafile '+DATA' size 1G autoextend on next 1G maxsize 31G;
-alter tablespace wspdb add datafile '+DATA' size 1G autoextend on next 1G maxsize 31G;
-alter tablespace wspdb add datafile '+DATA' size 1G autoextend on next 1G maxsize 31G;
-
-create user wsuser identified by L2dcjjxx111UAj default tablespace wspdb account unlock;
-
-grant dba to wsuser;
-grant select any table to wsuser;
-
-sqlplus wsuser/L2dcjjxx111UAj@10.8.14.15:1521/s_wspdb
-
-[oracle@zhongtaidb1 ~]$ srvctl add service -d xydb -s s_wspdb -r xydb1,xydb2 -P basic -e select -m basic -z 180 -w 5 -pdb wspdb
-[oracle@zhongtaidb1 ~]$ srvctl status service -d xydb -s s_wspdb
-Service s_wspdb is not running.
-[oracle@zhongtaidb1 ~]$ srvctl start service -d xydb -s s_wspdb
-[oracle@zhongtaidb1 ~]$ srvctl status service -d xydb -s s_wspdb
-Service s_wspdb is running on instance(s) xydb1,xydb2
-[oracle@zhongtaidb1 ~]$ lsnrctl status 
-
--------------------
-
-create pluggable database urpdb admin user urpdb identified by J38xmmAqbc12ed roles=(dba);
-alter pluggable database urpdb open;
-alter session set container=urpdb;
-
-create tablespace urpdb datafile '+DATA' size 1G autoextend on next 1G maxsize 31G extent management local segment space management auto;
-alter tablespace urpdb add datafile '+DATA' size 1G autoextend on next 1G maxsize 31G;
-alter tablespace urpdb add datafile '+DATA' size 1G autoextend on next 1G maxsize 31G;
-alter tablespace urpdb add datafile '+DATA' size 1G autoextend on next 1G maxsize 31G;
-alter tablespace urpdb add datafile '+DATA' size 1G autoextend on next 1G maxsize 31G;
-
-create user urpuser identified by J3nmmAAb6EYn default tablespace urpdb account unlock;
-
-grant dba to urpuser;
-grant select any table to urpuser;
-
-sqlplus urpuser/J3nmmAAb6EYn@10.8.14.15:1521/s_urpdb
-
-[oracle@zhongtaidb1 ~]$ srvctl add service -d xydb -s s_urpdb -r xydb1,xydb2 -P basic -e select -m basic -z 180 -w 5 -pdb urpdb
-[oracle@zhongtaidb1 ~]$ srvctl status service -d xydb -s s_urpdb
-Service s_urpdb is not running.
-[oracle@zhongtaidb1 ~]$ srvctl start service -d xydb -s s_urpdb
-[oracle@zhongtaidb1 ~]$ srvctl status service -d xydb -s s_urpdb
-Service s_urpdb is running on instance(s) xydb1,xydb2
-[oracle@zhongtaidb1 ~]$ lsnrctl status 
-
----------------
-create tablespace flow datafile '+DATA' size 1G autoextend on next 1G maxsize 31G extent management local segment space management auto;
-alter tablespace flow add datafile '+DATA' size 1G autoextend on next 1G maxsize 31G;
-alter tablespace flow add datafile '+DATA' size 1G autoextend on next 1G maxsize 31G;
-alter tablespace flow add datafile '+DATA' size 1G autoextend on next 1G maxsize 31G;
-alter tablespace flow add datafile '+DATA' size 1G autoextend on next 1G maxsize 31G;
-
-create user sharedb_flow identified by Yab004Jmaleu default tablespace flow account unlock;
-
-grant dba to sharedb_flow;
-grant select any table to urpuser;
-
-sqlplus sharedb_flow/Yab004Jmaleu@10.8.14.15:1521/s_flow
-
-[oracle@zhongtaidb1 ~]$ srvctl add service -d xydb -s s_flow -r xydb1,xydb2 -P basic -e select -m basic -z 180 -w 5 -pdb dataassets 
-[oracle@zhongtaidb1 ~]$ srvctl status service -d xydb -s s_flow
-Service s_flow is not running.
-[oracle@zhongtaidb1 ~]$ srvctl start service -d xydb -s s_flow
-[oracle@zhongtaidb1 ~]$ srvctl status service -d xydb -s s_flow
-Service s_flow is running on instance(s) xydb1,xydb2
-[oracle@zhongtaidb1 ~]$ lsnrctl status 
-
--------------------
-
-create pluggable database cwkyuser admin user cwkyuseradmin identified by L36Jbew1Blo roles=(dba);
-alter pluggable database cwkyuser open;
-alter session set container=cwkyuser;
-
-create tablespace cwkyuser datafile '+DATA' size 1G autoextend on next 1G maxsize 31G extent management local segment space management auto;
-alter tablespace cwkyuser add datafile '+DATA' size 1G autoextend on next 1G maxsize 31G;
-alter tablespace cwkyuser add datafile '+DATA' size 1G autoextend on next 1G maxsize 31G;
-alter tablespace cwkyuser add datafile '+DATA' size 1G autoextend on next 1G maxsize 31G;
-alter tablespace cwkyuser add datafile '+DATA' size 1G autoextend on next 1G maxsize 31G;
-
-create user cwkyuser identified by Y3nGwjZbeljy2 default tablespace cwkyuser account unlock;
-
-grant dba to cwkyuser;
-grant select any table to cwkyuser;
-
-sqlplus cwkyuser/Y3nGwjZbeljy2@10.8.14.15:1521/s_cwkyuser
-
-[oracle@zhongtaidb1 ~]$ srvctl add service -d xydb -s s_cwkyuser -r xydb1,xydb2 -P basic -e select -m basic -z 180 -w 5 -pdb cwkyuser
-[oracle@zhongtaidb1 ~]$ srvctl status service -d xydb -s s_cwkyuser
-Service s_cwkyuser is not running.
-[oracle@zhongtaidb1 ~]$ srvctl start service -d xydb -s s_cwkyuser
-[oracle@zhongtaidb1 ~]$ srvctl status service -d xydb -s s_cwkyuser
-Service s_cwkyuser is running on instance(s) xydb1,xydb2
-[oracle@zhongtaidb1 ~]$ lsnrctl status 
-
----------------
------------------
-
------------------
------------------
-01-NOV-2021 17:19:26 * (CONNECT_DATA=(SERVICE_NAME=s_hrpdb)(CID=(PROGRAM=C:\Program?Files\PremiumSoft\Navicat?Premium?12\navicat.exe)(HOST=JCPT-JUMPBOX)(USER=Administrator))(SERVER=dedicated)(INSTANCE_NAME=xydb2)) * (ADDRESS=(PROTOCOL=tcp)(HOST=10.8.13.2)(PORT=59391)) * establish * s_hrpdb * 0
-01-NOV-2021 17:31:35 * (CONNECT_DATA=(SERVICE_NAME=s_hrpdb)(CID=(PROGRAM=C:\Program?Files\PremiumSoft\Navicat?Premium?12\navicat.exe)(HOST=JCPT-JUMPBOX)(USER=Administrator))(SERVER=dedicated)(INSTANCE_NAME=xydb2)) * (ADDRESS=(PROTOCOL=tcp)(HOST=10.8.13.2)(PORT=59443)) * establish * s_hrpdb * 0
-
-
-
-
-01-NOV-2021 17:32:16 * (CONNECT_DATA=(SERVICE_NAME=s_hrpdb)(CID=(PROGRAM=sqlplus)(HOST=jcpt-oracletest)(USER=oracle))) * (ADDRESS=(PROTOCOL=tcp)(HOST=10.8.13.201)(PORT=38004)) * establish * s_hrpdb * 0
-
-[oracle@zhongtaidb2 trace]$ tail -f listener.log |grep s_data
-
-
-01-NOV-2021 17:34:07 * (CONNECT_DATA=(SERVICE_NAME=s_dataassets)(CID=(PROGRAM=C:\Program?Files\PremiumSoft\Navicat?Premium?12\navicat.exe)(HOST=JCPT-JUMPBOX)(USER=Administrator))) * (ADDRESS=(PROTOCOL=tcp)(HOST=10.8.13.2)(PORT=59446)) * establish * s_dataassets * 0
-
-
-
-^C
-[oracle@zhongtaidb2 trace]$ tail -f listener.log |grep s_hrpdb
-01-NOV-2021 17:34:29 * (CONNECT_DATA=(SERVICE_NAME=s_hrpdb)(CID=(PROGRAM=C:\Program?Files\PremiumSoft\Navicat?Premium?12\navicat.exe)(HOST=JCPT-JUMPBOX)(USER=Administrator))(SERVER=dedicated)(INSTANCE_NAME=xydb2)) * (ADDRESS=(PROTOCOL=tcp)(HOST=10.8.13.2)(PORT=59451)) * establish * s_hrpdb * 0
-
-
-01-NOV-2021 17:39:19 * (CONNECT_DATA=(SERVICE_NAME=s_hrpdb)(CID=(PROGRAM=C:\Program?Files\PremiumSoft\Navicat?Premium?12\navicat.exe)(HOST=JCPT-JUMPBOX)(USER=Administrator))(SERVER=dedicated)(INSTANCE_NAME=xydb2)) * (ADDRESS=(PROTOCOL=tcp)(HOST=10.8.13.2)(PORT=59463)) * establish * s_hrpdb * 0
 ```

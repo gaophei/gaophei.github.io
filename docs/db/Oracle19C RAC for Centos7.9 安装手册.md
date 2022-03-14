@@ -375,6 +375,8 @@ cat >> /etc/security/limits.conf <<EOF
 *            hard    sigpending      90000
 *            soft    nproc           90000
 *            hard    nproc           90000
+*            soft    memlock         unlimited
+*            hard    memlock         unlimited
 
 EOF
 
