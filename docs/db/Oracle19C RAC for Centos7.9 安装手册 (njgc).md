@@ -2097,6 +2097,30 @@ impdp  est1/test1@192.168.203.111:1521/s_dataassets schemas=test1 directory=expd
 
 #expdp-12.2.0.1.0
 expdp test1/test1@192.168.203.111:1521/s_dataassets schemas=test1 directory=expdir dumpfile=test1_20220314.dmp logfile=test1_20220314.log cluster=n compression=data_only version=12.2.0.1.0
+
+#脚本
+
+#!/bin/bash
+source /etc/profile
+source /home/oracle/.bash_profile
+
+now=`date +%y%m%d`
+dmpfile=dataassets_db$now.dmp
+logfile=dataassets_db$now.log
+
+echo start exp $dmpfile ...
+
+
+expdp pdbadmin/pdbadmin@192.168.203.111:1521/s_dataassets full=y directory=expdir dumpfile=$dmpfile logfile=$logfile cluster=n 
+
+
+
+echo delete local file ...
+find /home/oracle/expdir -name "*.dmp" -mtime +5 -exec rm {} \;
+find /home/oracle/expdir -name "*.log" -mtime +5 -exec rm {} \;
+
+echo finish bak job
+
 ```
 ### 6.5. Oracle RAC其他操作
 #创建pdb
