@@ -1199,7 +1199,7 @@ cd /u01/Storage/grid/
 --->Install and Configure Oracle Grid Infrastructure for a Cluster
 --->Advanced installation
 --->English/Simplified Chinese
---->cluster name:rac-scan/scan name:rac-scan/scan port:1521,去掉configure GNS前面的勾
+--->cluster name:rac-scan/scan name:rac-cluster/scan port:1521,去掉configure GNS前面的勾
 --->add:oracle2/oracle2-vip,SSHconnectivity,test
 --->ens160:192.168.97.0:private,ens32:210.46.97.0:public,virbr0:192.168.122.0:Do Not Use
 --->oracle ASM
@@ -1621,7 +1621,7 @@ chown -R oracle:oinstall /u01/Storage/database
 su - grid
 
 cd /u01/Storage/grid
-  ./runcluvfy.sh stage -pre dbinst -n oracle1,oracle2 -fixup -verbose 
+  ./runcluvfy.sh stage -pre dbinst -n oracle1,oracle2 -fixup -verbose |tee -a pre1.log
 ```
 #如果下面报错内容，可以忽略
 ```

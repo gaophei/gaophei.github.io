@@ -128,7 +128,7 @@ sqlplus idc_u_stuwork/password
 alter procedure REPAIR_DORM_DATA compile;
 ```
 
-#i#mp/exp，可以非oracle服务器端执行
+#imp/exp，可以非oracle服务器端执行
 
 ```oracle
 #用户idc_u_stuwork导出
