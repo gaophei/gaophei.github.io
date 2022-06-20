@@ -66,7 +66,7 @@ sqlplus urpuser/L333xnneJJ6EYn@10.8.14.15:1521/s_urpdb
 
 
 
-</br>
+
 
 ##rman备份
 
@@ -124,7 +124,7 @@ echo `date ` >> $rman_dir/rmanrun.log
 
 
 
-</br>
+
 
 ###其他操作
 
@@ -179,7 +179,7 @@ impdp  urpuser/L333xnneJJ6EYn@10.8.14.11:1521/s_urpdb directory=expdir dumpfile=
 
 
 
-</br>
+
 
 ###集群操作
 
