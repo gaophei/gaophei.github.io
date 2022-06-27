@@ -89,7 +89,7 @@ fmt.Printf("baseArr[1] addr=%p", &baseArr[1])
 
 5. time
 	time.Now()
-	time.Now().UNix()
+	time.Now().Unix()
 	time.Now().UnixNano()
 	
 	time.Sleep(d time.Duration)
@@ -3613,6 +3613,7 @@ func main() {
   
   l := AddSum
 	l()()
+	l()()
 	fmt.Printf("f'type is %T, l'type is %T\n", f, l)
 }
 
@@ -3623,6 +3624,7 @@ func main() {
 23
 21
 22
+21
 21
 f'type is func(), l'type is func() func()
 */
@@ -3685,20 +3687,51 @@ func main() {
 	for x := f(); x < 100; x = f() {
 		fmt.Println(x)
 	}
+  fmt.Println()
 }
 
 //输出结果如下：
 /*
-1
-2
-3
-5
-8
-13
-21
-34
-55
-89
+1 2 3 5 8 13 21 34 55 89
+*/
+```
+#通过闭包求斐波那契数01
+```
+package main
+
+import "fmt"
+
+func Fbn() func() int {
+	a, b := 0, 1
+	return func() int {
+		tmp := b
+		a, b = b, a+b
+		return tmp
+	}
+
+}
+
+func main() {
+	var num int
+	fmt.Println("plz :")
+	fmt.Scanln(&num)
+
+	if num == 0 {
+		return
+	}
+
+	f := Fbn()
+	for i := 0; i < num; i++ {
+		fmt.Printf("%v ", f())
+	}
+	fmt.Println()
+}
+
+//输出结果：
+/*
+plz :
+11
+1 1 2 3 5 8 13 21 34 55 89 
 */
 ```
 
