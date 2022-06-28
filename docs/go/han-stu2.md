@@ -3482,7 +3482,7 @@ func(int, int) int
 */
 ```
 
-### 6.9.闭包
+### 6.9.闭包closure
 #### 6.9.1.基本介绍
 ```
 闭包就是一个函数和其相关的引用环境组合的一个整体(实体)
@@ -3492,6 +3492,21 @@ func(int, int) int
 package main
 
 import "fmt"
+
+func Add01() func() int{
+  num01 := 10
+  return func() int {
+    return num01 + 1
+  }
+}
+
+func Add02() func() int{
+  num02 := 10
+  return func() int {
+    num02 += 1
+    return num02
+  }
+}
 
 func AddUpper() func(int) int {
 	var n int = 10
@@ -3504,7 +3519,17 @@ func AddUpper() func(int) int {
 }
 
 func main() {
-
+  
+  f01 := Add01()
+  fmt.Println(f01())
+	fmt.Println(f01())
+  fmt.Println()
+  
+  f02 := Add02()
+  fmt.Println(f02())
+	fmt.Println(f02())
+  fmt.Println()
+  
 	fmt.Println(AddUpper()(1))
 	fmt.Println(AddUpper()(2))
 
@@ -3518,6 +3543,12 @@ func main() {
 
 //输出结果如下：
 /*
+11
+11
+
+11
+12
+
 first n=10, &n=0xc000016088
 anomousfunc n=11, &n=0xc00001608811
 first n=10, &n=0xc000016098
