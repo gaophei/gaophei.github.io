@@ -480,6 +480,7 @@ abc
 
   int/uint: %02d
   float32/float64: %.2f/%g/%e
+  二进制：%b
   byte: %c
   bool: %t
   string: %s/%q
