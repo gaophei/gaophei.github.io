@@ -3486,6 +3486,7 @@ func(int, int) int
 #### 6.9.1.基本介绍
 ```
 闭包就是一个函数和其相关的引用环境组合的一个整体(实体)
+a closure is a record storing a function together with an environment.
 ```
 #### 6.9.2.快速入门案例
 ```go
@@ -3521,13 +3522,17 @@ func AddUpper() func(int) int {
 func main() {
   
   f01 := Add01()
+  fmt.Printf("the addr of f01: %p\n", f01)
   fmt.Println(f01())
-	fmt.Println(f01())
+  fmt.Printf("the addr of f01: %p\n", f01)
+  fmt.Println(f01())
   fmt.Println()
   
   f02 := Add02()
+  fmt.Printf("the addr of f02: %p\n", f02)
   fmt.Println(f02())
-	fmt.Println(f02())
+  fmt.Printf("the addr of f02: %p\n", f02)
+  fmt.Println(f02())
   fmt.Println()
   
 	fmt.Println(AddUpper()(1))
@@ -3543,22 +3548,32 @@ func main() {
 
 //输出结果如下：
 /*
+the addr of f01: 0x8be4e0
 11
+the addr of f01: 0x8be4e0        
 11
 
+the addr of f02: 0x8be4c0        
 11
+the addr of f02: 0x8be4c0        
 12
 
-first n=10, &n=0xc000016088
-anomousfunc n=11, &n=0xc00001608811
-first n=10, &n=0xc000016098
-anomousfunc n=12, &n=0xc00001609812
-first n=10, &n=0xc0000160b0
-anomousfunc n=11, &n=0xc0000160b011
-first n=10, &n=0xc0000160b8
-anomousfunc n=15, &n=0xc0000160b815
-anomousfunc n=13, &n=0xc0000160b013
-anomousfunc n=16, &n=0xc0000160b016
+first n=10, &n=0xc0000aa0b0      
+anomousfunc n=11, &n=0xc0000aa0b0
+11
+first n=10, &n=0xc0000aa0c0      
+anomousfunc n=12, &n=0xc0000aa0c0
+12
+first n=10, &n=0xc0000aa0d0      
+anomousfunc n=11, &n=0xc0000aa0d0
+11
+first n=10, &n=0xc0000aa0e0
+anomousfunc n=15, &n=0xc0000aa0e0
+15
+anomousfunc n=13, &n=0xc0000aa0d0
+13
+anomousfunc n=16, &n=0xc0000aa0d0
+16
 */
 //对上面代码的说明：
 /*
@@ -3697,6 +3712,241 @@ func main() {
 34
 35
 */
+```
+
+#code04---指针和值传递
+```go
+package main
+
+import "fmt"
+
+func foo1(x *int) func() {
+	return func() {
+		*x += *x
+		fmt.Printf("foo1 ... *x = %v\n", *x)
+	}
+}
+
+func foo2(x int) func() {
+	return func() {
+		x += x
+		fmt.Printf("foo2 ... x= %v\n", x)
+	}
+}
+
+func main() {
+	var num01 int = 10
+	fmt.Printf("main... num01 = %v\n", num01)
+	foo1(&num01)()
+	fmt.Printf("after foo1, main... num01 = %v\n", num01)
+	foo1(&num01)()
+	fmt.Printf("after second foo1, main... num01 = %v\n", num01)
+
+	f01 := foo1(&num01)
+	f01()
+	fmt.Printf("after fo1, main... num01= %v\n", num01)
+	f01()
+	fmt.Printf("after second fo1, main... num01= %v\n", num01)
+
+	foo2(num01)()
+	fmt.Printf("after foo2, main... num01= %v\n", num01)
+	foo2(num01)()
+	fmt.Printf("after second foo2, main... num01= %v\n", num01)
+
+	f02 := foo2(num01)
+	f02()
+	fmt.Printf("after fo2, main... num01= %v\n", num01)
+	f02()
+	fmt.Printf("after second fo2, main... num01= %v\n", num01)
+
+	fmt.Println("----------------------------------------")
+
+	num01 = 1000
+	fmt.Println("main...num01=", num01)
+	f01()
+	fmt.Printf("modify num01, after fo1, main... num01= %v\n", num01)
+	f01()
+	fmt.Printf("modify num01, after second fo1, main... num01= %v\n", num01)
+	f02()
+	fmt.Printf("modify num01, after fo2, main... num01= %v\n", num01)
+	f02()
+	fmt.Printf("modify num01, after second fo2, main... num01= %v\n", num01)
+
+}
+
+
+//输出结果如下：
+/*
+main... num01 = 10
+foo1 ... *x = 20
+after foo1, main... num01 = 20       
+foo1 ... *x = 40
+after second foo1, main... num01 = 40
+foo1 ... *x = 80
+after fo1, main... num01= 80
+foo1 ... *x = 160
+after second fo1, main... num01= 160 
+foo2 ... x= 320
+after foo2, main... num01= 160       
+foo2 ... x= 320
+after second foo2, main... num01= 160
+foo2 ... x= 320
+after fo2, main... num01= 160        
+foo2 ... x= 640
+after second fo2, main... num01= 160
+----------------------------------------
+main...num01= 1000
+foo1 ... *x = 2000
+modify num01, after fo1, main... num01= 2000
+foo1 ... *x = 4000
+modify num01, after second fo1, main... num01= 4000
+foo2 ... x= 1280
+modify num01, after fo2, main... num01= 4000
+foo2 ... x= 2560
+modify num01, after second fo2, main... num01= 4000
+*/
+```
+#code05---指针和值传递02
+```go
+package main
+
+import "fmt"
+
+func foo1(x *int) func() {
+	fmt.Println("f001 *x=", *x)
+	return func() {
+		*x = *x + 1
+		fmt.Printf("foo1 val = %d\n", *x)
+	}
+}
+func foo2(x int) func() {
+	fmt.Println("f002 x=", x)
+	return func() {
+		x = x + 1
+		fmt.Printf("foo2 val = %d\n", x)
+	}
+}
+
+func main() {
+
+	// Q1第一组实验
+	x := 133
+	fmt.Println("main...x = ", x)
+	f1 := foo1(&x)
+	fmt.Println("main...x = ", x)
+	f2 := foo2(x)
+	fmt.Println("main...x = ", x)
+	f1()
+	fmt.Println("main...x = ", x)
+	f2()
+	fmt.Println("main...x = ", x)
+	f1()
+	fmt.Println("main...x = ", x)
+	f2()
+	fmt.Println("main...x = ", x)
+	// Q1第二组
+	x = 233
+	f1()
+	f2()
+	f1()
+	f2()
+	fmt.Println("main...x =", x)
+	// Q1第三组
+	foo1(&x)()
+	foo2(x)()
+	foo1(&x)()
+	foo2(x)()
+}
+
+// 输出结果：
+/*
+main...x =  133
+f001 *x= 133
+main...x =  133
+f002 x= 133
+main...x =  133
+foo1 val = 134
+main...x =  134
+foo2 val = 134
+main...x =  134
+foo1 val = 135
+main...x =  135
+foo2 val = 135
+main...x =  135
+foo1 val = 234
+foo2 val = 136
+foo1 val = 235
+foo2 val = 137
+main...x = 235
+f001 *x= 235
+foo1 val = 236
+f002 x= 236
+foo2 val = 237
+f001 *x= 236
+foo1 val = 237
+f002 x= 237
+foo2 val = 238
+*/
+
+```
+
+#code06---code05精简版
+```go
+package main
+
+import "fmt"
+
+func foo1(x *int) func() {
+	return func() {
+		*x = *x + 1
+		fmt.Printf("foo1 val = %d\n", *x)
+	}
+}
+func foo2(x int) func() {
+	return func() {
+		x = x + 1
+		fmt.Printf("foo2 val = %d\n", x)
+	}
+}
+
+func main() {
+	// Q1第一组实验
+	x := 133
+	f1 := foo1(&x)
+	f2 := foo2(x)
+	f1()
+	f2()
+	f1()
+	f2()
+	// Q1第二组
+	x = 233
+	f1()
+	f2()
+	f1()
+	f2()
+	// Q1第三组
+	foo1(&x)()
+	foo2(x)()
+	foo1(&x)()
+	foo2(x)()
+}
+
+// 输出结果：
+/*
+foo1 val = 134
+foo2 val = 134
+foo1 val = 135
+foo2 val = 135
+foo1 val = 234
+foo2 val = 136
+foo1 val = 235
+foo2 val = 137
+foo1 val = 236
+foo2 val = 237
+foo1 val = 237
+foo2 val = 238
+*/
+
 ```
 
 #通过闭包求斐波那契数
