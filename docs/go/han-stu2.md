@@ -3917,6 +3917,7 @@ func main() {
 	f1()
 	f2()
 	f1()
+	f1()
 	f2()
 	// Q1第二组
 	x = 233
@@ -3936,6 +3937,7 @@ func main() {
 foo1 val = 134
 foo2 val = 134
 foo1 val = 135
+foo1 val = 136
 foo2 val = 135
 foo1 val = 234
 foo2 val = 136
