@@ -4867,9 +4867,11 @@ func main() {
 	num := t02.Sub(t01)
 	fmt.Println(num)
 	fmt.Println(time.Duration(a02-a01) / time.Nanosecond)
+  fmt.Println(time.Duration(a02-a01))
 }
 
 //5.770290473s
+//5.770197s
 //5.770197s
 ```
 
