@@ -94,6 +94,8 @@ fmt.Printf("baseArr[1] addr=%p", &baseArr[1])
 	
 	time.Sleep(d time.Duration)
 	
+	time.Duration(t2 - t1)
+	
 	type Duration:
 	const( 
 			Nanosecond Duration = 1
@@ -102,7 +104,25 @@ fmt.Printf("baseArr[1] addr=%p", &baseArr[1])
 			Second              = 1000 * Millisecond
 			Minute              = 60 * Second
 			Hour                = 60 * Minute
- ）
+    )
+    
+    time.Now().Format("2016-01-02 15:04:05")
+    time.Now().Year()
+    time.Now().Month()         //July
+    int(time.Now().Month())    //7
+    fmt.Printf("%02d\n",time.Now().Month())     //07
+    time.Now().Day()
+    time.Now().Hour()
+    time.Now().Minute()
+    time.Now().Second()
+    time.Now().Date()          //2022 July 11
+    time.Now().Clock()         //18 21 56
+    
+    time.Now().YearDay()       //192
+    time.Now().Weekday()       //Monday
+    
+ 	t2.sub(t1)     //return duration
+ 	t2.add(d duration)  //时间点
 6. strconv
 	strconv.FormatInt(int64, base int) string
 	strconv.FormatBool(b bool) string
@@ -4101,6 +4121,31 @@ defer.. 10
 5
 */
 ```
+#code0301---先return，函数执行完毕后再执行defer
+```go
+package main
+
+import "fmt"
+
+func foo1() (r int) {
+	fmt.Println("before closuer r = ", r)
+	defer func() {
+		r += r
+		fmt.Println("closure r =", r)
+	}()
+	return 1
+}
+
+func main() {
+	fmt.Println("main...", foo1())
+}
+
+/*
+before closuer r =  0
+closure r = 2
+main... 2    
+*/
+```
 #code04---形参和闭包的区别
 ```go
 package main
@@ -4138,27 +4183,41 @@ package main
 
 import "fmt"
 
-func f2() (r int) {
+func foo1() (r int) {
 	defer func() {
-		r = r + 5
-		fmt.Println("defer...", r)
+		r += 10
+		fmt.Println("defer ... r= ", r)
 	}()
-	fmt.Println("before return:", r)
-	return 1
+	r++
+	fmt.Println("foo1... before return r=", r)
+	return r
+}
+
+func foo2() int {
+	t := 0
+	defer func() {
+		t += 100
+		fmt.Println("defer... t=", t)
+	}()
+	t++
+	fmt.Println("foo2... before return t=", t)
+	return t
 }
 
 func main() {
-	sum := f2()
-	fmt.Println("main()..", sum)
-	fmt.Println("main()02..", sum)
+	fmt.Println("main... r= ", foo1())
+	fmt.Println("main... t= ", foo2())
 }
 
 /*
-before return: 0
-defer... 6
-main().. 6
-main()02.. 6
+foo1... before return r= 1
+defer ... r=  11
+main... r=  11
+foo2... before return t= 1
+defer... t= 101
+main... t=  1
 */
+
 ```
 #### 6.10.3.defer的使用细节
 ```
