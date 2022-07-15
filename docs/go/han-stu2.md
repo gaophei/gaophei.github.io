@@ -129,9 +129,43 @@ fmt.Printf("baseArr[1] addr=%p", &baseArr[1])
 	strconv.FormatFloat(f float64, fmt byte, prec, bitSize int) string
 	strconv.Itoa(i int) string
 	
-	strconv.Parse
+	strconv.ParseInt(str string, base int, bitSize int) (int64, error)
+	//base 进制，bitsize 精度
+	strconv.Atoi(str string) int
+	
+	strconv.ParseFloat(str string, bitSize int) (float64, error)
+	strconv.ParseBool(str string) (bool, error)	
 
 7. strings
+	strings.Index(str, substr string) int
+	strings.LastIndex(str, substr string) int
+	
+	strings.Contains(str, substr string) bool
+	strings.ContainsAny(str, substr string) bool
+	strings.Count(str, substr string) int
+	
+	strings.EqualFold(str1, str2 string) bool
+	strings.ToUpper(str string) string
+	strings.ToLower(str string) string
+	
+	strings.Replace(str, old, new string, n int) string
+	string.Splite(str, sep string) []string
+	
+	strings.TrimSpace(str string) string
+	strings.Trim(str, cutSet string) string
+	strings.TrimLeft(str, cutSet string) string
+	strings.TrimRight(str, cutSet string) string
+	
+	strings.HasPrefix(str, prefix string) bool
+	strings.HasSuffix(str, suffix string) bool
+
+8. errors
+	errors.New(str string) error
+	
+	type error interface {
+		Error() string
+	}
+	
 8. sort
 9. 
 ```
