@@ -1719,6 +1719,7 @@ Jan 04 11:45:14 oracle01 systemd[1]: Started Oracle High Availability Services.
 ```
 ##### 3.4.3.asm及crsd报错CRS-4535: Cannot communicate with Cluster Ready Services
 #如果是光纤直连服务器和SAN存储，因OCR检查时间是15s，但是服务器与存储间检查时间是30s，导致asm报错，从而crs整体报错
+
 ```bash
 [root@oracle01 ~]# cat /sys/block/sdb/device/timeout 
 30

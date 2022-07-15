@@ -129,12 +129,23 @@ fmt.Printf("baseArr[1] addr=%p", &baseArr[1])
 	strconv.FormatFloat(f float64, fmt byte, prec, bitSize int) string
 	strconv.Itoa(i int) string
 	
+<<<<<<< Updated upstream
 	strconv.ParseInt(str string, base int, bitSize int) (int64, error)
 	//base 进制，bitsize 精度
 	strconv.Atoi(str string) int
 	
 	strconv.ParseFloat(str string, bitSize int) (float64, error)
 	strconv.ParseBool(str string) (bool, error)	
+=======
+	strconv.ParseInt(str string, base int, bitsize int) (int64, error)
+	//base int----多少进制
+	//bitsize int ---- 原来的精度
+	
+	strconv.Atoi(str string) int
+	
+	strconv.ParseBool(str string) (bool, error)
+	strconv.ParseFloat(str string, bitsize int) (float64, error)
+>>>>>>> Stashed changes
 
 7. strings
 	strings.Index(str, substr string) int
@@ -148,6 +159,7 @@ fmt.Printf("baseArr[1] addr=%p", &baseArr[1])
 	strings.ToUpper(str string) string
 	strings.ToLower(str string) string
 	
+<<<<<<< Updated upstream
 	strings.Replace(str, old, new string, n int) string
 	string.Splite(str, sep string) []string
 	
@@ -167,6 +179,23 @@ fmt.Printf("baseArr[1] addr=%p", &baseArr[1])
 	}
 	
 8. sort
+=======
+	strings.Replace(str, old, new  string, n int) string
+	strings.Splite(str, sep string) []string
+	
+	strings.TrimSpace(str string) string
+	strings.Trim(str, cutset string) string
+	strings.TrimLeft(str, cutset string) string
+	strings.TrimRight(str, cutset string) string
+	
+	strings.HasPrefix(s, prefix string) bool
+	strings.HasSuffix(s, suffix string) bool
+
+8. errors
+	errors.New(str string) error
+
+9. sort
+>>>>>>> Stashed changes
 9. 
 ```
 
@@ -253,6 +282,38 @@ go build -o hello-mac hello.go
 2)测试时可以直接go run
 go run hello.go
 ===>hello
+
+3)跨平台交叉编译
+windows下:
+编译生成Linux执行文件,在cmd中执行以下命令：
+//set CGO_ENABLED=0
+//set GOARCH=amd64
+set GOOS=linux
+go build -o appName main.go
+然后传到linux服务器执行
+
+编译生成MacOS执行文件,在cmd中执行以下命令：
+//set CGO_ENABLED=0
+//set GOARCH=amd64
+set GOOS=darwin
+go build -o appName main.go
+然后传到linux服务器执行
+
+linux下:
+编译生成windows执行文件,在shell中执行以下命令：
+//export CGO_ENABLED=0
+//export GOARCH=amd64
+export GOOS=windows
+go build -o appName.exe main.go
+然后传到linux服务器执行
+
+编译生成MacOS执行文件,在shell中执行以下命令：
+//export CGO_ENABLED=0
+//export GOARCH=amd64
+export GOOS=darwin
+go build -o appName main.go
+然后传到linux服务器执行
+
 ```
 ### 2.6.Go程序开发注意事项
 ```
@@ -4011,67 +4072,71 @@ package main
 
 import "fmt"
 
-func fib() func() int {
-	a, b := 0, 1
-	return func() int {
-		a, b = b, a+b
-		return b
-	}
-}
-
-func main() {
-	f := fib()
-
-	for x := f(); x < 100; x = f() {
-		fmt.Println(x)
-	}
-  fmt.Println()
-}
-
-//输出结果如下：
-/*
-1 2 3 5 8 13 21 34 55 89
-*/
-```
-#通过闭包求斐波那契数01
-```
-package main
-
-import "fmt"
-
-func Fbn() func() int {
+func fbn() func() int {
 	a, b := 0, 1
 	return func() int {
 		tmp := b
 		a, b = b, a+b
 		return tmp
 	}
-
 }
 
 func main() {
-	var num int
-	fmt.Println("plz :")
-	fmt.Scanln(&num)
+	fmt.Println("the first n fbn:")
+	var n int
+labelA:
+	fmt.Println("plz input a int number:")
+	fmt.Scanln(&n)
 
-	if num == 0 {
-		return
+	if n <= 0 {
+		goto labelA
 	}
 
-	f := Fbn()
-	for i := 0; i < num; i++ {
-		fmt.Printf("%v ", f())
+	f1 := fbn()
+	for i := 0; i < n; i++ {
+		fmt.Printf("%v\t", f1())
 	}
 	fmt.Println()
+	fmt.Printf("the first %v fbn...done\n", n)
+	
+	fmt.Println("---------------------------------")
+	
+	fmt.Println("the fbn before m:")
+	var m int
+labelB:
+	fmt.Println("plz input a int number")
+	fmt.Scanln(&m)
+
+	if m <= 0 {
+		goto labelB
+	}
+
+	f2 := fbn()
+
+	fmt.Printf("the fbn before %v\n", m)
+	for i := f2(); i <= m; i = f2() {
+		fmt.Printf("%v\t", i)
+	}
+	fmt.Println()
+
 }
 
-//输出结果：
 /*
-plz :
-11
-1 1 2 3 5 8 13 21 34 55 89 
+the first n fbn:
+plz input a int number:
+10
+1       1       2       3       5       8       13      21      34      55
+the first 10 fbn...done
+---------------------------------
+the fbn before m:
+plz input a int number
+10
+the fbn before 10
+1       1       2       3       5       8
 */
+
 ```
+
 
 ### 6.10.函数的defer
 #### 6.10.1.为什么需要defer
@@ -5031,13 +5096,13 @@ func test() {
 
 func main() {
 	test()
-	fmt.Println("go~")
+	fmt.Println("main...go~")
 }
 
 /*
 err type = runtime.errorString
 err=runtime error: integer divide by zero
-go~
+main...go~
 */
 ```
 
@@ -5123,7 +5188,7 @@ func test() {
 	}()
 
 	num1 = 10
-	num2 = 0
+	num2 = 5
 	res = num1 / num2
 	fmt.Println("res=", res)
 }
@@ -5483,6 +5548,10 @@ for index, value := range 数组名 {
 	// for _, value := range arr01 {
 				...
 		}
+  如果只想获取index，那么value的占位符也可以不写	
+	// for index := range arr01 {
+				...
+		} 
 5)index和value的名称不是固定的，一般是使用该名称
 ```
 ```
@@ -7373,7 +7442,7 @@ class Solution:
         
         while left <= right:
             
-            mid = left + (right - left) // 2
+            mid = left + (right - left) / 2
             if nums[mid] == target: 
                 return mid
                 
