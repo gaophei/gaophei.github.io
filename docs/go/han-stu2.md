@@ -5739,7 +5739,7 @@ func main() {
 		arr01[i] = 'A' + byte(i)
 		//fmt.Printf("%c ", arr01[i])
 	}
-	//fmt.Println()
+	// fmt.Println()
 	fmt.Printf("%c\n", arr01)
 }
 ```
