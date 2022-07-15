@@ -129,14 +129,6 @@ fmt.Printf("baseArr[1] addr=%p", &baseArr[1])
 	strconv.FormatFloat(f float64, fmt byte, prec, bitSize int) string
 	strconv.Itoa(i int) string
 	
-<<<<<<< Updated upstream
-	strconv.ParseInt(str string, base int, bitSize int) (int64, error)
-	//base 进制，bitsize 精度
-	strconv.Atoi(str string) int
-	
-	strconv.ParseFloat(str string, bitSize int) (float64, error)
-	strconv.ParseBool(str string) (bool, error)	
-=======
 	strconv.ParseInt(str string, base int, bitsize int) (int64, error)
 	//base int----多少进制
 	//bitsize int ---- 原来的精度
@@ -145,7 +137,6 @@ fmt.Printf("baseArr[1] addr=%p", &baseArr[1])
 	
 	strconv.ParseBool(str string) (bool, error)
 	strconv.ParseFloat(str string, bitsize int) (float64, error)
->>>>>>> Stashed changes
 
 7. strings
 	strings.Index(str, substr string) int
@@ -159,7 +150,6 @@ fmt.Printf("baseArr[1] addr=%p", &baseArr[1])
 	strings.ToUpper(str string) string
 	strings.ToLower(str string) string
 	
-<<<<<<< Updated upstream
 	strings.Replace(str, old, new string, n int) string
 	string.Splite(str, sep string) []string
 	
@@ -177,26 +167,8 @@ fmt.Printf("baseArr[1] addr=%p", &baseArr[1])
 	type error interface {
 		Error() string
 	}
-	
-8. sort
-=======
-	strings.Replace(str, old, new  string, n int) string
-	strings.Splite(str, sep string) []string
-	
-	strings.TrimSpace(str string) string
-	strings.Trim(str, cutset string) string
-	strings.TrimLeft(str, cutset string) string
-	strings.TrimRight(str, cutset string) string
-	
-	strings.HasPrefix(s, prefix string) bool
-	strings.HasSuffix(s, suffix string) bool
-
-8. errors
-	errors.New(str string) error
 
 9. sort
->>>>>>> Stashed changes
-9. 
 ```
 
 ## 2.概述
