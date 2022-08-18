@@ -4108,6 +4108,65 @@ the fbn before 10
 */
 
 ```
+#通过闭包求斐波那契数并存入切片
+```go
+package main
+
+import "fmt"
+
+func fbn() func() int {
+	a, b := 0, 1
+	return func() int {
+		tmp := b
+		a, b = b, a+b
+		return tmp
+	}
+}
+
+func main() {
+	var num int
+	for {
+		fmt.Println("plz input a int number:")
+		fmt.Scanln(&num)
+
+		if num <= 0 {
+			fmt.Println("wrong input,plz input again")
+			continue
+		}
+
+		f01 := fbn()
+		var slice01 []int = make([]int, num)
+		for i := 0; i < num; i++ {
+			slice01[i] = f01()
+		}
+		fmt.Println(slice01)
+		fmt.Println("-------------")
+		slice02 := make([]int, 0)
+		f02 := fbn()
+		for i := f02(); i < num; i = f02() {
+			slice02 = append(slice02, i)
+		}
+		fmt.Println(slice02)
+
+	}
+}
+
+/*
+plz input a int number:
+20
+[1 1 2 3 5 8 13 21 34 55 89 144 233 377 610 987 1597 2584 4181 6765]
+-------------
+[1 1 2 3 5 8 13]
+plz input a int number:
+10
+[1 1 2 3 5 8 13 21 34 55]
+-------------
+[1 1 2 3 5 8]
+plz input a int number:
+*/
+
+```
+
 
 
 ### 6.10.函数的defer

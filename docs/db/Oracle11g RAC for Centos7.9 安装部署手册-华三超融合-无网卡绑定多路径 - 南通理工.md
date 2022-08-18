@@ -660,7 +660,7 @@ EOF
 #检查磁盘UUID
 ```bash
 sfdisk -s
-#由于华三超融合平台不支持scsi_id命令，只能使用udevadm
+##由于华三超融合平台不支持scsi_id命令，只能使用udevadm，改为裸块加入iscsi高速硬盘后，支持
 #/usr/lib/udev/scsi_id -g -u -d devicename
 ls -1cv /dev/sd* | grep -v [0-9] | while read disk; do  echo -n "$disk " ; /usr/lib/udev/scsi_id -g -u -d $disk ; done
 ls -1cv /dev/sd* | grep -v [0-9] | while read disk; do  echo -n "$disk " ; udevadm info --query=all --name=$disk|grep ID_SERIAL ; done
@@ -1613,7 +1613,7 @@ ORA-15078: ASM diskgroup was forcibly dismounted
 2022-01-04 12:58:15.519: [    CRSD][859629376][PANIC] CRSD exiting: Could not init OCR, code: 26
 2022-01-04 12:58:15.519: [    CRSD][859629376] Done.
 ```
-##### 3.4.4.添加listener
+##### 3.4.4.添加listener---grid用户
 #上面错误解决后，发现集群缺少listener
 ```
 [grid@oracle01 ~]$ crsctl status resource -t
@@ -2253,8 +2253,8 @@ dbca
     --->弹框中输入ASMSNMP的密码(此弹框可能需要鼠标拖开，密码为GI时设置的密码)
 --->Specify FRA: +FRA/500000M(大小根据实际情况填写)/Enable Arechiving
 --->Sample Schemas，可以去掉打勾
---->Memory: Custom---SGA:115000M/PGA:38000M(大小根据实际设置memory*60%左右)
-    --->Sizing: Processes---1500(根据服务器资源调整)
+--->Memory: Custom---SGA:30000M/PGA:10000M(大小根据实际设置memory*60%左右)
+    --->Sizing: Processes---2000(根据服务器资源调整)
     --->CharacterSets: Use Unicode(AL32UTF8)
     --->Connection Mode: Dedicated Server Mode
 --->可以修改Redo Log Groups，再添加两组，并调整大小为200M

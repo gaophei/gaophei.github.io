@@ -147,7 +147,7 @@ imp username/password@ip:1521/xydb file=20211216.dmp log=20211216.log
 crontab -e
 ```
 #添加以下内容
-30 1 * * * /home/oracle/rmanbak/rmanbak.sh
+30 0 * * * /home/oracle/rmanbak/rmanbak.sh
 
 #备份脚本rmanbak.sh
 
