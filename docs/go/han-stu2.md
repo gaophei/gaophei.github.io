@@ -6313,7 +6313,7 @@ slice01 after +=, slice01=[16 36 64]
 	var slice = arr[start:len(arr)] 可以简写成 var slice = arr[start:]
 	var slice = arr[0:len(arr)] 可以简写成 var slice = arr[:]
 
-3)cap是一个内置函数，用于统计切片的容量，即最大可以存放多少个元素
+3)cap是一个内置函数，用于统计切片的容量，即最大可以存放多少个元素。是从创建切片的索引开始的底层数组中元素的数量
 
 4)切片定义完后，还不能使用，此时是nil切片，需要让其引用到一个数组，或者make一个空间供切片来使用
 	//注意nil切片和空切片的区别
@@ -6334,6 +6334,9 @@ slice01 after +=, slice01=[16 36 64]
 func append(slice []Type, elems ...Type) []Type
 内建函数append将元素追加到切片的末尾。若它有足够的容量，其目标就会重新切片以容纳新的元素。否则，就会分配一个新的基本数组。append返回更新后的切片，因此必须存储追加后的结果。
 
+append 函数会改变 slice 所引用的数组的内容，从而影响到引用同一数组的其它 slice
+但当 slice 中没有剩余空间，即 cap-len == 0 时，此时将动态分配新的数组空间。返回的 slice 数组指针将指向这个空间，而原数组的内容将保持不变；其它引用此数组的 slice 则不受影响
+
 slice = append(slice, elem1, elem2)
 slice = append(slice, anotherSlice...)
 
@@ -6344,7 +6347,7 @@ slice = append([]byte("hello "), "world"...)
 	切片使用内置函数copy完成拷贝
 	func copy(dst, src []Type) int
 内建函数copy将元素从来源切片复制到目标切片中，也能将字节从字符串复制到字节切片中。copy返回被复制的元素数量，它会是 len(src) 和 len(dst) 中较小的那个。来源和目标的底层内存可以重叠。
-	dst和src两个切片的数据空间是独立的，只是复制其中的元素
+	dst和src两个切片的数据空间是独立的，只是复制其中的元素，也就是说copy方法是不会建立两个切片的联系的
 	var arr01 = [5]int{1, 2, 3, 4, 5}
 	slice01 := arr01[1:3]  //2, 3
 	slice02 : = make([]int 5)
@@ -6425,6 +6428,10 @@ package main
 
 import "fmt"
 
+func printSlice(x []int) {
+    fmt.Printf("len=%v, cap =%v, content=%v\n", len(x), cap(x), x)
+}
+
 func main() {
 	// 方式一：切片引用数组的扩容测试
 	// 扩容当切片容量不足时，会创建新的基本数组来存储元素，切片的地址会变化
@@ -6434,26 +6441,31 @@ func main() {
 
 	fmt.Printf("arr01[1] addr=%p\n", &arr01[1])
 	fmt.Printf("slice01 addr=%p\n", &slice01[0])
-	fmt.Printf("slice01 len=%v, cap =%v, content=%v\n", len(slice01), cap(slice01), slice01)
+    printSlice(slice01)
+	// fmt.Printf("slice01 len=%v, cap =%v, content=%v\n", len(slice01), cap(slice01), slice01)
 
 	slice01 = append(slice01, 10, 20, 30)
 	fmt.Printf("slice01 addr=%p\n", &slice01[0])
-	fmt.Printf("slice01 len=%v, cap =%v, content=%v\n", len(slice01), cap(slice01), slice01)
+    printSlice(slice01)
+	// fmt.Printf("slice01 len=%v, cap =%v, content=%v\n", len(slice01), cap(slice01), slice01)
 	fmt.Println(arr01)
 
 	slice01 = append(slice01, 11, 22, 33, 44)
 	fmt.Printf("slice01 addr=%p\n", &slice01[0])
-	fmt.Printf("slice01 len=%v, cap =%v, content=%v\n", len(slice01), cap(slice01), slice01)
+    printSlice(slice01)
+	// fmt.Printf("slice01 len=%v, cap =%v, content=%v\n", len(slice01), cap(slice01), slice01)
 	fmt.Println(arr01)
 
 	slice01 = append(slice01, slice01...)
 	fmt.Printf("slice01 addr=%p\n", &slice01[0])
-	fmt.Printf("slice01 len=%v, cap =%v, content=%v\n", len(slice01), cap(slice01), slice01)
+    printSlice(slice01)
+	// fmt.Printf("slice01 len=%v, cap =%v, content=%v\n", len(slice01), cap(slice01), slice01)
 	fmt.Println(arr01)
 
 	slice01 = append(slice01, slice01...)
 	fmt.Printf("slice01 addr=%p\n", &slice01[0])
-	fmt.Printf("slice01 len=%v, cap =%v, content=%v\n", len(slice01), cap(slice01), slice01)
+    printSlice(slice01)
+	// fmt.Printf("slice01 len=%v, cap =%v, content=%v\n", len(slice01), cap(slice01), slice01)
 
 	// 方式二：make方式切片的扩容测试
 	// 扩容当切片的容量不足时
@@ -6576,8 +6588,58 @@ func main() {
 ![image-20220518204648127](go-pics/sliceappend03.png)
 
 #### 7.11.2.切片的append的坑
+##### 7.11.2.1.切片作为函数参数时append
 ```
-当切片slice作为函数参数时，如果在函数内部发生了扩容，这时再修改slice中的值是不起作用的，因为修改发生在新的array内存中，对老的array内存不起作用
+当切片slice作为函数参数时，如果在函数内部发生了扩容，这时再修改slice中的值是不起作用的，因为修改发生在新的array内存中，对老的array内存不起作用，即如果切片的当前大小不足以附加新值，那么切片需要动态增长，从而更改了基础数组。如果没有返回此新切片，那么追加的更改是不生效的
+如果原来的cap足够大，在里面append时，则会影响main()的切片
+```
+
+```go
+package main
+
+import (
+	"fmt"
+)
+
+func printSlice(x []int) {
+	fmt.Printf("slice self addr=%p, slice addr=%p, content=%v, len=%d, cap=%d\n", &x, x, x, len(x), cap(x))
+}
+
+func modifySlice(a []int) {
+    // a[0] = 100 //此时可以影响到main()的切片
+	fmt.Println("ms...before modify...")
+	printSlice(a)
+	a = append(a, 6) 
+	a[0] = 10
+	fmt.Println("ms...after modify...")
+	printSlice(a)
+}
+
+func main() {
+	s := []int{1, 2, 3, 4, 5}
+	fmt.Println("main...before modify...")
+	printSlice(s)
+	modifySlice(s)
+	fmt.Println("main...after modify...")
+	printSlice(s)
+}
+
+/*
+main...before modify...
+slice self addr=0xc000004078, slice addr=0xc00000a390, content=[1 2 3 4 5], len=5, cap=5    
+ms...before modify...
+slice self addr=0xc0000040c0, slice addr=0xc00000a390, content=[1 2 3 4 5], len=5, cap=5    
+ms...after modify...
+slice self addr=0xc000004108, slice addr=0xc0000102d0, content=[10 2 3 4 5 6], len=6, cap=10
+main...after modify...
+slice self addr=0xc000004150, slice addr=0xc00000a390, content=[1 2 3 4 5], len=5, cap=5   
+*/
+
+```
+```
+解决办法：
+1)外部函数的参数采用切片指针
+2)外部函数返回一个切片
 ```
 
 ```go
@@ -6585,30 +6647,180 @@ package main
 
 import "fmt"
 
-func modifySlice01(s []int) {
-	s[0] = 10
-	fmt.Println("mS01...s=", s)
+func printSlice(slice []int) {
+	fmt.Printf("slice addr=%p, content=%v, len=%d, cap=%d\n", slice, slice, len(slice), cap(slice))
 }
 
-func modifySlice02(s []int) {
-	s = append(s, 4)
-	s[0] = 100
-	fmt.Println("mS02...s=", s)
+func modifySlice01(x *[]int) {
+	fmt.Println("ms01...before modify...")
+	printSlice(*x)
+	*x = append(*x, 4)
+	fmt.Println("ms01...after modify...")
+	printSlice(*x)
+}
+
+func modifySlice02(y []int) []int {
+	fmt.Println("ms02...before modify...")
+	printSlice(y)
+	y = append(y, y...)
+	fmt.Println("ms02...after modify...")
+	printSlice(y)
+	return y
 }
 
 func main() {
-	slice01 := []int{1, 2, 3}
-	modifySlice01(slice01)
-	fmt.Println(slice01)
-	modifySlice02(slice01)
-	fmt.Println(slice01)
+	s := []int{1, 2, 3}
+	fmt.Println("main...before ms01 modify...")
+	printSlice(s)
+	modifySlice01(&s)
+	fmt.Println("main...after ms01 modify...")
+	printSlice(s)
+
+	s = modifySlice02(s)
+	fmt.Println("main...after ms02 modify...")
+	printSlice(s)
 }
 
 /*
-mS01...s= [10 2 3]
-[10 2 3]
-mS02...s= [100 2 3 4]
-[10 2 3]
+main...before ms01 modify...
+slice addr=0xc000018168, content=[1 2 3], len=3, cap=3
+ms01...before modify...
+slice addr=0xc000018168, content=[1 2 3], len=3, cap=3
+ms01...after modify...
+slice addr=0xc00000a3c0, content=[1 2 3 4], len=4, cap=6
+main...after ms01 modify...
+slice addr=0xc00000a3c0, content=[1 2 3 4], len=4, cap=6
+ms02...before modify...
+slice addr=0xc00000a3c0, content=[1 2 3 4], len=4, cap=6
+ms02...after modify...
+slice addr=0xc000056060, content=[1 2 3 4 1 2 3 4], len=8, cap=12
+main...after ms02 modify...
+slice addr=0xc000056060, content=[1 2 3 4 1 2 3 4], len=8, cap=12
+*/
+```
+##### 7.11.2.2.cap不变时，切片append遭覆盖
+```go
+package main
+
+import "fmt"
+
+func printSlice(slice []int) {
+	fmt.Printf("slice addr=%p, content=%v, len=%d, cap=%d\n", slice, slice, len(slice), cap(slice))
+}
+
+func main() {
+	s := []int{5}
+	printSlice(s)
+	s = append(s, 7)
+	printSlice(s)
+	s = append(s, 9)
+	printSlice(s)
+	fmt.Println("------")
+	x := append(s, 11)
+	printSlice(s)
+	printSlice(x)
+	fmt.Println("=======")
+	y := append(s, 12)
+	printSlice(s)
+	printSlice(x)
+	printSlice(y)
+}
+
+/*
+slice addr=0xc0000aa058, content=[5], len=1, cap=1
+slice addr=0xc0000aa0a0, content=[5 7], len=2, cap=2
+slice addr=0xc0000a8080, content=[5 7 9], len=3, cap=4
+------
+slice addr=0xc0000a8080, content=[5 7 9], len=3, cap=4
+slice addr=0xc0000a8080, content=[5 7 9 11], len=4, cap=4
+=======
+slice addr=0xc0000a8080, content=[5 7 9], len=3, cap=4
+slice addr=0xc0000a8080, content=[5 7 9 12], len=4, cap=4
+slice addr=0xc0000a8080, content=[5 7 9 12], len=4, cap=4
+*/
+```
+
+```
+解决办法：
+1)初始化的切片一步到位为3个元素
+2)采用copy方法
+```
+```go
+package main
+
+import "fmt"
+
+func printSlice(slice []int) {
+	fmt.Printf("slice addr=%p, content=%v, len=%d, cap=%d\n", slice, slice, len(slice), cap(slice))
+}
+
+func main() {
+	s := []int{5}
+	printSlice(s)
+	s = append(s, 7)
+	printSlice(s)
+	s = append(s, 9)
+	printSlice(s)
+	fmt.Println("------")
+	x := make([]int, len(s))
+	copy(x, s)
+	x = append(x, 11)
+	printSlice(s)
+	printSlice(x)
+	fmt.Println("=======")
+	y := append(s, 12)
+	printSlice(s)
+	printSlice(x)
+	printSlice(y)
+}
+
+/*
+slice addr=0xc000016098, content=[5], len=1, cap=1
+slice addr=0xc0000160e0, content=[5 7], len=2, cap=2     
+slice addr=0xc00000e200, content=[5 7 9], len=3, cap=4   
+------
+slice addr=0xc00000e200, content=[5 7 9], len=3, cap=4   
+slice addr=0xc00000a390, content=[5 7 9 11], len=4, cap=6
+=======
+slice addr=0xc00000e200, content=[5 7 9], len=3, cap=4   
+slice addr=0xc00000a390, content=[5 7 9 11], len=4, cap=6
+slice addr=0xc00000e200, content=[5 7 9 12], len=4, cap=4
+ */
+
+```
+
+```go
+package main
+
+import "fmt"
+
+func printSlice(slice []int) {
+	fmt.Printf("slice addr=%p, content=%v, len=%d, cap=%d\n", slice, slice, len(slice), cap(slice))
+}
+
+func main() {
+	s := []int{5, 7, 9}
+	printSlice(s)
+	fmt.Println("------")
+	x := append(s, 11)
+	printSlice(s)
+	printSlice(x)
+	fmt.Println("=======")
+	y := append(s, 12)
+	printSlice(s)
+	printSlice(x)
+	printSlice(y)
+}
+
+/*
+slice addr=0xc000018168, content=[5 7 9], len=3, cap=3
+------
+slice addr=0xc000018168, content=[5 7 9], len=3, cap=3
+slice addr=0xc00000a390, content=[5 7 9 11], len=4, cap=6
+=======
+slice addr=0xc000018168, content=[5 7 9], len=3, cap=3
+slice addr=0xc00000a390, content=[5 7 9 11], len=4, cap=6
+slice addr=0xc00000a3c0, content=[5 7 9 12], len=4, cap=6
 */
 ```
 
@@ -6621,6 +6833,7 @@ import "fmt"
 
 func main() {
 	//测试切片slice的拷贝功能，内置函数copy(dst, src []Type) int
+    //copy中存在空切片时，不会进行复制
 	//方式一：切片引用数组的方式测试
 	var arr01 = [...]int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}
 	slice01 := arr01[1:4]
@@ -6805,6 +7018,137 @@ plz input a int number:
 plz input a int number:
 -1
 goodbye!
+*/
+```
+
+### 7.13.array和slice的内存存储区别
+
+```
+#array
+ array是值传递，在内存是一段连续的值
+```
+```go
+package main
+
+import "fmt"
+
+func main() {
+	a := [4]int{1, 2, 3, 41}
+	fmt.Println(a)    // line 7
+}
+```
+```
+#内存分析
+#通过https://github.com/go-delve/delve 进行分析
+/*
+C:\work\01> dlv debug .\main.go
+Type 'help' for list of commands.
+(dlv) break main.go:7
+Breakpoint 1 set at 0x552afc for main.main() c:/work/01/main.go:7
+(dlv) continue
+> main.main() c:/work/01/main.go:7 (hits goroutine(1):1 total:1) (PC: 0x552afc)
+     2:
+     3: import "fmt"
+     4:
+     5: func main() {
+     6:         a := [4]int{1, 2, 3, 41}
+=>   7:         fmt.Println(a)
+     8: }
+(dlv) print a
+[4]int [1,2,3,41]
+(dlv) examinemem -count 4 -size 8 -x &a
+0xc000107f00:   0x0000000000000001   0x0000000000000002   0x0000000000000003   0x0000000000000029   
+(dlv)
+*/
+```
+
+```
+#slice
+ slice是引用传递，在内存中存在三个值：pointer(指针)、len、cap，pointer指向的值是一个数组
+```
+```go
+package main
+
+import "fmt"
+
+func main() {
+	s := []int{1, 2, 3}
+	fmt.Println(s)    // line 7
+}
+```
+```
+#内存分析
+#通过https://github.com/go-delve/delve 进行分析
+
+C:\work\02> dlv debug .\main.go
+Type 'help' for list of commands.
+(dlv) break main.go:7
+Breakpoint 1 set at 0xdf2b0f for main.main() c:/work/02/main.go:7
+(dlv) continue
+> main.main() c:/work/02/main.go:7 (hits goroutine(1):1 total:1) (PC: 0xdf2b0f)
+     2:
+     3: import "fmt"
+     4:
+     5: func main() {
+     6:         s := []int{1, 2, 3}
+=>   7:         fmt.Println(s)
+     8: }
+(dlv) print s
+[]int len: 3, cap: 3, [1,2,3]
+(dlv) examinemem -count 3 -size 8 -x &s
+0xc000107f40:   0x000000c000196000   0x0000000000000003   0x0000000000000003   
+(dlv) examinemem -count 3 -size 8 0x000000c000196000
+0xc000196000:   0x0000000000000001   0x0000000000000002   0x0000000000000003   
+(dlv) examinemem -count 4 -size 8 0x000000c000196000
+0xc000196000:   0x0000000000000001   0x0000000000000002   0x0000000000000003   0x0000000000000000   
+(dlv)
+```
+
+```
+#slice 切片的切片
+```
+```go
+package main
+
+import "fmt"
+
+func main() {
+	arr := [5]int{1, 2, 3, 4, 5}
+	s1 := arr[1:3]               // [2, 3], len=2, cap=4
+	s2 := s1[:1]                 // [2], len=1, cap=4
+	fmt.Println(s1, s2)
+}
+/*
+C:\work\03> dlv debug .\main.go
+Type 'help' for list of commands.
+(dlv) break main.go:9
+Breakpoint 1 set at 0x662b3f for main.main() c:/work/03/main.go:9
+(dlv) continue
+> main.main() c:/work/03/main.go:9 (hits goroutine(1):1 total:1) (PC: 0x662b3f)
+     4:
+     5: func main() {
+     6:         arr := [5]int{1, 2, 3, 4, 5}
+     7:         s1 := arr[1:3]
+     8:         s2 := s1[:1]
+=>   9:         fmt.Println(s1, s2)
+    10: }
+(dlv) print arr
+[5]int [1,2,3,4,5]
+(dlv) print s1
+[]int len: 2, cap: 4, [2,3]
+(dlv) print s2
+[]int len: 1, cap: 4, [2]
+(dlv) examinemem -count 2 -size 8 -x &s1
+0xc000107f20:   0x000000c00000a398   0x0000000000000002   
+(dlv) examinemem -count 4 -size 8 -x &s1
+0xc000107f20:   0x000000c00000a398   0x0000000000000002   0x0000000000000004   0x00000000005c5385   
+(dlv) examinemem -count 5 -size 8 -x &s1
+0xc000107f20:   0x000000c00000a398   0x0000000000000002   0x0000000000000004   0x00000000005c5385   0x0000000000000000   
+(dlv) examinemem -count 5 -size 8 -x &s2
+0xc000107f08:   0x000000c00000a398   0x0000000000000001   0x0000000000000004   0x000000c00000a398   0x0000000000000002   
+(dlv) examinemem -count 5 -size 8 0x000000c00000a398
+0xc00000a398:   0x0000000000000002   0x0000000000000003   0x0000000000000004   0x0000000000000005   0x0000000000000000   
+(dlv)
 */
 ```
 
