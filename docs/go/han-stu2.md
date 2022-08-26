@@ -6167,22 +6167,18 @@ package main
 import "fmt"
 
 func main() {
-	//nil切片
-	var slice01 []int
-	
-	//空切片
-	slice02 := make([]int, 0)
-	slice03 := []int{}
-
-	fmt.Printf("slice01 addr=%p, content=%v, len=%v, cap=%v\n", slice01, slice01, slice01, slice01)
-	fmt.Printf("slice02 addr=%p, content=%v, len=%v, cap=%v\n", slice02, slice02, slice02, slice02)
-	fmt.Printf("slice03 addr=%p, content=%v, len=%v, cap=%v\n", slice03, slice03, slice03, slice03)
-	/*
-		slice01 addr=0x0, content=[], len=[], cap=[]
-		slice02 addr=0x116be80, content=[], len=[], cap=[]
-		slice03 addr=0x116be80, content=[], len=[], cap=[]
-	*/
+	var slice01 []bool
+	slice02 := make([]bool, 0, 0)
+	slice03 := []string{}
+	fmt.Printf("slice01 content= %v, addr = %p, len=%d, cap= %d\n", slice01, slice01, len(slice01), cap(slice01))
+	fmt.Printf("slice02 content= %v, addr = %p, len=%d, cap= %d\n", slice02, slice02, len(slice02), cap(slice02))
+	fmt.Printf("slice03 content= %v, addr = %p, len=%d, cap= %d\n", slice03, slice03, len(slice03), cap(slice03))
 }
+/*
+slice01 content= [], addr = 0x0, len=0, cap= 0
+slice02 content= [], addr = 0x7882f8, len=0, cap= 0
+slice03 content= [], addr = 0x7882f8, len=0, cap= 0
+*/
 ```
 
 ### 7.10.切片的遍历
@@ -6258,13 +6254,59 @@ slice01 add=0xc0000aa030, v addr=0xc0000b2008, slice01[4] addr=0xc0000aa050, v= 
 */
 ```
 
+```go
+package main
+
+import "fmt"
+
+func main() {
+	var intArr = [5]int{1, 2, 3, 4, 5}
+	fmt.Println("intArr...", intArr)
+	slice01 := intArr[1:4]
+	fmt.Println("slice01...", slice01)
+
+	for i := 0; i < len(slice01); i++ {
+		slice01[i] += slice01[i]
+	}
+	fmt.Println("slice01 after +=", slice01)
+
+	for i := range slice01 {
+		slice01[i] *= slice01[i]
+		fmt.Printf("slice01[%d]=%v\n", i, slice01[i])
+	}
+	fmt.Printf("slice01 after *=, slice01=%v\n", slice01)
+
+	for _, v := range slice01 {
+		v += v
+		fmt.Printf("v = %d, v...addr = %p\n", v, &v)
+	}
+	fmt.Printf("slice01 after +=, slice01=%v\n", slice01)
+}
+
+/*
+intArr... [1 2 3 4 5]
+slice01... [2 3 4]
+slice01 after += [4 6 8]
+slice01[0]=16
+slice01[1]=36
+slice01[2]=64
+slice01 after *=, slice01=[16 36 64]
+v = 32, v...addr = 0xc000016110
+v = 72, v...addr = 0xc000016110
+v = 128, v...addr = 0xc000016110
+slice01 after +=, slice01=[16 36 64]
+*/
+
+
+```
+
 ![img](go-pics/slice06.png)
 
 ### 7.11.切片使用的注意事项和细节
 
 ```
 1)切片初始化时，var slice = arr[startIndex:endIndex]
-	//从arr数组下标startIndex开始，取到下标为endIndex的元素(不含arr[endIndex])
+	//从arr数组下标startIndex开始，取到下标为endIndex的元素(不含arr[endIndex]), 左闭右开
 
 2)切片初始化时，仍然不能越界。范围在[0,len(arr)]之间，但是可以动态增长
 	var slice = arr[0:end] 可以简写成 var slice = arr[:end]
@@ -6275,16 +6317,18 @@ slice01 add=0xc0000aa030, v addr=0xc0000b2008, slice01[4] addr=0xc0000aa050, v= 
 
 4)切片定义完后，还不能使用，此时是nil切片，需要让其引用到一个数组，或者make一个空间供切片来使用
 	//注意nil切片和空切片的区别
-	var slice []int             //nil切片
-	var slice = make([]int, 0)  //空切片
-	var slice = []int{}         //空切片
+	var slice []int             //nil切片, slice addr=%p===>0x0 
+	var slice = make([]int, 0)  //空切片, slice addr=%p===>0x7882f8
+	var slice = []int{}         //空切片, slice addr=%p===>0x7882f8 
 	
 5)切片可以继续切片
 	var arr01 = [...]int{1, 3, 5, 7, 8, 10, 12}
-	var slice01 []int = arr01[1:5]  //[3 5 7 8]
+	var slice01 []int = arr01[1:5]  //[3 5 7 8], len=4, cap=6
 	var slice02 = slice01[0:6]  //[3 5 7 8 10 12]
 	
-	slice02的访问范围：slice01[0---cap(slice010)]
+	slice02的访问范围：slice01[0:cap(slice01)]
+	如果超过cap(slice01)，那么会报错：
+	panic: runtime error: slice bounds out of range [:7] with capacity 6
 
 6)用内置函数append，可以对切片进行动态追加
 func append(slice []Type, elems ...Type) []Type
@@ -6318,7 +6362,11 @@ slice = append([]byte("hello "), "world"...)
 	fmt.Println(srcSlice)
 	fmt.Println(dstSlice)
 	fmt.Println(copy1)
-	
+    /*
+	[]
+	[1 3 5]
+	0
+	*/
 8)切片是引用类型，所以在传递时，遵守引用传递机制
 
 ```
@@ -6330,17 +6378,19 @@ slice = append([]byte("hello "), "world"...)
 Golang 切片声明
 基本格式：
 
-var slice = []type 										//此时 slice 为 nil
-var slice = []type{}  								//此时 slice 不为 nil
-var slice []type = make([]type, len) 	//此时 slice 不为 nil
+var slice []type 						//此时 slice 为 nil
+var slice = []type{}  					//此时 slice 为 空切片
+var slice []type = make([]type, 0) 	    //此时 slice 为 空切片
 slice := make([]type, len)
 slice := make([]type, len, cap)
 
 slice := arr[startIndex:endIndex]  	//从一个数组中开一个切片，不包括 endIndex
-slice := arr[:endIndex] 	 					//从头到 endIndex，不包括 endIndex
-slice := arr[startIndex:] 					//从 startIndex 到尾
+slice := arr[:endIndex] 	 		//从头到 endIndex，不包括 endIndex
+slice := arr[startIndex:] 			//从 startIndex 到尾
 
 slice2 := slice1[startIndex:endIndex]  //从一个切片中再开一个切片
+slice3 := slice1[0:cap(slice1)]
+
 示例：
 
 package main
@@ -6357,6 +6407,7 @@ func main() {
   fmt.Println(slice2) //[3,4,5,6]
 }
 ```
+#切片的切片，测试2
 
 ```go
 	var arr01 [6]int = [...]int{10, 20, 30, 40, 50, 60}
@@ -6406,8 +6457,8 @@ func main() {
 
 	// 方式二：make方式切片的扩容测试
 	// 扩容当切片的容量不足时
-  //有时候会在原来的底层数组上直接增加扩容，切片地址不变
-  //有时候会创建另外一个新的数组，切片指向该新的数组
+    //有时候会在原来的底层数组上直接增加扩容，切片地址不变
+    //有时候会创建另外一个新的数组，切片指向该新的数组
 	var slice02 = make([]int, 3)
 	fmt.Printf("slice02 addr=%p, len=%v, cap =%v\n", &slice02, len(slice02), cap(slice02))
 	fmt.Printf("slice02 content=%v\n", slice02)
@@ -6523,6 +6574,43 @@ func main() {
 
 
 ![image-20220518204648127](go-pics/sliceappend03.png)
+
+#### 7.11.2.切片的append的坑
+```
+当切片slice作为函数参数时，如果在函数内部发生了扩容，这时再修改slice中的值是不起作用的，因为修改发生在新的array内存中，对老的array内存不起作用
+```
+
+```go
+package main
+
+import "fmt"
+
+func modifySlice01(s []int) {
+	s[0] = 10
+	fmt.Println("mS01...s=", s)
+}
+
+func modifySlice02(s []int) {
+	s = append(s, 4)
+	s[0] = 100
+	fmt.Println("mS02...s=", s)
+}
+
+func main() {
+	slice01 := []int{1, 2, 3}
+	modifySlice01(slice01)
+	fmt.Println(slice01)
+	modifySlice02(slice01)
+	fmt.Println(slice01)
+}
+
+/*
+mS01...s= [10 2 3]
+[10 2 3]
+mS02...s= [100 2 3 4]
+[10 2 3]
+*/
+```
 
 #### 7.11.3.切片的copy
 
