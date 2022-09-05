@@ -132,13 +132,26 @@ alter procedure REPAIR_DORM_DATA compile;
 
 ```oracle
 #用户idc_u_stuwork导出
-exp username/password@ip:1521/xydb owner=idc_u_stuwork file=20211216.dmp log=20211216.log statistics=none
+exp idc_u_stuwork/password@ip:1521/xydb owner=idc_u_stuwork file=20211216.dmp log=20211216.log statistics=none
 
 #全库导出
 exp username/password@ip:1521/xydb full=y file=20211216.dmp log=20211216.log statistics=none
 
 #导入
 imp username/password@ip:1521/xydb file=20211216.dmp log=20211216.log
+```
+
+```
+impdp导入后，重新exp导出，然后imp到别的服务器
+```
+```
+先在别的库里建了个新账户idc_u_stuwork_new，按照上面语句导入下
+impdp idc_u_stuwork_new/kingstar@orcl directory=expdp_bak_dir dumpfile=oracle6.1.0-20220721.dmp remap_schema=idc_u_stuworkwss:idc_u_stuwork _new transform=segment_attributes:n logfile=oracle_6.1.01impdp.log
+
+然后执行exp，将文件拷贝到windows堡垒机上，在执行imp
+
+exp idc_u_stuwork_new/password@ip:1521/xydb owner=idc_u_stuwork_new file=2022.dmp log=2022.log statistics=none
+imp idc_u_stuwork/password@ip:1521/xydb fromuser=idc_u_stuwork_new touser=idc_u_stuwork file=2022.dmp log=2022.log
 ```
 
 #rman备份

@@ -8297,6 +8297,71 @@ func main() {
 	arr01[2][0] addr = 0xc0000bc030
 */
 ```
+```go
+package main
+
+import "fmt"
+
+func main() {
+	var dA [3][4]int
+	for i := 0; i < len(dA); i++ {
+		for j := 0; j < len(dA[i]); j++ {
+			dA[i][j] = i * j
+		}
+		fmt.Println(dA[i])
+	}
+	fmt.Println(dA)
+
+	/*
+		C:\doubleArr\01> dlv debug .\main.go
+		Type 'help' for list of commands.
+		(dlv) break main.go:13
+		Breakpoint 1 set at 0xd12b16 for main.main() c:/doublearr/01/main.go:13
+		(dlv) continue
+		[0 0 0 0]
+		[0 1 2 3]
+		[0 2 4 6]
+		> main.main() c:/doublearr/01/main.go:13 (hits goroutine(1):1 total:1) (PC: 0xd12b16)
+		     8:                 for j := 0; j < len(dA[i]); j++ {
+		     9:                         dA[i][j] = i * j
+		    10:                 }
+		    11:                 fmt.Println(dA[i])
+		    12:         }
+		=>  13:         fmt.Println(dA)
+		    14:
+		    15:         // var bA [3][4]int
+		    16:         // for i1, v1 := range bA {
+		    17:         //      for i2 := range v1 {
+		    18:         //              bA[i1][i2] = i1 * i2
+		(dlv) print dA
+		[3][4]int [
+		        [0,0,0,0],
+		        [0,1,2,3],
+		        [0,2,4,6],
+		]
+
+		(dlv) examinemem -count 4 -size 8 -x dA
+		Command failed: unsupported expression type: array
+		(dlv) examinemem -count 4 -size 8 -x &dA
+		0xc00014be58:   0x0000000000000000   0x0000000000000000   0x0000000000000000   0x0000000000000000
+		(dlv) examinemem -count 4 -size 8 -x &dA[0]
+		0xc00014be58:   0x0000000000000000   0x0000000000000000   0x0000000000000000   0x0000000000000000
+		(dlv) examinemem -count 4 -size 8 -x &dA[1]
+		0xc00014be78:   0x0000000000000000   0x0000000000000001   0x0000000000000002   0x0000000000000003
+		(dlv) examinemem -count 4 -size 8 -x &dA[2]
+		0xc00014be98:   0x0000000000000000   0x0000000000000002   0x0000000000000004   0x0000000000000006
+		(dlv) examinemem -count 4 -size 8 -x &dA[3]
+		Command failed: index out of bounds
+		(dlv) examinemem -count 4 -size 8 -x &dA
+		0xc00014be58:   0x0000000000000000   0x0000000000000000   0x0000000000000000   0x0000000000000000
+		(dlv) examinemem -count 4 -size 8 -x dA
+		Command failed: unsupported expression type: array
+
+	*/
+
+}
+
+```
 #二维数组也是值类型
 ```go
 package main
@@ -8647,6 +8712,8 @@ func main() {
 #题目二
 已知有个排序好(升序)的数组，要求插入一个元素，最后打印该数组，顺序依然是升序
 ```
+
+
 
 ```go
 //顺序查找
