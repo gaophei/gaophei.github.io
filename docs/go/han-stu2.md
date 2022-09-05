@@ -7780,7 +7780,7 @@ func main() {
 //arr[i] >= -5 ===> 0 表示要插入的位置
 ```
 
-###### 8.3.2.5.4.go标准库实现办法(<=num)的插入位置
+###### 8.3.2.5.5.go标准库实现办法(<=num)的插入位置
 
 ```go
 package main
@@ -8156,7 +8156,7 @@ func main() {
 	}
 
 	/*
-		0 0 1 0 0 0]
+		[0 0 1 0 0 0]
 		[0 2 0 3 0 0]
 		[0 0 0 0 0 0]
 	*/
@@ -9130,6 +9130,55 @@ find str maa in index 5
 find str maaab in index 7
 find str aa in index 8
 [4 5 7 8]
+*/
+```
+
+```go
+// 查找字符串数组中中是否含有相应子串，并保存相应下标后返回
+package main
+
+import "fmt"
+
+func checkArr(arr *[10]string, str1 string) []int {
+	var slice01 = make([]int, 0)
+	for i := 0; i < len(arr); i++ {
+		if arr[i] == str1 {
+			slice01 = append(slice01, i)
+		}
+	}
+	return slice01
+}
+
+func main() {
+	// 试写出实现查找的核心代码，比如已知数组 arr[10]string，里面保存了10个元素，
+	// 现在要查找"AA"在其中是否存在，打印提示，
+	// 如果有多个"AA"，也要找到对应的下标
+	var arr [10]string
+	arr = [10]string{"AA", "ABC", "AA", "CD", "AD", "AAC", "ABA", "AA", "AAAA", "ACAA"}
+	fmt.Println(arr)
+	var str01 string = "AA"
+	slice := checkArr(&arr, str01)
+	if len(slice) == 0 {
+		fmt.Println("no AA in this array!")
+	} else {
+		fmt.Println("find AA in this array, index ...:")
+		for _, v := range slice {
+			fmt.Println(v)
+		}
+	}
+}
+
+/*
+ go run .\main.go
+[AB ABC AC CD AD AAC ABA AAA AAAA ACAA]
+no AA in this array!
+
+ go run .\main.go
+[AA ABC AA CD AD AAC ABA AA AAAA ACAA]
+find AA in this array, index ...:
+0
+2
+7
 */
 ```
 
