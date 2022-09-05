@@ -9201,7 +9201,7 @@ find str aa in index 8
 ```
 
 ```go
-// 查找字符串数组中中是否含有相应子串，并保存相应下标后返回
+// 查找字符串数组中中是否含有相应子串，并保存相应下标后返回，通过append实现保存
 package main
 
 import "fmt"
