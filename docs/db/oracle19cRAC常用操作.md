@@ -169,6 +169,8 @@ grant read,write on directory expdir to public;
 
 ##expdp
 expdp urpuser/L333xnneJJ6EYn@10.8.14.11:1521/s_urpdb schemas=urpuser directory=expdir dumpfile=urpuser_20211101.dmp logfile=urpuser_20211101.log cluster=n
+#19c--->11g
+expdp urpuser/L333xnneJJ6EYn@10.8.14.11:1521/s_urpdb schemas=urpuser directory=expdir dumpfile=urpuser_20211101.dmp logfile=urpuser_20211101.log cluster=n version=11.2.0.4.0
 
 ##impdp
 impdp urpuser/L333xnneJJ6EYn@10.8.14.11:1521/s_urpdb schemas=urpuser directory=expdir dumpfile=urpuser_20211101.dmp logfile=urpuser_20211101.log cluster=n
