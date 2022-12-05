@@ -265,6 +265,9 @@ cat /var/log/mysqld.log | grep password
 mysql -u root -p
 ==> sRj4lo!!d.pM
 
+#set global validate_password.policy=0;
+#set global validate_password.length=1;
+
 ALTER USER "root"@"localhost" IDENTIFIED  BY "Abc123!@#";
 exit;
 

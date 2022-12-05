@@ -806,7 +806,7 @@ export ORACLE_SID=xydb1
 #注意db-rac02修改
 #export ORACLE_SID=xydb2
 export PATH=$ORACLE_HOME/bin:$PATH
-export LD_LIBRARY_PATH=$ORACLE_HOME/bin:/bin:/usr/bin:/usr/local/bin
+export LD_LIBRARY_PATH=$ORACLE_HOME/lib:/lib:/usr/lib
 export CLASSPATH=$ORACLE_HOME/JRE:$ORACLE_HOME/jlib:$ORACLE_HOME/rdbms/jlib
 EOF
 
@@ -829,57 +829,57 @@ ls -1cv /dev/sd* | grep -v [0-9] | while read disk; do  echo -n "$disk " ; udeva
 ```
 #ls -1cv /dev/sd* | grep -v [0-9] | while read disk; do  echo -n "$disk " ; /usr/lib/udev/scsi_id -g -u -d $disk ; done
 
-[root@db-rac01 ~]# lsblk
-NAME        MAJ:MIN RM  SIZE RO TYPE MOUNTPOINT
-sda           8:0    0    2T  0 disk 
-sdb           8:16   0    2T  0 disk 
-sdc           8:32   0    2T  0 disk 
-sdd           8:48   0    2T  0 disk 
-sde           8:64   0  100G  0 disk 
-sdf           8:80   0  100G  0 disk 
-sdg           8:96   0  100G  0 disk 
-sr0          11:0    1 11.2G  0 rom  
-vda         251:0    0 1000G  0 disk 
-├─vda1      251:1    0    1G  0 part /boot
-└─vda2      251:2    0  999G  0 part 
-  ├─ol-root 252:0    0  967G  0 lvm  /
-  └─ol-swap 252:1    0   32G  0 lvm  [SWAP]
-[root@db-rac01 ~]# ls -1cv /dev/sd* | grep -v [0-9] | sk; do  echo -n "$disk " ; /usr/lib/udev/scsi_id -g -uone
+[root@db-rac01 ~]# lsblk -d
+NAME MAJ:MIN RM  SIZE RO TYPE MOUNTPOINT
+sda    8:0    0    2T  0 disk 
+sdb    8:16   0    2T  0 disk 
+sdc    8:32   0    2T  0 disk 
+sdd    8:48   0    2T  0 disk 
+sde    8:64   0  100G  0 disk 
+sdf    8:80   0  1.5T  0 disk 
+sdg    8:96   0  100G  0 disk 
+sdh    8:112  0  100G  0 disk 
+sr0   11:0    1 11.2G  0 rom  
+vda  251:0    0 1000G  0 disk 
+
+[root@db-rac01 ~]# ls -1cv /dev/sd* | grep -v [0-9] | while read disk; do  echo -n "$disk " ; /usr/lib/udev/scsi_id -g -u -d $disk ; done
 /dev/sda 36ff204468043c909acc0afa4094745b6
-/dev/sdb 368350b4ed049f10a9b108e152738bc3d
-/dev/sdc 366960e55904821091c9025e2c7255c7f
-/dev/sdd 36b0708eaa043b10a29d06927e688b365
+/dev/sdb 366960e55904821091c9025e2c7255c7f
+/dev/sdc 36b0708eaa043b10a29d06927e688b365
+/dev/sdd 368350b4ed049f10a9b108e152738bc3d
 /dev/sde 3643a008cc04b8e0b8e109a319a118822
-/dev/sdf 36e450b2170407e0911006b92fd32de0e
-/dev/sdg 366a2083ed04ba40b0470989b6a3a6a77
+/dev/sdf 360b10783704bff0af2707731d9fb3cf0
+/dev/sdg 36e450b2170407e0911006b92fd32de0e
+/dev/sdh 366a2083ed04ba40b0470989b6a3a6a77
 [root@db-rac01 ~]# 
 
-[root@db-rac02 ~]# lsblk
-NAME        MAJ:MIN RM  SIZE RO TYPE MOUNTPOINT
-sda           8:0    0    2T  0 disk 
-sdb           8:16   0    2T  0 disk 
-sdc           8:32   0    2T  0 disk 
-sdd           8:48   0    2T  0 disk 
-sde           8:64   0  100G  0 disk 
-sdf           8:80   0  100G  0 disk 
-sdg           8:96   0  100G  0 disk 
-sr0          11:0    1 11.2G  0 rom  
-vda         251:0    0 1000G  0 disk 
-├─vda1      251:1    0    1G  0 part /boot
-└─vda2      251:2    0  999G  0 part 
-  ├─ol-root 252:0    0  967G  0 lvm  /
-  └─ol-swap 252:1    0   32G  0 lvm  [SWAP]
-[root@db-rac02 ~]# ls -1cv /dev/sd* | grep -v [0-9] | sk; do  echo -n "$disk " ; /usr/lib/udev/scsi_id -g -uone
-/dev/sda 36ff204468043c909acc0afa4094745b6
-/dev/sdb 36b0708eaa043b10a29d06927e688b365
-/dev/sdc 366960e55904821091c9025e2c7255c7f
-/dev/sdd 368350b4ed049f10a9b108e152738bc3d
+
+[root@db-rac02 ~]# lsblk -d
+NAME MAJ:MIN RM  SIZE RO TYPE MOUNTPOINT
+sda    8:0    0    2T  0 disk 
+sdb    8:16   0    2T  0 disk 
+sdc    8:32   0    2T  0 disk 
+sdd    8:48   0    2T  0 disk 
+sde    8:64   0  100G  0 disk 
+sdf    8:80   0  1.5T  0 disk 
+sdg    8:96   0  100G  0 disk 
+sdh    8:112  0  100G  0 disk 
+sr0   11:0    1 11.2G  0 rom  
+vda  251:0    0 1000G  0 disk 
+
+[root@db-rac02 ~]# ls -1cv /dev/sd* | grep -v [0-9] | while read disk; do  echo -n "$disk " ; /usr/lib/udev/scsi_id -g -u -d $disk ; done
+/dev/sda 366960e55904821091c9025e2c7255c7f
+/dev/sdb 36ff204468043c909acc0afa4094745b6
+/dev/sdc 368350b4ed049f10a9b108e152738bc3d
+/dev/sdd 36b0708eaa043b10a29d06927e688b365
 /dev/sde 36e450b2170407e0911006b92fd32de0e
-/dev/sdf 366a2083ed04ba40b0470989b6a3a6a77
-/dev/sdg 3643a008cc04b8e0b8e109a319a118822
+/dev/sdf 360b10783704bff0af2707731d9fb3cf0
+/dev/sdg 366a2083ed04ba40b0470989b6a3a6a77
+/dev/sdh 3643a008cc04b8e0b8e109a319a118822
 [root@db-rac02 ~]# 
+
 ```
-#99-oracle-asmdevices.rules
+#无法通过/usr/lib/udev/scsi_id -g -u -d  /dev/sda等创建99-oracle-asmdevices.rules
 ```bash
 cat >> /etc/udev/rules.d/99-oracle-asmdevices.rules <<'EOF'
 KERNEL=="sda", SUBSYSTEM=="block", PROGRAM=="/usr/lib/udev/scsi_id -g -u -d /dev/$name",RESULT=="368ee0625304a85085600b88ed5fa3e0e", OWNER="grid",GROUP="asmadmin", MODE="0660"
@@ -892,6 +892,30 @@ KERNEL=="sdg", SUBSYSTEM=="block", PROGRAM=="/usr/lib/udev/scsi_id -g -u -d /dev
 EOF
 
 ```
+
+#通过一台虚拟机生成文件，然后scp到另一台
+#dev根据规则文件命名，只需要在一个节点执行，再将生成的规则文件复制到另外一个节点，这样保证两个节点产生的磁盘名一致。
+#节点1：
+
+```bash
+#Unpart $name
+#!/bin/bash
+disk=$(lsblk -d | grep -E "sd|vd" | grep -v $(df -h | grep boot | cut -c 6-8 | head -n 1) | awk {'print $1'})
+for i in $disk
+do
+echo "KERNEL==\"sd*\",SUBSYSTEM==\"block\", PROGRAM==\"/usr/lib/udev/scsi_id -g -u -d /dev/\$name\", RESULT==\"`/usr/lib/udev/scsi_id -g -u -d /dev/$i`\", SYMLINK+=\"asm-disk$i\", OWNER=\"grid\", GROUP=\"asmadmin\", MODE=\"0660\"", ATTR{queue/scheduler}=\"deadline\"   >> /etc/udev/rules.d/99-oracle-asmdevices.rules
+done
+start_udev > /dev/null 2>&1
+
+```
+
+#为了保持节点间，对同一磁盘有一样的名称，需要使用一样的规则文件。需要在一个节点生成后，传输到其他节点。
+#节点1:
+```bash
+scp /etc/udev/rules.d/99-oracle-asmdevices.rules db-rac02:/etc/udev/rules.d/99-oracle-asmdevices.rules
+```
+
+
 #启动udev
 ```bash
 /usr/sbin/partprobe
@@ -902,18 +926,41 @@ systemctl status systemd-udev-trigger.service
 ```
 #检查asm磁盘
 ```bash
-ll /dev|grep asm
+ll /dev|grep asm*
 ```
 #显示如下
+
 ```
-[root@db-rac01 ~]# ll /dev|grep asm
-brw-rw----  1 grid asmadmin   8,   0 Dec 30 17:09 sda
-brw-rw----  1 grid asmadmin   8,  16 Dec 30 17:09 sdb
-brw-rw----  1 grid asmadmin   8,  32 Dec 30 17:09 sdc
-brw-rw----  1 grid asmadmin   8,  48 Dec 30 17:09 sdd
-brw-rw----  1 grid asmadmin   8,  64 Dec 30 17:09 sde
-brw-rw----  1 grid asmadmin   8,  80 Dec 30 17:09 sdf
-brw-rw----  1 grid asmadmin   8,  96 Dec 30 17:09 sdg
+[root@db-rac01 ~]# ll /dev/asm*
+lrwxrwxrwx 1 root root 3 Dec  2 16:19 /dev/asm-disksda -> sdb
+lrwxrwxrwx 1 root root 3 Dec  2 16:19 /dev/asm-disksdb -> sda
+lrwxrwxrwx 1 root root 3 Dec  2 16:19 /dev/asm-disksdc -> sdc
+lrwxrwxrwx 1 root root 3 Dec  2 16:19 /dev/asm-disksdd -> sdd
+lrwxrwxrwx 1 root root 3 Dec  2 16:19 /dev/asm-disksde -> sde
+lrwxrwxrwx 1 root root 3 Dec  2 16:19 /dev/asm-disksdf -> sdg
+lrwxrwxrwx 1 root root 3 Dec  2 16:19 /dev/asm-disksdg -> sdh
+lrwxrwxrwx 1 root root 3 Dec  2 16:19 /dev/asm-disksdh -> sdf
+
+
+[root@db-rac02 ~]# ll /dev/asm*
+lrwxrwxrwx 1 root root 3 Dec  2 16:19 /dev/asm-disksda -> sda
+lrwxrwxrwx 1 root root 3 Dec  2 16:19 /dev/asm-disksdb -> sdb
+lrwxrwxrwx 1 root root 3 Dec  2 16:19 /dev/asm-disksdc -> sdd
+lrwxrwxrwx 1 root root 3 Dec  2 16:19 /dev/asm-disksdd -> sdc
+lrwxrwxrwx 1 root root 3 Dec  2 16:19 /dev/asm-disksde -> sdh
+lrwxrwxrwx 1 root root 3 Dec  2 16:19 /dev/asm-disksdf -> sde
+lrwxrwxrwx 1 root root 3 Dec  2 16:19 /dev/asm-disksdg -> sdg
+lrwxrwxrwx 1 root root 3 Dec  2 16:19 /dev/asm-disksdh -> sdf
+```
+
+#如果没有启动udev，可以执行以下命令
+```bash
+/usr/sbin/partprobe
+/usr/sbin/udevadm control --reload-rules
+/sbin/udevadm trigger --type=devices --action=change
+
+ll /dev/asm*
+
 ```
 
 #### 2.9.2.多路径模式--无
@@ -1279,7 +1326,7 @@ rpm -ivh cvuqdisk-1.0.10-1.rpm
 
 #节点一安装前检查：
 [grid@db-rac01 ~]$ cd /u01/app/19.0.0/grid/
-[grid@db-rac01 grid]$ ./runcluvfy.sh stage -pre crsinst -n db-rac01,db-rac02 -verbose
+[grid@db-rac01 grid]$ ./runcluvfy.sh stage -pre crsinst -n db-rac01,db-rac02 -verbose | tee -a pre1.log
 ```
 
 #error检查
