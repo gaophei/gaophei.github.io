@@ -1331,6 +1331,8 @@ rpm -ivh cvuqdisk-1.0.10-1.rpm
 
 #error检查
 ```
+#如果执行该命令时卡住，半天没反应，可能是scp报错了，解决办法见下面
+
 #可以忽略的
 ERROR:
 PRVG-10467 : The default Oracle Inventory group could not be determined.
@@ -1366,6 +1368,19 @@ rpm -ivh xterm-295-3.el7.x86_64.rpm
 cd /u01/app/19.0.0/grid/
 [grid@db-rac01 grid]$ ./gridSetup.sh
 ```
+#报错处理
+```
+[INS-08101] Unexpected error while executing the action at state: 'supportedOSCheck'
+```
+```
+办法一：临时解决
+export CV_ASSUME_DISTID=OEL8.1
+办法二：永久解决
+vi $ORACLE_HOME/cv/admin/cvu_config
+在#CV_ASSUME_DISTID=OEL5该行下添加一行：
+CV_ASSUME
+```
+
 ### 3.4. GI 安装步骤
 #安装过程如下
 ```
@@ -1373,7 +1388,7 @@ cd /u01/app/19.0.0/grid/
 2. 配置独立的集群(configure an oracle standalone cluster)
 3. 配置集群名称以及 scan 名称(rac-cluster/rac-scan/1521)
 4. 添加节点2并测试节点互信(Add db-rac02/db-rac02-vip, test for SSH connectivity)
-5. 公网、私网网段选择(eth1-3.3.3.0-ASM&private/eth0-10.4.0.0-public)
+5. 公网、私网网段选择(eth1-172.16.134.0-ASM&private/eth0-10.251.252.0-public)
 6. 选择 asm 存储(use oracle flex ASM for storage)
 7. 选择不单独为GIMR配置磁盘组
 8. 选择 asm 磁盘组(ORC/normal/100G三块磁盘)
@@ -1396,6 +1411,36 @@ cd /u01/app/19.0.0/grid/
     INS-43080----YES
 19. Close     
 ```
+#报错处理，如果在ssh互信时报错
+```
+[INS-06006] Passwordless SSH connectivity not set up between the following nodes(s)
+```
+#可以通过root账户用以下命令临时解决
+```bash
+# Rename the original scp
+mv /usr/bin/scp /usr/bin/scp.orig
+
+# Create a new file scp
+echo "/usr/bin/scp.orig -T \$*" > /usr/bin/scp
+
+# Make the file executable
+chmod a+rx /usr/bin/scp
+
+# 查看scp的内容
+cat /usr/bin/scp
+/usr/bin/scp.orig -T $*
+```
+
+#全部装好数据库后，可以恢复scp
+```
+# Delete interim scp
+rm /usr/bin/scp
+
+# Restore the original scp.
+mv /usr/bin/scp.orig /usr/bin/scp
+```
+
+
 #报错处理，安装进度到了5%的时候出现
 ###以下两个报错均是lib中文件的软链接出现了问题导致的
 ```
@@ -1663,64 +1708,112 @@ The log of current session can be found at:
 ```
 ### 4.2 查看状态
 ```
-[grid@db-rac01 ~]$ crsctl status resource -t
+[grid@db-rac01 grid]$ crsctl status resource -t
 --------------------------------------------------------------------------------
-Name           Target  State        Server                   State details
+Name           Target  State        Server                   State details       
 --------------------------------------------------------------------------------
 Local Resources
 --------------------------------------------------------------------------------
 ora.LISTENER.lsnr
-               ONLINE  ONLINE       db-rac01              STABLE
-               ONLINE  ONLINE       db-rac02              STABLE
+               ONLINE  ONLINE       db-rac01                 STABLE
+               ONLINE  ONLINE       db-rac02                 STABLE
 ora.chad
-               ONLINE  ONLINE       db-rac01              STABLE
-               ONLINE  ONLINE       db-rac02              STABLE
+               ONLINE  ONLINE       db-rac01                 STABLE
+               ONLINE  ONLINE       db-rac02                 STABLE
 ora.net1.network
-               ONLINE  ONLINE       db-rac01              STABLE
-               ONLINE  ONLINE       db-rac02              STABLE
+               ONLINE  ONLINE       db-rac01                 STABLE
+               ONLINE  ONLINE       db-rac02                 STABLE
 ora.ons
-               ONLINE  ONLINE       db-rac01              STABLE
-               ONLINE  ONLINE       db-rac02              STABLE
+               ONLINE  ONLINE       db-rac01                 STABLE
+               ONLINE  ONLINE       db-rac02                 STABLE
 --------------------------------------------------------------------------------
 Cluster Resources
 --------------------------------------------------------------------------------
 ora.ASMNET1LSNR_ASM.lsnr(ora.asmgroup)
-      1        ONLINE  ONLINE       db-rac01              STABLE
-      2        ONLINE  ONLINE       db-rac02              STABLE
+      1        ONLINE  ONLINE       db-rac01                 STABLE
+      2        ONLINE  ONLINE       db-rac02                 STABLE
       3        OFFLINE OFFLINE                               STABLE
 ora.DATA.dg(ora.asmgroup)
-      1        ONLINE  ONLINE       db-rac01              STABLE
-      2        ONLINE  ONLINE       db-rac02              STABLE
+      1        ONLINE  ONLINE       db-rac01                 STABLE
+      2        ONLINE  ONLINE       db-rac02                 STABLE
       3        ONLINE  OFFLINE                               STABLE
 ora.FRA.dg(ora.asmgroup)
-      1        ONLINE  ONLINE       db-rac01              STABLE
-      2        ONLINE  ONLINE       db-rac02              STABLE
+      1        ONLINE  ONLINE       db-rac01                 STABLE
+      2        ONLINE  ONLINE       db-rac02                 STABLE
       3        ONLINE  OFFLINE                               STABLE
 ora.LISTENER_SCAN1.lsnr
-      1        ONLINE  ONLINE       db-rac01              STABLE
+      1        ONLINE  ONLINE       db-rac02                 STABLE
+ora.LISTENER_SCAN2.lsnr
+      1        ONLINE  ONLINE       db-rac01                 STABLE
+ora.LISTENER_SCAN3.lsnr
+      1        ONLINE  ONLINE       db-rac01                 STABLE
 ora.OCR.dg(ora.asmgroup)
-      1        ONLINE  ONLINE       db-rac01              STABLE
-      2        ONLINE  ONLINE       db-rac02              STABLE
+      1        ONLINE  ONLINE       db-rac01                 STABLE
+      2        ONLINE  ONLINE       db-rac02                 STABLE
       3        OFFLINE OFFLINE                               STABLE
 ora.asm(ora.asmgroup)
-      1        ONLINE  ONLINE       db-rac01              Started,STABLE
-      2        ONLINE  ONLINE       db-rac02              Started,STABLE
+      1        ONLINE  ONLINE       db-rac01                 Started,STABLE
+      2        ONLINE  ONLINE       db-rac02                 Started,STABLE
       3        OFFLINE OFFLINE                               STABLE
 ora.asmnet1.asmnetwork(ora.asmgroup)
-      1        ONLINE  ONLINE       db-rac01              STABLE
-      2        ONLINE  ONLINE       db-rac02              STABLE
+      1        ONLINE  ONLINE       db-rac01                 STABLE
+      2        ONLINE  ONLINE       db-rac02                 STABLE
       3        OFFLINE OFFLINE                               STABLE
 ora.cvu
-      1        ONLINE  ONLINE       db-rac01              STABLE
-ora.qosmserver
-      1        ONLINE  ONLINE       db-rac01              STABLE
-ora.scan1.vip
-      1        ONLINE  ONLINE       db-rac01              STABLE
+      1        ONLINE  ONLINE       db-rac01                 STABLE
 ora.db-rac01.vip
-      1        ONLINE  ONLINE       db-rac01              STABLE
+      1        ONLINE  ONLINE       db-rac01                 STABLE
 ora.db-rac02.vip
-      1        ONLINE  ONLINE       db-rac02              STABLE
+      1        ONLINE  ONLINE       db-rac02                 STABLE
+ora.qosmserver
+      1        ONLINE  ONLINE       db-rac01                 STABLE
+ora.scan1.vip
+      1        ONLINE  ONLINE       db-rac02                 STABLE
+ora.scan2.vip
+      1        ONLINE  ONLINE       db-rac01                 STABLE
+ora.scan3.vip
+      1        ONLINE  ONLINE       db-rac01                 STABLE
 --------------------------------------------------------------------------------
+
+
+sqlplus / as sysasm
+
+db-rac02:
+SQL> select name,path from v$asm_disk;
+
+NAME			       PATH
+------------------------------ 
+DATA_0002		       /dev/sdc
+DATA_0003		       /dev/sdg
+FRA_0000		       /dev/sdf
+DATA_0000		       /dev/sda
+DATA_0001		       /dev/sdb
+OCR_0001		       /dev/sdd
+OCR_0000		       /dev/sdh
+OCR_0002		       /dev/sde
+
+8 rows selected.
+
+SQL> 
+
+db-rac01:
+SQL> set linesize 300
+SQL> select name,path from v$asm_disk;
+
+NAME			       PATH
+------------------------------ 
+OCR_0002		       /dev/sdg
+DATA_0000		       /dev/sda
+DATA_0002		       /dev/sdc
+OCR_0001		       /dev/sdf
+DATA_0003		       /dev/sdd
+OCR_0000		       /dev/sde
+DATA_0001		       /dev/sdb
+FRA_0000		       /dev/sdh
+
+8 rows selected.
+
+SQL> 
 
 ```
 ## 5 安装 Oracle 数据库软件
@@ -1728,24 +1821,38 @@ ora.db-rac02.vip
 ```bash
 [oracle@db-rac01 db_1]$ pwd
 /u01/app/oracle/product/19.0.0/db_1
-[oracle@db-rac01 db_1]$ unzip -oq /u01/Storage/LINUX.X64_193000_db_home.zip
+[oracle@db-rac01 db_1]$ unzip -oq /u01/storage/LINUX.X64_193000_db_home.zip
 ```
 #通过xstart图形化连接服务器，同Grid连接方式
 
 ```bash
 [oracle@db-rac01 db_1]$ ./runInstaller
 ```
+#报错处理
+```
+[INS-08101] Unexpected error while executing the action at state: 'supportedOSCheck'
+```
+```
+办法一：临时解决
+export CV_ASSUME_DISTID=OEL8.1
+办法二：永久解决
+vi $ORACLE_HOME/cv/admin/cvu_config
+在#CV_ASSUME_DISTID=OEL5该行下添加一行：
+CV_ASSUME_DISTID=OEL8.1
+```
+
 ### 5.1. oracle software安装步骤
 #安装过程如下
+
 ```
-1. 仅设置software
+1. 仅设置software(set up software only)
 2. oracle RAC
 3. SSH互信测试
 4. Enterprise Edition
 5. $ORACLE_BASE(/u01/app/oracle)
-6. 用户组，保持默认
+6. 用户组，保持默认(dba/oper/backupdba/dgdba/kmdba/racdba)
 7. 不执行配置脚本，保持默认
-8. 忽略全部--->Yes
+8. 忽略全部(scan/rac-scan)--->Yes
 9. Install
 10. root账户先在db-rac01执行完毕后再在db-rac02上执行脚本(/u01/app/oracle/product/19.0.0/db_1/root.sh)，然后点击OK
 11. Close
@@ -1796,15 +1903,14 @@ Now product-specific root actions will be performed.
 2. Advanced Configuration
 3. RAC/Admin Managed/General Purpose
 4. Select All
-5. xydb/xydb/Create as Container database/Use Local Undo tbs for PDBs/pdb:1/pdbname:stuwork
+5. xydb/xydb/Create as Container database/Use Local Undo tbs for PDBs/pdb:1/pdbname:portal
 6. AMS:+DATA/{DB_UNIQUE_NAME}/Use OMF
-7. ASM/+FRA/+FRA free space(点击Browse查看：2097012)/Enable archiving
-8. 数据库组件，保持默认不选
+7. ASM/+FRA/+FRA free space(点击Browse查看：1535868)/Enable archiving
+8. 数据库组件，保持默认不选(Vault/Label Security)
 9. ASMM自动共享内存管理
-       #sga=memory*65%*75%=512G*65%*75%=249.6G(向下十位取整为240G)
-       #pga=memory*65%*25%=512G*65%*25%=83.2G(向下十位取整为80G)
-       sga=66G
-       pag=22G
+       #sga=memory*65%*75%=256G*65%*75%=129.1875G(向下十位取整为129G)
+       #pga=memory*65%*25%=512G*65%*25%=43.0625G(向下十位取整为43G)
+       
    Sizing: block size: 8192/processes: 3000
    Character Sets: AL32UTF8
    Connection mode: Dadicated server mode--->Next
@@ -1818,92 +1924,109 @@ Now product-specific root actions will be performed.
 ```
 ### 6.2. 查看集群状态
 ```
-[grid@db-rac01 ~]$ crsctl status resource -t
+[root@db-rac01 db_1]# cd
+[root@db-rac01 ~]# . oraenv
+ORACLE_SID = [root] ? +ASM1
+ORACLE_HOME = [/home/oracle] ? /u01/app/19.0.0/grid
+The Oracle base has been set to /u01/app/grid
+[root@db-rac01 ~]# crsctl enable crs
+CRS-4622: Oracle High Availability Services autostart is enabled.
+[root@db-rac01 ~]# crsctl status resource -t
 --------------------------------------------------------------------------------
-Name           Target  State        Server                   State details
+Name           Target  State        Server                   State details       
 --------------------------------------------------------------------------------
 Local Resources
 --------------------------------------------------------------------------------
 ora.LISTENER.lsnr
-               ONLINE  ONLINE       db-rac01              STABLE
-               ONLINE  ONLINE       db-rac02              STABLE
+               ONLINE  ONLINE       db-rac01                 STABLE
+               ONLINE  ONLINE       db-rac02                 STABLE
 ora.chad
-               ONLINE  ONLINE       db-rac01              STABLE
-               ONLINE  ONLINE       db-rac02              STABLE
+               ONLINE  ONLINE       db-rac01                 STABLE
+               ONLINE  ONLINE       db-rac02                 STABLE
 ora.net1.network
-               ONLINE  ONLINE       db-rac01              STABLE
-               ONLINE  ONLINE       db-rac02              STABLE
+               ONLINE  ONLINE       db-rac01                 STABLE
+               ONLINE  ONLINE       db-rac02                 STABLE
 ora.ons
-               ONLINE  ONLINE       db-rac01              STABLE
-               ONLINE  ONLINE       db-rac02              STABLE
+               ONLINE  ONLINE       db-rac01                 STABLE
+               ONLINE  ONLINE       db-rac02                 STABLE
 --------------------------------------------------------------------------------
 Cluster Resources
 --------------------------------------------------------------------------------
 ora.ASMNET1LSNR_ASM.lsnr(ora.asmgroup)
-      1        ONLINE  ONLINE       db-rac01              STABLE
-      2        ONLINE  ONLINE       db-rac02              STABLE
+      1        ONLINE  ONLINE       db-rac01                 STABLE
+      2        ONLINE  ONLINE       db-rac02                 STABLE
       3        OFFLINE OFFLINE                               STABLE
 ora.DATA.dg(ora.asmgroup)
-      1        ONLINE  ONLINE       db-rac01              STABLE
-      2        ONLINE  ONLINE       db-rac02              STABLE
+      1        ONLINE  ONLINE       db-rac01                 STABLE
+      2        ONLINE  ONLINE       db-rac02                 STABLE
       3        ONLINE  OFFLINE                               STABLE
 ora.FRA.dg(ora.asmgroup)
-      1        ONLINE  ONLINE       db-rac01              STABLE
-      2        ONLINE  ONLINE       db-rac02              STABLE
+      1        ONLINE  ONLINE       db-rac01                 STABLE
+      2        ONLINE  ONLINE       db-rac02                 STABLE
       3        ONLINE  OFFLINE                               STABLE
 ora.LISTENER_SCAN1.lsnr
-      1        ONLINE  ONLINE       db-rac01              STABLE
+      1        ONLINE  ONLINE       db-rac02                 STABLE
+ora.LISTENER_SCAN2.lsnr
+      1        ONLINE  ONLINE       db-rac01                 STABLE
+ora.LISTENER_SCAN3.lsnr
+      1        ONLINE  ONLINE       db-rac01                 STABLE
 ora.OCR.dg(ora.asmgroup)
-      1        ONLINE  ONLINE       db-rac01              STABLE
-      2        ONLINE  ONLINE       db-rac02              STABLE
+      1        ONLINE  ONLINE       db-rac01                 STABLE
+      2        ONLINE  ONLINE       db-rac02                 STABLE
       3        OFFLINE OFFLINE                               STABLE
 ora.asm(ora.asmgroup)
-      1        ONLINE  ONLINE       db-rac01              Started,STABLE
-      2        ONLINE  ONLINE       db-rac02              Started,STABLE
+      1        ONLINE  ONLINE       db-rac01                 Started,STABLE
+      2        ONLINE  ONLINE       db-rac02                 Started,STABLE
       3        OFFLINE OFFLINE                               STABLE
 ora.asmnet1.asmnetwork(ora.asmgroup)
-      1        ONLINE  ONLINE       db-rac01              STABLE
-      2        ONLINE  ONLINE       db-rac02              STABLE
+      1        ONLINE  ONLINE       db-rac01                 STABLE
+      2        ONLINE  ONLINE       db-rac02                 STABLE
       3        OFFLINE OFFLINE                               STABLE
 ora.cvu
-      1        ONLINE  ONLINE       db-rac01              STABLE
-ora.qosmserver
-      1        ONLINE  ONLINE       db-rac01              STABLE
-ora.scan1.vip
-      1        ONLINE  ONLINE       db-rac01              STABLE
-ora.xydb.db
-      1        ONLINE  ONLINE       db-rac01              Open,HOME=/u01/app/o
-                                                             racle/product/19.0.0
-                                                             /db_1,STABLE
-      2        ONLINE  ONLINE       db-rac02              Open,HOME=/u01/app/o
-                                                             racle/product/19.0.0
-                                                             /db_1,STABLE
+      1        ONLINE  ONLINE       db-rac01                 STABLE
 ora.db-rac01.vip
-      1        ONLINE  ONLINE       db-rac01              STABLE
+      1        ONLINE  ONLINE       db-rac01                 STABLE
 ora.db-rac02.vip
-      1        ONLINE  ONLINE       db-rac02              STABLE
+      1        ONLINE  ONLINE       db-rac02                 STABLE
+ora.qosmserver
+      1        ONLINE  ONLINE       db-rac01                 STABLE
+ora.scan1.vip
+      1        ONLINE  ONLINE       db-rac02                 STABLE
+ora.scan2.vip
+      1        ONLINE  ONLINE       db-rac01                 STABLE
+ora.scan3.vip
+      1        ONLINE  ONLINE       db-rac01                 STABLE
+ora.xydb.db
+      1        ONLINE  ONLINE       db-rac01                 Open,HOME=/u01/app/o
+                                                             racle/product/19.0.0
+                                                             /db_1,STABLE
+      2        ONLINE  ONLINE       db-rac02                 Open,HOME=/u01/app/o
+                                                             racle/product/19.0.0
+                                                             /db_1,STABLE
 --------------------------------------------------------------------------------
+[root@db-rac01 ~]# 
 
 
-[grid@db-rac01 ~]$ srvctl config database -d xydb
+
+[root@db-rac01 ~]#  srvctl config database -d xydb
 Database unique name: xydb
 Database name: xydb
 Oracle home: /u01/app/oracle/product/19.0.0/db_1
 Oracle user: oracle
-Spfile: +DATA/XYDB/PARAMETERFILE/spfile.272.1098977945
-Password file: +DATA/XYDB/PASSWORD/pwdxydb.256.1098977053
-Domain:
+Spfile: +DATA/XYDB/PARAMETERFILE/spfile.272.1122668865
+Password file: +DATA/XYDB/PASSWORD/pwdxydb.256.1122667929
+Domain: 
 Start options: open
 Stop options: immediate
 Database role: PRIMARY
 Management policy: AUTOMATIC
-Server pools:
+Server pools: 
 Disk Groups: FRA,DATA
-Mount point paths:
-Services:
+Mount point paths: 
+Services: 
 Type: RAC
-Start concurrency:
-Stop concurrency:
+Start concurrency: 
+Stop concurrency: 
 OSDBA group: dba
 OSOPER group: oper
 Database instances: xydb1,xydb2
@@ -1912,9 +2035,9 @@ CSS critical: no
 CPU count: 0
 Memory target: 0
 Maximum memory: 0
-Default network number for database services:
+Default network number for database services: 
 Database is administrator managed
-
+[root@db-rac01 ~]# 
 ```
 ### 6.3. 查看数据库版本
 ```
@@ -1947,17 +2070,17 @@ SQL> select file_name ,tablespace_name from dba_temp_files;
 
 FILE_NAME									 TABLESPACE_NAME
 ------------------------------------------- ------------------------------
-+DATA/XYDB/TEMPFILE/temp.264.1098977211 					 TEMP
++DATA/XYDB/TEMPFILE/temp.264.1122668107 					 TEMP
 
 SQL> select file_name,tablespace_name from dba_data_files;
 
-FILE_NAME									 TABLESPACE_NAME
--------------------------------------------- ------------------------------
-+DATA/XYDB/DATAFILE/system.257.1098977073					 SYSTEM
-+DATA/XYDB/DATAFILE/sysaux.258.1098977107					 SYSAUX
-+DATA/XYDB/DATAFILE/undotbs1.259.1098977123					 UNDOTBS1
-+DATA/XYDB/DATAFILE/users.260.1098977123					 USERS
-+DATA/XYDB/DATAFILE/undotbs2.269.1098977625					 UNDOTBS2
+FILE_NAME											     TABLESPACE_NAME
+---------------------------------                     ------------------------------
++DATA/XYDB/DATAFILE/system.257.1122667951							     SYSTEM
++DATA/XYDB/DATAFILE/sysaux.258.1122667985							     SYSAUX
++DATA/XYDB/DATAFILE/undotbs1.259.1122668011							     UNDOTBS1
++DATA/XYDB/DATAFILE/users.260.1122668011							     USERS
++DATA/XYDB/DATAFILE/undotbs2.269.1122668541							     UNDOTBS2
 
 SQL> 
 
@@ -1966,8 +2089,9 @@ SQL> show pdbs;
     CON_ID CON_NAME			  OPEN MODE  RESTRICTED
 ---------- ------------------------------ ---------- ----------
 	 2 PDB$SEED			  READ ONLY  NO
-	 3 DATAASSETS			  READ WRITE NO
-SQL> alter session set container=dataassets;
+	 3 PORTAL			  READ WRITE NO
+SQL> 
+SQL> alter session set container=PORTAL;
 
 Session altered.
 
@@ -1975,19 +2099,21 @@ SQL> select file_name ,tablespace_name from dba_temp_files;
 
 FILE_NAME									 TABLESPACE_NAME
 -------------------------------------------- ------------------------------
-+DATA/XYDB/D9D95AD26C416301E0536ACBA8C0985D/TEMPFILE/temp.276.1098978145	 TEMP
++DATA/XYDB/EF14DB5CE59D2D91E053018610AC1806/TEMPFILE/temp.276.1122669049	 TEMP
 
 SQL> select file_name,tablespace_name from dba_data_files;
 
-FILE_NAME									 TABLESPACE_NAME
--------------------------------------------  ------------------------------
-+DATA/XYDB/D9D95AD26C416301E0536ACBA8C0985D/DATAFILE/system.274.1098978145	 SYSTEM
-+DATA/XYDB/D9D95AD26C416301E0536ACBA8C0985D/DATAFILE/sysaux.275.1098978145	 SYSAUX
-+DATA/XYDB/D9D95AD26C416301E0536ACBA8C0985D/DATAFILE/undotbs1.273.1098978145	 UNDOTBS1
-+DATA/XYDB/D9D95AD26C416301E0536ACBA8C0985D/DATAFILE/undo_2.277.1098978155	 UNDO_2
-+DATA/XYDB/D9D95AD26C416301E0536ACBA8C0985D/DATAFILE/users.278.1098978155	 USERS
+FILE_NAME											     TABLESPACE_NAME
+---------------------------------------------------------------------------------------------------- ------------------------------
++DATA/XYDB/EF14DB5CE59D2D91E053018610AC1806/DATAFILE/system.274.1122669049			     SYSTEM
++DATA/XYDB/EF14DB5CE59D2D91E053018610AC1806/DATAFILE/sysaux.275.1122669049			     SYSAUX
++DATA/XYDB/EF14DB5CE59D2D91E053018610AC1806/DATAFILE/undotbs1.273.1122669049			     UNDOTBS1
++DATA/XYDB/EF14DB5CE59D2D91E053018610AC1806/DATAFILE/undo_2.277.1122669059			     UNDO_2
++DATA/XYDB/EF14DB5CE59D2D91E053018610AC1806/DATAFILE/users.278.1122669061			     USERS
 
 SQL> 
+
+
 ```
 ### 6.4. Oracle RAC数据库优化
 #user password life修改，一个节点修改即可(CDB/PDB)
@@ -2032,9 +2158,9 @@ alter pluggable database all save state instances=all;
 ```oracle
 su - oracle
 
-srvctl add service -d xydb -s s_dataassets -r xydb1,xydb2 -P basic -e select -m basic -z 180 -w 5 -pdb dataassets
+srvctl add service -d xydb -s s_portal -r xydb1,xydb2 -P basic -e select -m basic -z 180 -w 5 -pdb portal
 
-srvctl start service -d xydb -s s_dataassets
+srvctl start service -d xydb -s s_portal
 
 lsnrctl status 
 ```
