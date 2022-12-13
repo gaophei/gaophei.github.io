@@ -337,6 +337,12 @@ teamdctl team0 state
 
 ### 1.4. 操作系统配置部分
 
+#修改hostname
+```bash
+hostnamectl set-hostname db-rac01
+hostnamectl set-hostname db-rac02
+hostnamectl set-hostname db-rac03
+```
 #关闭防火墙
 ```bash
 systemctl stop firewalld
@@ -411,7 +417,7 @@ mpathg dm-8  2aa67dbb0c9c0573b6c9ce90079a4df08
 ```bash
 mount -t auto /dev/cdrom /mnt
 ```
-#配置本地源
+#配置本地源---centos7.9
 ```bash
 cat >> CentOS-Media.repo <<EOF
 # CentOS-Media.repo
@@ -432,6 +438,43 @@ baseurl=file:///mnt/
 gpgcheck=0
 enabled=1
 gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-CentOS-7
+EOF
+
+
+yum clean all
+
+yum makecache
+```
+
+#配置本地源---oracleLinux8.7
+```bash
+cd /etc/yum.repo.d
+mv oracle-linux-ol8.repo oracle-linux-ol8.repo.bak
+
+cat >> oracle-linux-ol8.repo <<EOF
+# CentOS-Media.repo
+#
+# This repo can be used with mounted DVD media, verify the mount point for
+# CentOS-7. You can use this repo and yum to install items directly off the
+# DVD ISO that we release.
+#
+# To use this repo, put in your DVD and use it with the other repos too:
+# yum --enablerepo=c7-media [command]
+#
+# or for ONLY the media repo, do this:
+#
+# yum --disablerepo=\* --enablerepo=c7-media [command]
+[local_iso_baseos]
+name=ol8_baseos
+baseurl=file:///mnt/BaseOS/
+enabled=1
+gpgcheck=0
+[local_iso_appstream]
+name=ol8_appstream
+baseurl=file:///mnt/AppStream/
+enabled=1
+gpgcheck=0
+
 EOF
 
 
@@ -558,12 +601,15 @@ cat >> /etc/hosts <<EOF
 #public ip 
 172.16.134.1 db-rac01
 172.16.134.3 db-rac02
+172.16.134.6 db-rac03
 #vip
 172.16.134.2 db-rac01-vip
 172.16.134.4 db-rac02-vip
+172.16.134.7 db-rac03-vip
 #private ip
 10.251.252.1 db-rac01-prv
 10.251.252.3 db-rac02-prv
+10.251.252.6 db-rac03-prv
 #scan ip
 172.16.134.8 rac-scan
 172.16.134.9 rac-scan
@@ -785,6 +831,8 @@ cat >> /home/grid/.bash_profile <<'EOF'
 export ORACLE_SID=+ASM1
 #注意db-rac02修改
 #export ORACLE_SID=+ASM2
+#注意db-rac03修改
+#export ORACLE_SID=+ASM3
 export ORACLE_BASE=/u01/app/grid
 export ORACLE_HOME=/u01/app/19.0.0/grid
 export NLS_DATE_FORMAT="yyyy-mm-dd HH24:MI:SS"
@@ -805,6 +853,8 @@ export ORACLE_HOME=$ORACLE_BASE/product/19.0.0/db_1
 export ORACLE_SID=xydb1
 #注意db-rac02修改
 #export ORACLE_SID=xydb2
+#注意db-rac03修改
+#export ORACLE_SID=xydb3
 export PATH=$ORACLE_HOME/bin:$PATH
 export LD_LIBRARY_PATH=$ORACLE_HOME/lib:/lib:/usr/lib
 export CLASSPATH=$ORACLE_HOME/JRE:$ORACLE_HOME/jlib:$ORACLE_HOME/rdbms/jlib
@@ -893,7 +943,7 @@ EOF
 
 ```
 
-#通过一台虚拟机生成文件，然后scp到另一台
+#通过第一台虚拟机生成文件，然后scp到另一台
 #dev根据规则文件命名，只需要在一个节点执行，再将生成的规则文件复制到另外一个节点，这样保证两个节点产生的磁盘名一致。
 #节点1：
 
@@ -915,8 +965,8 @@ start_udev > /dev/null 2>&1
 scp /etc/udev/rules.d/99-oracle-asmdevices.rules db-rac02:/etc/udev/rules.d/99-oracle-asmdevices.rules
 ```
 
-
 #启动udev
+
 ```bash
 /usr/sbin/partprobe
 
@@ -1378,7 +1428,7 @@ export CV_ASSUME_DISTID=OEL8.1
 办法二：永久解决
 vi $ORACLE_HOME/cv/admin/cvu_config
 在#CV_ASSUME_DISTID=OEL5该行下添加一行：
-CV_ASSUME
+CV_ASSUME_DISTID=OEL8.1
 ```
 
 ### 3.4. GI 安装步骤
@@ -2310,10 +2360,13 @@ echo finish bak job
 ### 6.5. Oracle RAC其他操作
 #创建pdb
 ```oracle
-create pluggable database pdb1 admin user pdb1user identified by pdb1user roles=(dba);
+create pluggable database dataassets admin user pdbadmin identified by J3my3xl4c12ed roles=(dba);
+alter pluggable database dataassets open;
+alter pluggable database all save state instances=all;
 
-alter pluggable database pdb1 open;
-alter session set container=pdb1;
+
+
+alter session set container=dataassets;
 
 create tablespace pdb1user datafile '+DATA' size 1G autoextend on next 1G maxsize 31G extent management local segment space management auto;
 
@@ -2327,12 +2380,12 @@ grant select any table to user1;
 ```
 #连接方式
 ```bash
-srvctl add service -d xydb -s s_pdb1 -r xydb1,xydb2 -P basic -e select -m basic -z 180 -w 5 -pdb pdb1
+srvctl add service -d xydb -s s_dataassets -r xydb1,xydb2,xydb3 -P basic -e select -m basic -z 180 -w 5 -pdb dataassets
 
-srvctl start service -d xydb -s s_pdb1
-srvctl status service -d xydb -s s_pdb1
+srvctl start service -d xydb -s s_dataassets
+srvctl status service -d xydb -s s_dataassets
 
-sqlplus user1/user1@172.16.134.8:1521/s_pdb1
+sqlplus pdbadmin/J3my3xl4c12ed@172.16.134.9:1521/s_dataassets
 ```
 
 ### 6.8. Oracle RAC更改PDB的字符集
@@ -2433,4 +2486,830 @@ AMERICAN_AMERICA.AL32UTF8
 
 SQL> 
 
+```
+
+## 7 部署第三个节点
+
+### 7.1. 根据前面内容做好节点三的优化、grid/oracle配置、ssh互信等
+#节点三root下修改scp
+```
+# Rename the original scp
+mv /usr/bin/scp /usr/bin/scp.orig
+
+# Create a new file scp
+echo "/usr/bin/scp.orig -T \$*" > /usr/bin/scp
+
+# Make the file executable
+chmod a+rx /usr/bin/scp
+
+# 查看scp的内容
+cat /usr/bin/scp
+/usr/bin/scp.orig -T $*
+```
+
+#配置共享磁盘
+
+#为了保持节点间，对同一磁盘有一样的名称，需要使用一样的规则文件。需要在一个节点生成后，传输到其他节点。
+#节点1:
+
+```bash
+scp /etc/udev/rules.d/99-oracle-asmdevices.rules db-rac03:/etc/udev/rules.d/99-oracle-asmdevices.rules
+```
+
+#启动udev
+
+```bash
+/usr/sbin/partprobe
+
+systemctl restart systemd-udev-trigger.service
+systemctl enable systemd-udev-trigger.service
+systemctl status systemd-udev-trigger.service
+```
+#检查asm磁盘
+```bash
+ll /dev|grep asm*
+```
+
+#配置互信
+#db-rac03:
+
+```bash
+su - grid
+
+cd /home/grid
+mkdir ~/.ssh
+chmod 700 ~/.ssh
+
+ssh-keygen -t rsa
+
+su - oracle
+
+cd /home/grid
+mkdir ~/.ssh
+chmod 700 ~/.ssh
+
+ssh-keygen -t rsa
+```
+#db-rac01:
+#grid/oracle
+```bash
+ssh db-rac03 cat ~/.ssh/id_rsa.pub >>~/.ssh/authorized_keys
+
+scp ~/.ssh/authorized_keys db-rac02:~/.ssh/authorized_keys
+
+scp ~/.ssh/authorized_keys db-rac03:~/.ssh/authorized_keys
+```
+#db-rac01/db-rac02/db-rac03:
+#grid/oracle
+```bash
+ssh db-rac01 date;ssh db-rac02 date;ssh db-rac03 date;ssh db-rac01-prv date;ssh db-rac02-prv date;ssh db-rac03-prv date
+```
+
+### 7.2. 安装前检查
+```bash
+su - grid
+cd $ORACLE_HOME/
+./runcluvfy.sh comp peer -refnode db-rac01 -n db-rac03 -verbose
+```
+#看到结果
+```
+Verifying Peer Compatibility ...PASSED
+
+Verification of peer compatibility was successful. 
+```
+
+
+```bash
+su - grid
+cd $ORACLE_HOME/
+ ./runcluvfy.sh  stage -pre nodeadd -n db-rac03 -fixup -verbose
+```
+
+#看到以下有关共享磁盘的报错，可以忽略，继续安装
+```
+Verifying Device Checks for ASM ...
+  Verifying Package: cvuqdisk-1.0.10-1 ...PASSED
+  Verifying ASM device sharedness check ...
+    Verifying Shared Storage Accessibility:/dev/sda,/dev/sdb,/dev/sdc,/dev/sde,/dev/sdh,/dev/sdd,/dev/sdf,/dev/sdg ...FAILED (PRVG-0806)
+
+  Device                                Device Type             
+  ------------------------------------  ------------------------
+  /dev/sdh                              Disk                    
+  /dev/sdg                              Disk                    
+  /dev/sdf                              Disk                    
+  /dev/sdc                              Disk                    
+PRVG-10487 : Storage "/dev/sda" is not shared on all nodes.
+PRVG-10487 : Storage "/dev/sde" is not shared on all nodes.
+PRVG-10487 : Storage "/dev/sdd" is not shared on all nodes.
+PRVG-10487 : Storage "/dev/sdb" is not shared on all nodes.
+  Verifying ASM device sharedness check ...FAILED (PRVG-0806)
+
+
+Failures were encountered during execution of CVU verification request "stage -pre nodeadd".
+
+Verifying Device Checks for ASM ...FAILED
+  Verifying ASM device sharedness check ...FAILED
+    Verifying Shared Storage
+    Accessibility:/dev/sda,/dev/sdb,/dev/sdc,/dev/sde,/dev/sdh,/dev/sdd,/dev/sdf
+    ,/dev/sdg ...FAILED
+    PRVG-0806 : Signature for storage path "/dev/sda" is inconsistent across
+    the nodes.
+    Signature was found as "36ff204468043c909acc0afa4094745b6|" on nodes:
+    "db-rac03".
+    Signature was found as "366960e55904821091c9025e2c7255c7f|" on nodes:
+    "db-rac01".
+    PRVG-0806 : Signature for storage path "/dev/sdb" is inconsistent across
+    the nodes.
+    Signature was found as "36ff204468043c909acc0afa4094745b6|" on nodes:
+    "db-rac01".
+    Signature was found as "366960e55904821091c9025e2c7255c7f|" on nodes:
+    "db-rac03".
+    PRVG-0806 : Signature for storage path "/dev/sde" is inconsistent across
+    the nodes.
+    Signature was found as "3643a008cc04b8e0b8e109a319a118822|" on nodes:
+    "db-rac03".
+    Signature was found as "368350b4ed049f10a9b108e152738bc3d|" on nodes:
+    "db-rac01".
+    PRVG-0806 : Signature for storage path "/dev/sdd" is inconsistent across
+    the nodes.
+    Signature was found as "3643a008cc04b8e0b8e109a319a118822|" on nodes:
+    "db-rac01".
+    Signature was found as "368350b4ed049f10a9b108e152738bc3d|" on nodes:
+    "db-rac03".
+```
+
+### 7.3. 在节点一上开始添加节点三的GI
+
+#节点一db-rac01上执行，xterm连接grid用户
+
+```bash
+cd $ORACLE_HOME
+./gridSetup.sh
+```
+#安装过程
+```
+Add more nodes to the cluster--->Add：db-rac03/db-rac03-vip--->SSH connectivity、Test--->Ignore all--->submit--->db-rac03root执行脚本：/u01/app/oraInventory/orainstRoot.sh /u01/app/19.0.0/grid/root.sh-->Close
+```
+
+#脚本结果
+```
+[root@db-rac03 u01]# cd /u01/app/oraInventory/
+[root@db-rac03 oraInventory]# ls
+backup  ContentsXML  logs  oraInst.loc  orainstRoot.sh
+[root@db-rac03 oraInventory]# ./orainstRoot.sh 
+Changing permissions of /u01/app/oraInventory.
+Adding read,write permissions for group.
+Removing read,write,execute permissions for world.
+
+Changing groupname of /u01/app/oraInventory to oinstall.
+The execution of the script is complete.
+
+[root@db-rac03 oraInventory]# cd /u01/app/19.0.0/grid/
+[root@db-rac03 grid]# ./root.sh
+Performing root user operation.
+
+The following environment variables are set as:
+    ORACLE_OWNER= grid
+    ORACLE_HOME=  /u01/app/19.0.0/grid
+
+Enter the full pathname of the local bin directory: [/usr/local/bin]: 
+   Copying dbhome to /usr/local/bin ...
+   Copying oraenv to /usr/local/bin ...
+   Copying coraenv to /usr/local/bin ...
+
+
+Creating /etc/oratab file...
+Entries will be added to the /etc/oratab file as needed by
+Database Configuration Assistant when a database is created
+Finished running generic part of root script.
+Now product-specific root actions will be performed.
+Relinking oracle with rac_on option
+Using configuration parameter file: /u01/app/19.0.0/grid/crs/install/crsconfig_params
+The log of current session can be found at:
+  /u01/app/grid/crsdata/db-rac03/crsconfig/rootcrs_db-rac03_2022-12-06_06-34-48PM.log
+2022/12/06 18:34:52 CLSRSC-594: Executing installation step 1 of 19: 'SetupTFA'.
+2022/12/06 18:34:52 CLSRSC-594: Executing installation step 2 of 19: 'ValidateEnv'.
+2022/12/06 18:34:53 CLSRSC-363: User ignored prerequisites during installation
+2022/12/06 18:34:53 CLSRSC-594: Executing installation step 3 of 19: 'CheckFirstNode'.
+2022/12/06 18:34:53 CLSRSC-594: Executing installation step 4 of 19: 'GenSiteGUIDs'.
+2022/12/06 18:34:59 CLSRSC-594: Executing installation step 5 of 19: 'SetupOSD'.
+2022/12/06 18:34:59 CLSRSC-594: Executing installation step 6 of 19: 'CheckCRSConfig'.
+2022/12/06 18:35:00 CLSRSC-594: Executing installation step 7 of 19: 'SetupLocalGPNP'.
+2022/12/06 18:35:01 CLSRSC-594: Executing installation step 8 of 19: 'CreateRootCert'.
+2022/12/06 18:35:02 CLSRSC-594: Executing installation step 9 of 19: 'ConfigOLR'.
+2022/12/06 18:35:10 CLSRSC-594: Executing installation step 10 of 19: 'ConfigCHMOS'.
+2022/12/06 18:35:10 CLSRSC-594: Executing installation step 11 of 19: 'CreateOHASD'.
+2022/12/06 18:35:12 CLSRSC-594: Executing installation step 12 of 19: 'ConfigOHASD'.
+2022/12/06 18:35:12 CLSRSC-330: Adding Clusterware entries to file 'oracle-ohasd.service'
+2022/12/06 18:35:16 CLSRSC-4002: Successfully installed Oracle Trace File Analyzer (TFA) Collector.
+2022/12/06 18:35:31 CLSRSC-594: Executing installation step 13 of 19: 'InstallAFD'.
+2022/12/06 18:35:32 CLSRSC-594: Executing installation step 14 of 19: 'InstallACFS'.
+2022/12/06 18:35:34 CLSRSC-594: Executing installation step 15 of 19: 'InstallKA'.
+2022/12/06 18:35:35 CLSRSC-594: Executing installation step 16 of 19: 'InitConfig'.
+2022/12/06 18:35:42 CLSRSC-594: Executing installation step 17 of 19: 'StartCluster'.
+2022/12/06 18:37:48 CLSRSC-343: Successfully started Oracle Clusterware stack
+2022/12/06 18:37:48 CLSRSC-594: Executing installation step 18 of 19: 'ConfigNode'.
+clscfg: EXISTING configuration version 19 detected.
+Successfully accumulated necessary OCR keys.
+Creating OCR keys for user 'root', privgrp 'root'..
+Operation successful.
+2022/12/06 18:38:08 CLSRSC-594: Executing installation step 19 of 19: 'PostConfig'.
+2022/12/06 18:38:12 CLSRSC-325: Configure Oracle Grid Infrastructure for a Cluster ... succeeded
+```
+
+### 7.4. 在节点一上开始添加节点三的数据库
+#节点一db-rac01上执行，xterm连接oracle用户
+```bash
+cd $ORACLE_HOME/addnode
+./addnode.sh "CLUSTER_NEW_NODES={db-rac03}"
+```
+#安装过程
+```
+SH connectivity---Test--->submit--->db-rac03root执行脚本：/u01/app/oracle/product/19.0.0/db_1/root.sh-->OK-->Close
+```
+
+#脚本结果
+```
+[root@db-rac03 ~]# cd /u01/app/oracle/product/19.0.0/db_1/
+[root@db-rac03 db_1]# ./root.sh
+Performing root user operation.
+
+The following environment variables are set as:
+    ORACLE_OWNER= oracle
+    ORACLE_HOME=  /u01/app/oracle/product/19.0.0/db_1
+
+Enter the full pathname of the local bin directory: [/usr/local/bin]: 
+The contents of "dbhome" have not changed. No need to overwrite.
+The contents of "oraenv" have not changed. No need to overwrite.
+The contents of "coraenv" have not changed. No need to overwrite.
+
+Entries will be added to the /etc/oratab file as needed by
+Database Configuration Assistant when a database is created
+Finished running generic part of root script.
+Now product-specific root actions will be performed.
+[root@db-rac03 db_1]#
+```
+
+#此时检查集群状态
+
+```bash
+[grid@db-rac01 ~]$ crsctl status resource -t
+--------------------------------------------------------------------------------
+Name           Target  State        Server                   State details       
+--------------------------------------------------------------------------------
+Local Resources
+--------------------------------------------------------------------------------
+ora.LISTENER.lsnr
+               ONLINE  ONLINE       db-rac01                 STABLE
+               ONLINE  ONLINE       db-rac02                 STABLE
+               ONLINE  ONLINE       db-rac03                 STABLE
+ora.chad
+               ONLINE  ONLINE       db-rac01                 STABLE
+               ONLINE  ONLINE       db-rac02                 STABLE
+               ONLINE  ONLINE       db-rac03                 STABLE
+ora.net1.network
+               ONLINE  ONLINE       db-rac01                 STABLE
+               ONLINE  ONLINE       db-rac02                 STABLE
+               ONLINE  ONLINE       db-rac03                 STABLE
+ora.ons
+               ONLINE  ONLINE       db-rac01                 STABLE
+               ONLINE  ONLINE       db-rac02                 STABLE
+               ONLINE  ONLINE       db-rac03                 STABLE
+--------------------------------------------------------------------------------
+Cluster Resources
+--------------------------------------------------------------------------------
+ora.ASMNET1LSNR_ASM.lsnr(ora.asmgroup)
+      1        ONLINE  ONLINE       db-rac01                 STABLE
+      2        ONLINE  ONLINE       db-rac02                 STABLE
+      3        ONLINE  ONLINE       db-rac03                 STABLE
+ora.DATA.dg(ora.asmgroup)
+      1        ONLINE  ONLINE       db-rac01                 STABLE
+      2        ONLINE  ONLINE       db-rac02                 STABLE
+      3        ONLINE  ONLINE       db-rac03                 STABLE
+ora.FRA.dg(ora.asmgroup)
+      1        ONLINE  ONLINE       db-rac01                 STABLE
+      2        ONLINE  ONLINE       db-rac02                 STABLE
+      3        ONLINE  ONLINE       db-rac03                 STABLE
+ora.LISTENER_SCAN1.lsnr
+      1        ONLINE  ONLINE       db-rac02                 STABLE
+ora.LISTENER_SCAN2.lsnr
+      1        ONLINE  ONLINE       db-rac03                 STABLE
+ora.LISTENER_SCAN3.lsnr
+      1        ONLINE  ONLINE       db-rac01                 STABLE
+ora.OCR.dg(ora.asmgroup)
+      1        ONLINE  ONLINE       db-rac01                 STABLE
+      2        ONLINE  ONLINE       db-rac02                 STABLE
+      3        ONLINE  ONLINE       db-rac03                 STABLE
+ora.asm(ora.asmgroup)
+      1        ONLINE  ONLINE       db-rac01                 Started,STABLE
+      2        ONLINE  ONLINE       db-rac02                 Started,STABLE
+      3        ONLINE  ONLINE       db-rac03                 Started,STABLE
+ora.asmnet1.asmnetwork(ora.asmgroup)
+      1        ONLINE  ONLINE       db-rac01                 STABLE
+      2        ONLINE  ONLINE       db-rac02                 STABLE
+      3        ONLINE  ONLINE       db-rac03                 STABLE
+ora.cvu
+      1        ONLINE  ONLINE       db-rac01                 STABLE
+ora.db-rac01.vip
+      1        ONLINE  ONLINE       db-rac01                 STABLE
+ora.db-rac02.vip
+      1        ONLINE  ONLINE       db-rac02                 STABLE
+ora.db-rac03.vip
+      1        ONLINE  ONLINE       db-rac03                 STABLE
+ora.qosmserver
+      1        ONLINE  ONLINE       db-rac01                 STABLE
+ora.scan1.vip
+      1        ONLINE  ONLINE       db-rac02                 STABLE
+ora.scan2.vip
+      1        ONLINE  ONLINE       db-rac03                 STABLE
+ora.scan3.vip
+      1        ONLINE  ONLINE       db-rac01                 STABLE
+ora.xydb.db
+      1        ONLINE  ONLINE       db-rac01                 Open,HOME=/u01/app/o
+                                                             racle/product/19.0.0
+                                                             /db_1,STABLE
+      2        ONLINE  ONLINE       db-rac02                 Open,HOME=/u01/app/o
+                                                             racle/product/19.0.0
+                                                             /db_1,STABLE
+ora.xydb.s_portal.svc
+      1        ONLINE  ONLINE       db-rac01                 STABLE
+      2        ONLINE  ONLINE       db-rac02                 STABLE
+--------------------------------------------------------------------------------
+```
+
+
+
+###  7.5. 在节点一上开始安装节点三的instance
+
+#xterm连接db-rac01的oracle账户
+```bash
+dbca
+```
+#安装过程
+```
+Oracle RAC databas instnce management--->Add an instance--->勾选xydb/xydb1/ADMIN_MANAGED，下面填写sys/Ora543Cle--->Instance name：xydb3；Node name：db-rac03；下面是xydb1/xydb2/active--->Finish--->开始安装--->Close
+```
+#此时集群检查
+```
+[grid@db-rac01 ~]$ crsctl status resource -t
+--------------------------------------------------------------------------------
+Name           Target  State        Server                   State details       
+--------------------------------------------------------------------------------
+Local Resources
+--------------------------------------------------------------------------------
+ora.LISTENER.lsnr
+               ONLINE  ONLINE       db-rac01                 STABLE
+               ONLINE  ONLINE       db-rac02                 STABLE
+               ONLINE  ONLINE       db-rac03                 STABLE
+ora.chad
+               ONLINE  ONLINE       db-rac01                 STABLE
+               ONLINE  ONLINE       db-rac02                 STABLE
+               ONLINE  ONLINE       db-rac03                 STABLE
+ora.net1.network
+               ONLINE  ONLINE       db-rac01                 STABLE
+               ONLINE  ONLINE       db-rac02                 STABLE
+               ONLINE  ONLINE       db-rac03                 STABLE
+ora.ons
+               ONLINE  ONLINE       db-rac01                 STABLE
+               ONLINE  ONLINE       db-rac02                 STABLE
+               ONLINE  ONLINE       db-rac03                 STABLE
+--------------------------------------------------------------------------------
+Cluster Resources
+--------------------------------------------------------------------------------
+ora.ASMNET1LSNR_ASM.lsnr(ora.asmgroup)
+      1        ONLINE  ONLINE       db-rac01                 STABLE
+      2        ONLINE  ONLINE       db-rac02                 STABLE
+      3        ONLINE  ONLINE       db-rac03                 STABLE
+ora.DATA.dg(ora.asmgroup)
+      1        ONLINE  ONLINE       db-rac01                 STABLE
+      2        ONLINE  ONLINE       db-rac02                 STABLE
+      3        ONLINE  ONLINE       db-rac03                 STABLE
+ora.FRA.dg(ora.asmgroup)
+      1        ONLINE  ONLINE       db-rac01                 STABLE
+      2        ONLINE  ONLINE       db-rac02                 STABLE
+      3        ONLINE  ONLINE       db-rac03                 STABLE
+ora.LISTENER_SCAN1.lsnr
+      1        ONLINE  ONLINE       db-rac02                 STABLE
+ora.LISTENER_SCAN2.lsnr
+      1        ONLINE  ONLINE       db-rac03                 STABLE
+ora.LISTENER_SCAN3.lsnr
+      1        ONLINE  ONLINE       db-rac01                 STABLE
+ora.OCR.dg(ora.asmgroup)
+      1        ONLINE  ONLINE       db-rac01                 STABLE
+      2        ONLINE  ONLINE       db-rac02                 STABLE
+      3        ONLINE  ONLINE       db-rac03                 STABLE
+ora.asm(ora.asmgroup)
+      1        ONLINE  ONLINE       db-rac01                 Started,STABLE
+      2        ONLINE  ONLINE       db-rac02                 Started,STABLE
+      3        ONLINE  ONLINE       db-rac03                 Started,STABLE
+ora.asmnet1.asmnetwork(ora.asmgroup)
+      1        ONLINE  ONLINE       db-rac01                 STABLE
+      2        ONLINE  ONLINE       db-rac02                 STABLE
+      3        ONLINE  ONLINE       db-rac03                 STABLE
+ora.cvu
+      1        ONLINE  ONLINE       db-rac01                 STABLE
+ora.db-rac01.vip
+      1        ONLINE  ONLINE       db-rac01                 STABLE
+ora.db-rac02.vip
+      1        ONLINE  ONLINE       db-rac02                 STABLE
+ora.db-rac03.vip
+      1        ONLINE  ONLINE       db-rac03                 STABLE
+ora.qosmserver
+      1        ONLINE  ONLINE       db-rac01                 STABLE
+ora.scan1.vip
+      1        ONLINE  ONLINE       db-rac02                 STABLE
+ora.scan2.vip
+      1        ONLINE  ONLINE       db-rac03                 STABLE
+ora.scan3.vip
+      1        ONLINE  ONLINE       db-rac01                 STABLE
+ora.xydb.db
+      1        ONLINE  ONLINE       db-rac01                 Open,HOME=/u01/app/o
+                                                             racle/product/19.0.0
+                                                             /db_1,STABLE
+      2        ONLINE  ONLINE       db-rac02                 Open,HOME=/u01/app/o
+                                                             racle/product/19.0.0
+                                                             /db_1,STABLE
+      3        ONLINE  ONLINE       db-rac03                 Open,HOME=/u01/app/o
+                                                             racle/product/19.0.0
+                                                             /db_1,STABLE
+ora.xydb.s_portal.svc
+      1        ONLINE  ONLINE       db-rac01                 STABLE
+      2        ONLINE  ONLINE       db-rac02                 STABLE
+--------------------------------------------------------------------------------
+[grid@db-rac01 ~]$ 
+
+[grid@db-rac01 ~]$ ifconfig
+ens18: flags=4163<UP,BROADCAST,RUNNING,MULTICAST>  mtu 1500
+        inet 172.16.134.1  netmask 255.255.255.0  broadcast 172.16.134.255
+        inet6 fe80::fcfc:feff:feaa:d9d6  prefixlen 64  scopeid 0x20<link>
+        ether fe:fc:fe:aa:d9:d6  txqueuelen 1000  (Ethernet)
+        RX packets 663622  bytes 80047357 (76.3 MiB)
+        RX errors 0  dropped 0  overruns 0  frame 0
+        TX packets 615625  bytes 14447513558 (13.4 GiB)
+        TX errors 0  dropped 0 overruns 0  carrier 0  collisions 0
+
+ens18:1: flags=4163<UP,BROADCAST,RUNNING,MULTICAST>  mtu 1500
+        inet 172.16.134.10  netmask 255.255.255.0  broadcast 172.16.134.255
+        ether fe:fc:fe:aa:d9:d6  txqueuelen 1000  (Ethernet)
+
+ens18:4: flags=4163<UP,BROADCAST,RUNNING,MULTICAST>  mtu 1500
+        inet 172.16.134.2  netmask 255.255.255.0  broadcast 172.16.134.255
+        ether fe:fc:fe:aa:d9:d6  txqueuelen 1000  (Ethernet)
+
+ens19: flags=4163<UP,BROADCAST,RUNNING,MULTICAST>  mtu 1500
+        inet 10.251.252.1  netmask 255.255.255.0  broadcast 10.251.252.255
+        inet6 fe80::fcfc:feff:fef3:9f21  prefixlen 64  scopeid 0x20<link>
+        ether fe:fc:fe:f3:9f:21  txqueuelen 1000  (Ethernet)
+        RX packets 21212444  bytes 26580525643 (24.7 GiB)
+        RX errors 0  dropped 0  overruns 0  frame 0
+        TX packets 21779803  bytes 27480176546 (25.5 GiB)
+        TX errors 0  dropped 0 overruns 0  carrier 0  collisions 0
+
+ens19:1: flags=4163<UP,BROADCAST,RUNNING,MULTICAST>  mtu 1500
+        inet 169.254.1.167  netmask 255.255.224.0  broadcast 169.254.31.255
+        ether fe:fc:fe:f3:9f:21  txqueuelen 1000  (Ethernet)
+
+lo: flags=73<UP,LOOPBACK,RUNNING>  mtu 65536
+        inet 127.0.0.1  netmask 255.0.0.0
+        inet6 ::1  prefixlen 128  scopeid 0x10<host>
+        loop  txqueuelen 1000  (Local Loopback)
+        RX packets 1899949  bytes 3740600055 (3.4 GiB)
+        RX errors 0  dropped 0  overruns 0  frame 0
+        TX packets 1899949  bytes 3740600055 (3.4 GiB)
+        TX errors 0  dropped 0 overruns 0  carrier 0  collisions 0
+
+[grid@db-rac01 ~]$ 
+
+
+[root@db-rac02 ~]# ifconfig
+ens18: flags=4163<UP,BROADCAST,RUNNING,MULTICAST>  mtu 1500
+        inet 172.16.134.3  netmask 255.255.255.0  broadcast 172.16.134.255
+        inet6 fe80::fcfc:feff:fe91:b277  prefixlen 64  scopeid 0x20<link>
+        ether fe:fc:fe:91:b2:77  txqueuelen 1000  (Ethernet)
+        RX packets 183979  bytes 159190115 (151.8 MiB)
+        RX errors 0  dropped 0  overruns 0  frame 0
+        TX packets 90450  bytes 18687149 (17.8 MiB)
+        TX errors 0  dropped 0 overruns 0  carrier 0  collisions 0
+
+ens18:1: flags=4163<UP,BROADCAST,RUNNING,MULTICAST>  mtu 1500
+        inet 172.16.134.4  netmask 255.255.255.0  broadcast 172.16.134.255
+        ether fe:fc:fe:91:b2:77  txqueuelen 1000  (Ethernet)
+
+ens18:2: flags=4163<UP,BROADCAST,RUNNING,MULTICAST>  mtu 1500
+        inet 172.16.134.8  netmask 255.255.255.0  broadcast 172.16.134.255
+        ether fe:fc:fe:91:b2:77  txqueuelen 1000  (Ethernet)
+
+ens19: flags=4163<UP,BROADCAST,RUNNING,MULTICAST>  mtu 1500
+        inet 10.251.252.3  netmask 255.255.255.0  broadcast 10.251.252.255
+        inet6 fe80::fcfc:feff:fe49:1cec  prefixlen 64  scopeid 0x20<link>
+        ether fe:fc:fe:49:1c:ec  txqueuelen 1000  (Ethernet)
+        RX packets 21315577  bytes 26910727608 (25.0 GiB)
+        RX errors 0  dropped 0  overruns 0  frame 0
+        TX packets 18651149  bytes 25728630369 (23.9 GiB)
+        TX errors 0  dropped 0 overruns 0  carrier 0  collisions 0
+
+ens19:1: flags=4163<UP,BROADCAST,RUNNING,MULTICAST>  mtu 1500
+        inet 169.254.13.190  netmask 255.255.224.0  broadcast 169.254.31.255
+        ether fe:fc:fe:49:1c:ec  txqueuelen 1000  (Ethernet)
+
+lo: flags=73<UP,LOOPBACK,RUNNING>  mtu 65536
+        inet 127.0.0.1  netmask 255.0.0.0
+        inet6 ::1  prefixlen 128  scopeid 0x10<host>
+        loop  txqueuelen 1000  (Local Loopback)
+        RX packets 1158296  bytes 339405030 (323.6 MiB)
+        RX errors 0  dropped 0  overruns 0  frame 0
+        TX packets 1158296  bytes 339405030 (323.6 MiB)
+        TX errors 0  dropped 0 overruns 0  carrier 0  collisions 0
+
+[root@db-rac02 ~]# 
+
+
+[root@db-rac03 ~]# ifconfig
+ens18: flags=4163<UP,BROADCAST,RUNNING,MULTICAST>  mtu 1500
+        inet 172.16.134.6  netmask 255.255.255.0  broadcast 172.16.134.255
+        inet6 fe80::fcfc:feff:fede:6b05  prefixlen 64  scopeid 0x20<link>
+        ether fe:fc:fe:de:6b:05  txqueuelen 1000  (Ethernet)
+        RX packets 10026107  bytes 14883537972 (13.8 GiB)
+        RX errors 0  dropped 0  overruns 0  frame 0
+        TX packets 513671  bytes 45281175 (43.1 MiB)
+        TX errors 0  dropped 0 overruns 0  carrier 0  collisions 0
+
+ens18:1: flags=4163<UP,BROADCAST,RUNNING,MULTICAST>  mtu 1500
+        inet 172.16.134.9  netmask 255.255.255.0  broadcast 172.16.134.255
+        ether fe:fc:fe:de:6b:05  txqueuelen 1000  (Ethernet)
+
+ens18:2: flags=4163<UP,BROADCAST,RUNNING,MULTICAST>  mtu 1500
+        inet 172.16.134.7  netmask 255.255.255.0  broadcast 172.16.134.255
+        ether fe:fc:fe:de:6b:05  txqueuelen 1000  (Ethernet)
+
+ens19: flags=4163<UP,BROADCAST,RUNNING,MULTICAST>  mtu 1500
+        inet 10.251.252.6  netmask 255.255.255.0  broadcast 10.251.252.255
+        inet6 fe80::fcfc:feff:fe19:23d3  prefixlen 64  scopeid 0x20<link>
+        ether fe:fc:fe:19:23:d3  txqueuelen 1000  (Ethernet)
+        RX packets 870633  bytes 789535439 (752.9 MiB)
+        RX errors 0  dropped 0  overruns 0  frame 0
+        TX packets 704293  bytes 895592146 (854.1 MiB)
+        TX errors 0  dropped 0 overruns 0  carrier 0  collisions 0
+
+ens19:1: flags=4163<UP,BROADCAST,RUNNING,MULTICAST>  mtu 1500
+        inet 169.254.14.16  netmask 255.255.224.0  broadcast 169.254.31.255
+        ether fe:fc:fe:19:23:d3  txqueuelen 1000  (Ethernet)
+
+lo: flags=73<UP,LOOPBACK,RUNNING>  mtu 65536
+        inet 127.0.0.1  netmask 255.0.0.0
+        inet6 ::1  prefixlen 128  scopeid 0x10<host>
+        loop  txqueuelen 1000  (Local Loopback)
+        RX packets 86625  bytes 27356489 (26.0 MiB)
+        RX errors 0  dropped 0  overruns 0  frame 0
+        TX packets 86625  bytes 27356489 (26.0 MiB)
+        TX errors 0  dropped 0 overruns 0  carrier 0  collisions 0
+
+[root@db-rac03 ~]# 
+```
+
+#修改原来的service
+```
+[oracle@db-rac01 ~]$ srvctl modify service -d xydb -s s_portal -oldinst xydb1,xydb2 -newinst xydb3
+PRKO-2101 : Failed to find database instances xydb1,xydb2
+[oracle@db-rac01 ~]$ lsnrctl status
+
+LSNRCTL for Linux: Version 19.0.0.0.0 - Production on 06-DEC-2022 21:37:08
+
+Copyright (c) 1991, 2019, Oracle.  All rights reserved.
+
+Connecting to (ADDRESS=(PROTOCOL=tcp)(HOST=)(PORT=1521))
+STATUS of the LISTENER
+------------------------
+Alias                     LISTENER
+Version                   TNSLSNR for Linux: Version 19.0.0.0.0 - Production
+Start Date                05-DEC-2022 20:58:22
+Uptime                    1 days 0 hr. 38 min. 46 sec
+Trace Level               off
+Security                  ON: Local OS Authentication
+SNMP                      OFF
+Listener Parameter File   /u01/app/19.0.0/grid/network/admin/listener.ora
+Listener Log File         /u01/app/grid/diag/tnslsnr/db-rac01/listener/alert/log.xml
+Listening Endpoints Summary...
+  (DESCRIPTION=(ADDRESS=(PROTOCOL=ipc)(KEY=LISTENER)))
+  (DESCRIPTION=(ADDRESS=(PROTOCOL=tcp)(HOST=172.16.134.1)(PORT=1521)))
+  (DESCRIPTION=(ADDRESS=(PROTOCOL=tcp)(HOST=172.16.134.2)(PORT=1521)))
+Services Summary...
+Service "+ASM" has 1 instance(s).
+  Instance "+ASM1", status READY, has 1 handler(s) for this service...
+Service "+ASM_DATA" has 1 instance(s).
+  Instance "+ASM1", status READY, has 1 handler(s) for this service...
+Service "+ASM_FRA" has 1 instance(s).
+  Instance "+ASM1", status READY, has 1 handler(s) for this service...
+Service "+ASM_OCR" has 1 instance(s).
+  Instance "+ASM1", status READY, has 1 handler(s) for this service...
+Service "86b637b62fdf7a65e053f706e80a27ca" has 1 instance(s).
+  Instance "xydb1", status READY, has 1 handler(s) for this service...
+Service "ef14db5ce59d2d91e053018610ac1806" has 1 instance(s).
+  Instance "xydb1", status READY, has 1 handler(s) for this service...
+Service "portal" has 1 instance(s).
+  Instance "xydb1", status READY, has 1 handler(s) for this service...
+Service "s_portal" has 1 instance(s).
+  Instance "xydb1", status READY, has 1 handler(s) for this service...
+Service "xydb" has 1 instance(s).
+  Instance "xydb1", status READY, has 1 handler(s) for this service...
+Service "xydbXDB" has 1 instance(s).
+  Instance "xydb1", status READY, has 1 handler(s) for this service...
+The command completed successfully
+[oracle@db-rac01 ~]$ srvctl remove service -d xydb -s s_portal
+PRCR-1025 : Resource ora.xydb.s_portal.svc is still running
+[oracle@db-rac01 ~]$ srvctl stop service -d xydb -s s_portal
+[oracle@db-rac01 ~]$ srvctl remove service -d xydb -s s_portal
+[oracle@db-rac01 ~]$ lsnrctl status
+
+LSNRCTL for Linux: Version 19.0.0.0.0 - Production on 06-DEC-2022 21:37:51
+
+Copyright (c) 1991, 2019, Oracle.  All rights reserved.
+
+Connecting to (ADDRESS=(PROTOCOL=tcp)(HOST=)(PORT=1521))
+STATUS of the LISTENER
+------------------------
+Alias                     LISTENER
+Version                   TNSLSNR for Linux: Version 19.0.0.0.0 - Production
+Start Date                05-DEC-2022 20:58:22
+Uptime                    1 days 0 hr. 39 min. 28 sec
+Trace Level               off
+Security                  ON: Local OS Authentication
+SNMP                      OFF
+Listener Parameter File   /u01/app/19.0.0/grid/network/admin/listener.ora
+Listener Log File         /u01/app/grid/diag/tnslsnr/db-rac01/listener/alert/log.xml
+Listening Endpoints Summary...
+  (DESCRIPTION=(ADDRESS=(PROTOCOL=ipc)(KEY=LISTENER)))
+  (DESCRIPTION=(ADDRESS=(PROTOCOL=tcp)(HOST=172.16.134.1)(PORT=1521)))
+  (DESCRIPTION=(ADDRESS=(PROTOCOL=tcp)(HOST=172.16.134.2)(PORT=1521)))
+Services Summary...
+Service "+ASM" has 1 instance(s).
+  Instance "+ASM1", status READY, has 1 handler(s) for this service...
+Service "+ASM_DATA" has 1 instance(s).
+  Instance "+ASM1", status READY, has 1 handler(s) for this service...
+Service "+ASM_FRA" has 1 instance(s).
+  Instance "+ASM1", status READY, has 1 handler(s) for this service...
+Service "+ASM_OCR" has 1 instance(s).
+  Instance "+ASM1", status READY, has 1 handler(s) for this service...
+Service "86b637b62fdf7a65e053f706e80a27ca" has 1 instance(s).
+  Instance "xydb1", status READY, has 1 handler(s) for this service...
+Service "ef14db5ce59d2d91e053018610ac1806" has 1 instance(s).
+  Instance "xydb1", status READY, has 1 handler(s) for this service...
+Service "portal" has 1 instance(s).
+  Instance "xydb1", status READY, has 1 handler(s) for this service...
+Service "xydb" has 1 instance(s).
+  Instance "xydb1", status READY, has 1 handler(s) for this service...
+Service "xydbXDB" has 1 instance(s).
+  Instance "xydb1", status READY, has 1 handler(s) for this service...
+The command completed successfully
+[oracle@db-rac01 ~]$ srvctl add service -help
+
+Adds a service configuration to the Oracle Clusterware.
+
+Usage: srvctl add service -db <db_unique_name> -service "<service_name_list>" 
+       {-preferred "<preferred_list>" [-available "<available_list>"] [-tafpolicy {BASIC | NONE | PRECONNECT}] | -serverpool <pool_name> [-cardinality {UNIFORM | SINGLETON}] } 
+       [-netnum <network_number>] [-role "[PRIMARY][,PHYSICAL_STANDBY][,LOGICAL_STANDBY][,SNAPSHOT_STANDBY]"] [-policy {AUTOMATIC | MANUAL}] 
+       [-notification {TRUE | FALSE}] [-dtp {TRUE | FALSE}] [-clbgoal {SHORT | LONG}] [-rlbgoal {NONE | SERVICE_TIME | THROUGHPUT}] 
+       [-failovertype {NONE | SESSION | SELECT | TRANSACTION | AUTO}] [-failovermethod {NONE | BASIC}] [-failoverretry <failover_retries>] [-failoverdelay <failover_delay>] [-failover_restore {NONE | LEVEL1}] [-failback {YES | NO}] 
+       [-edition <edition>] [-pdb <pluggable_database>] [-global {TRUE | FALSE}] [-maxlag <max_lag_time>] [-sql_translation_profile <sql_translation_profile>] 
+       [-commit_outcome {TRUE | FALSE}] [-retention <retention>] [-replay_init_time <replay_initiation_time>] [-session_state {STATIC | DYNAMIC}] 
+       [-pqservice <pq_service>] [-pqpool "<pq_pool_list>"] [-gsmflags <gsm_flags>] [-tablefamilyid <table_family_id>] [-drain_timeout <drain_timeout>] [-stopoption <stop_option>] [-css_critical {YES | NO}] [-rfpool <pool_name> -hubsvc <hub_service>]
+       [-force] [-eval] [-verbose]
+    -db <db_unique_name>           Unique name for the database
+    -service "<serv,...>"          Comma separated service names
+    -preferred "<preferred_list>"  Comma separated list of preferred instances
+    -available "<available_list>"  Comma separated list of available instances
+    -serverpool <pool_name>        Server pool name
+    -cardinality                   (UNIFORM | SINGLETON) Service runs on every active server in the server pool hosting this service (UNIFORM) or just one server (SINGLETON)
+    -netnum  <network_number>      Network number (default number is 1)
+    -tafpolicy                     (NONE | BASIC | PRECONNECT)        TAF policy specification
+    -role <role>                   Role of the service (primary, physical_standby, logical_standby, snapshot_standby)
+    -policy <policy>               Management policy for the service (AUTOMATIC or MANUAL)
+    -failovertype                  (NONE | SESSION | SELECT | TRANSACTION | AUTO)      Failover type
+    -failovermethod                (NONE | BASIC)     Failover method
+    -failoverdelay <failover_delay> Failover delay (in seconds)
+    -failoverretry <failover_retries> Number of attempts to retry connection
+    -failover_restore <failover_restore>  Option to restore initial environment for Application Continuity and TAF (NONE or LEVEL1)
+    -failback                      (YES|NO) Failback to a preferred instance for a administrator-managed database 
+    -edition <edition>             Edition (or "" for empty edition value)
+    -pdb <pluggable_database>      Pluggable database name
+    -maxlag <max_lag_time>         Maximum replication lag time in seconds (Non-negative integer, default value is 'ANY')
+    -clbgoal                       (SHORT | LONG)                   Connection Load Balancing Goal. Default is LONG.
+    -rlbgoal                       (SERVICE_TIME | THROUGHPUT | NONE)     Runtime Load Balancing Goal
+    -dtp                           (TRUE | FALSE)  Distributed Transaction Processing
+    -notification                  (TRUE | FALSE)  Enable Fast Application Notification (FAN) for OCI connections
+    -global <global>               Global attribute (TRUE or FALSE)
+    -sql_translation_profile <sql_translation_profile> Specify a database object for SQL translation profile
+    -commit_outcome                (TRUE | FALSE)          Commit outcome
+    -retention <retention>         Specifies the number of seconds the commit outcome is retained
+    -replay_init_time <replay_initiation_time> Seconds after which replay will not be initiated
+    -session_state <session_state> Session state consistency (STATIC or DYNAMIC)
+    -pqservice <pq_service>        Parallel query service name
+    -pqpool "<pq_pool_list>"       Comma separated list of parallel query server pool names
+    -gsmflags <gsm_flags>          Set locality and region failover values
+    -tablefamilyid <table_family_id> Set table family ID for a given service
+    -drain_timeout <drain_timeout> Service drain timeout specified in seconds
+    -stopoption <stop_options>     Options to stop service (e.g. TRANSACTIONAL or IMMEDIATE)
+    -css_critical {YES | NO}          Define whether the database or service is CSS critical
+    -rfpool <pool_name>            Reader farm server pool name
+    -hubsvc <hub_service>            Hub service used by Reader Farm service
+    -eval                          Evaluates the effects of event without making any changes to the system
+Usage: srvctl add service -db <db_unique_name> -service "<service_name_list>" -update {-preferred "<new_pref_inst>" | -available "<new_avail_inst>"} [-force] [-verbose]
+    -db <db_unique_name>           Unique name for the database
+    -service "<serv,...>"          Comma separated service names
+    -update                        Add a new instance to service configuration
+    -preferred <new_pref_inst>     Name of new preferred instance
+    -available <new_avail_inst>    Name of new available instance
+    -force                         Force the add operation even though a listener is not configured for a network
+    -verbose                       Verbose output
+    -help                          Print usage
+    
+#oracle11gRAC
+
+[root@stuora1 ~]# su - oracle
+Last login: Sun Oct  9 14:41:38 CST 2022 on pts/0
+[oracle@stuora1 ~]$ srvctl add service -help
+
+Adds a service configuration to the Oracle Clusterware.
+
+Usage: srvctl add service -d <db_unique_name> -s <service_name> {-r "<preferred_list>" [-a "<available_list>"] [-P {BASIC | NONE | PRECONNECT}] | -g <pool_name> [-c {UNIFORM | SINGLETON}] } [-k   <net_num>] [-l [PRIMARY][,PHYSICAL_STANDBY][,LOGICAL_STANDBY][,SNAPSHOT_STANDBY]] [-y {AUTOMATIC | MANUAL}] [-q {TRUE|FALSE}] [-x {TRUE|FALSE}] [-j {SHORT|LONG}] [-B {NONE|SERVICE_TIME|THROUGHPUT}] [-e {NONE|SESSION|SELECT}] [-m {NONE|BASIC}] [-z <failover_retries>] [-w <failover_delay>] [-t <edition>] [-f]
+    -d <db_unique_name>      Unique name for the database
+    -s <service>             Service name
+    -r "<preferred_list>"    Comma separated list of preferred instances
+    -a "<available_list>"    Comma separated list of available instances
+    -g <pool_name>           Server pool name
+    -c {UNIFORM | SINGLETON} Service runs on every active server in the server pool hosting this service (UNIFORM) or just one server (SINGLETON)
+    -k <net_num>             network number (default number is 1)
+    -P {NONE | BASIC | PRECONNECT}        TAF policy specification
+    -l <role>                Role of the service (primary, physical_standby, logical_standby, snapshot_standby)
+    -y <policy>              Management policy for the service (AUTOMATIC or MANUAL)
+    -e <Failover type>       Failover type (NONE, SESSION, or SELECT)
+    -m <Failover method>     Failover method (NONE or BASIC)
+    -w <integer>             Failover delay
+    -z <integer>             Failover retries
+    -t <edition>             Edition (or "" for empty edition value)
+    -j <clb_goal>  Connection Load Balancing Goal (SHORT or LONG). Default is LONG.
+    -B <Runtime Load Balancing Goal>     Runtime Load Balancing Goal (SERVICE_TIME, THROUGHPUT, or NONE)
+    -x <Distributed Transaction Processing>  Distributed Transaction Processing (TRUE or FALSE)
+    -q <AQ HA notifications> AQ HA notifications (TRUE or FALSE)
+Usage: srvctl add service -d <db_unique_name> -s <service_name> -u {-r "<new_pref_inst>" | -a "<new_avail_inst>"} [-f]
+    -d <db_unique_name>      Unique name for the database
+    -s <service>             Service name
+    -u                       Add a new instance to service configuration
+    -r <new_pref_inst>       Name of new preferred instance
+    -a <new_avail_inst>      Name of new available instance
+    -f                       Force the add operation even though a listener is not configured for a network
+    -h                       Print usage
+[oracle@stuora1 ~]$
+
+[oracle@db-rac01 ~]$ srvctl add service -d xydb -s s_portal -r xydb1,xydb2,xydb3 -P basic -e select -m basic -z 180 -w 5 -pdb portal
+[oracle@db-rac01 ~]$ srvctl start service -d xydb -s s_portal
+[oracle@db-rac01 ~]$ lsnrctl status
+
+LSNRCTL for Linux: Version 19.0.0.0.0 - Production on 06-DEC-2022 21:49:02
+
+Copyright (c) 1991, 2019, Oracle.  All rights reserved.
+
+Connecting to (ADDRESS=(PROTOCOL=tcp)(HOST=)(PORT=1521))
+STATUS of the LISTENER
+------------------------
+Alias                     LISTENER
+Version                   TNSLSNR for Linux: Version 19.0.0.0.0 - Production
+Start Date                05-DEC-2022 20:58:22
+Uptime                    1 days 0 hr. 50 min. 40 sec
+Trace Level               off
+Security                  ON: Local OS Authentication
+SNMP                      OFF
+Listener Parameter File   /u01/app/19.0.0/grid/network/admin/listener.ora
+Listener Log File         /u01/app/grid/diag/tnslsnr/db-rac01/listener/alert/log.xml
+Listening Endpoints Summary...
+  (DESCRIPTION=(ADDRESS=(PROTOCOL=ipc)(KEY=LISTENER)))
+  (DESCRIPTION=(ADDRESS=(PROTOCOL=tcp)(HOST=172.16.134.1)(PORT=1521)))
+  (DESCRIPTION=(ADDRESS=(PROTOCOL=tcp)(HOST=172.16.134.2)(PORT=1521)))
+Services Summary...
+Service "+ASM" has 1 instance(s).
+  Instance "+ASM1", status READY, has 1 handler(s) for this service...
+Service "+ASM_DATA" has 1 instance(s).
+  Instance "+ASM1", status READY, has 1 handler(s) for this service...
+Service "+ASM_FRA" has 1 instance(s).
+  Instance "+ASM1", status READY, has 1 handler(s) for this service...
+Service "+ASM_OCR" has 1 instance(s).
+  Instance "+ASM1", status READY, has 1 handler(s) for this service...
+Service "86b637b62fdf7a65e053f706e80a27ca" has 1 instance(s).
+  Instance "xydb1", status READY, has 1 handler(s) for this service...
+Service "ef14db5ce59d2d91e053018610ac1806" has 1 instance(s).
+  Instance "xydb1", status READY, has 1 handler(s) for this service...
+Service "portal" has 1 instance(s).
+  Instance "xydb1", status READY, has 1 handler(s) for this service...
+Service "s_portal" has 1 instance(s).
+  Instance "xydb1", status READY, has 1 handler(s) for this service...
+Service "xydb" has 1 instance(s).
+  Instance "xydb1", status READY, has 1 handler(s) for this service...
+Service "xydbXDB" has 1 instance(s).
+  Instance "xydb1", status READY, has 1 handler(s) for this service...
+The command completed successfully
+[oracle@db-rac01 ~]$ 
+
+sqlplus pdbadmin/J3my3xl4c12ed@172.16.134.9:1521/s_dataassets
+
+sqlplus pdbadmin/J3my3xl4c12ed@172.16.134.8:1521/s_portal
 ```

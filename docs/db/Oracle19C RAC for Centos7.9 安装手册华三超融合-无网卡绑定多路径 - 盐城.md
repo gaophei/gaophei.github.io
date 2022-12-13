@@ -64,6 +64,7 @@ scan ip              10.4.0.45
 10.0.1.68  密码Jshl@iop*()mh
 Jscn2022!
 
+10.4.0.41  root/sangfor@123
 
 [root@stuora1 ~]# ls -1cv /dev/sd* | grep -v [0-9] | while read disk; do  echo -n "$disk " ; /usr/lib/udev/scsi_id -g -u -d $disk ; done
 /dev/sda 36000c290895fb077d085d625b053999c
