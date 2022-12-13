@@ -174,6 +174,65 @@ docker search nginx
 
 #### 1.4.容器基本操作
 
+```bash
+docker run --help
+man docker run
+
+docker run -d -p 8080:80 httpd
+```
+
+```
+root@ubuntu:~# docker run -d -p 8080:80 httpd
+Unable to find image 'httpd:latest' locally
+latest: Pulling from library/httpd
+a2abf6c4d29d: Pull complete 
+dcc4698797c8: Pull complete 
+41c22baa66ec: Pull complete 
+67283bbdd4a0: Pull complete 
+d982c879c57e: Pull complete 
+Digest: sha256:0954cc1af252d824860b2c5dc0a10720af2b7a3d3435581ca788dff8480c7b32
+Status: Downloaded newer image for httpd:latest
+0dfd41b8026694a025e5e5a6bbb4f4ea9abbdfd9eb3362019b2abeca42271bd2
+
+root@ubuntu:~# docker ps
+CONTAINER ID   IMAGE     COMMAND              CREATED          STATUS          PORTS                                   NAMES
+0dfd41b80266   httpd     "httpd-foreground"   15 seconds ago   Up 12 seconds   0.0.0.0:8080->80/tcp, :::8080->80/tcp   exciting_jemison
+
+root@ubuntu:~# docker images
+REPOSITORY   TAG       IMAGE ID       CREATED         SIZE
+httpd        latest    dabbfbe0c57b   11 months ago   144MB
+
+root@ubuntu:~# docker logs exciting_jemison
+AH00558: httpd: Could not reliably determine the server's fully qualified domain name, using 172.17.0.2. Set the 'ServerName' directive globally to suppress this message
+AH00558: httpd: Could not reliably determine the server's fully qualified domain name, using 172.17.0.2. Set the 'ServerName' directive globally to suppress this message
+[Tue Dec 13 15:24:18.202035 2022] [mpm_event:notice] [pid 1:tid 139696380173632] AH00489: Apache/2.4.52 (Unix) configured -- resuming normal operations
+[Tue Dec 13 15:24:18.202266 2022] [core:notice] [pid 1:tid 139696380173632] AH00094: Command line: 'httpd -D FOREGROUND'
+
+root@ubuntu:~# curl -v localhost:8080
+*   Trying 127.0.0.1:8080...
+* Connected to localhost (127.0.0.1) port 8080 (#0)
+> GET / HTTP/1.1
+> Host: localhost:8080
+> User-Agent: curl/7.81.0
+> Accept: */*
+> 
+* Mark bundle as not supporting multiuse
+< HTTP/1.1 200 OK
+< Date: Tue, 13 Dec 2022 15:25:03 GMT
+< Server: Apache/2.4.52 (Unix)
+< Last-Modified: Mon, 11 Jun 2007 18:53:14 GMT
+< ETag: "2d-432a5e4a73a80"
+< Accept-Ranges: bytes
+< Content-Length: 45
+< Content-Type: text/html
+< 
+<html><body><h1>It works!</h1></body></html>
+* Connection #0 to host localhost left intact
+
+root@ubuntu:~# curl localhost:8080
+<html><body><h1>It works!</h1></body></html>
+root@ubuntu:~# 
+```
 
 
 
@@ -213,6 +272,15 @@ docker search nginx
 
 
 
+
+
+===abc===
+
+--cd--
+
+---e---
+
+---
 
 
 
@@ -222,19 +290,19 @@ docker search nginx
 
 
 ### 附录
-#### 学习方法
+#### A1.学习方法
 
 | step |                |                    |               示例                |
 | :--: | :------------: | :----------------: | --------------------------------- |
 |  1   |      word      |    查单词，释义    |            pull，拉取             |
 |  2   | <kbd>Tab</kbd> | 一下不全，两下列出 | # doc<kbd>Tab</kbd><br /># docker <kbd>空格</kbd> <kbd>Tab</kbd><kbd>Tab</kbd> |
-|  3   |   man,--help   |        帮助        | # man docker <br># docker --help |
+|  3   |   man,--help   |        帮助        | # man docker run <br># docker --help |
 |  4   | echo $? | 查看回显 | 0 == 正确执行<br>非0 == 错误执行 |
 |  5   |                |                    |                                   |
 
 
 
-#### 相关软件
+#### A2.相关软件
 
 |      |   NAME   |                             URL                              |         FUNC          |
 | :--: | :------: | :----------------------------------------------------------: | :-------------------: |
@@ -247,6 +315,17 @@ docker search nginx
 |      |          | https://cr.console.aliyun.com/cn-hangzhou/instances/mirrors  | 仓库加速器daemon.json |
 |  6   |          |                                                              |                       |
 |      |          |                                                              |                       |
+
+
+
+#### A3.ubuntu快捷键
+
+| 1    | <kbd>crtl</kbd>-<kbd>shift</kbd>-<kbd>+</kbd>\|<kbd>ctrl</kbd>-<kbd>+</kbd> | 字体放大         |
+| ---- | ------------------------------------------------------------ | ---------------- |
+| 2    | <kbd>crtl</kbd>-<kbd>shift</kbd>-<kbd>T</kbd>                | 新建terminal标签 |
+| 3    | <kbd>Alt</kbd>-<kbd>1</kbd>\|<kbd>Alt</kbd>-<kbd>2</kbd>     | 切换标签         |
+|      |                                                              |                  |
+
 
 
 
