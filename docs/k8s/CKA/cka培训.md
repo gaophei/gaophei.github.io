@@ -1,5 +1,9 @@
 ***CKA培训***
+
+[TOC]
+
 ### 1.容器技术
+
 #### 1.1.容器技术发展
 
 #docker镜像
@@ -18,6 +22,7 @@ docker: docker CE/docker EE
 ```
 
 #容器是什么
+
 ```
 定义：容器是容器image运行时的实例
 主要是隔离、封装
@@ -92,7 +97,7 @@ mini-install/shanghai
 ##### 1.3.2.1.网络配置
 
 ```bash
-# sudo -i
+$ sudo -i
 ```
 图形界面配置的IP等在 /etc/NetworkManager/system-connections/'Wired connection 1.nmconnection'
 ```bash
@@ -143,27 +148,38 @@ network:
 
 ##### 1.3.2.2.安装openssh
 ```bash
-# sudo apt-get update -y && sudo apt upgrade -y
-# sudo install openssh-server -y
-# sudo systemctl enable --now ssh
-# sudo systemctl status ssh
+$ sudo -i
+# apt-get update -y && sudo apt upgrade -y
+# apt search ssh|grep server
+
+# apt install openssh-server -y
+# systemctl enable --now ssh
+# systemctl status ssh
+
+可以允许root账户远程登录
+# passwd root
+
+# echo "PermitRootLogin yes" >> /etc/ssh/sshd_config
+# systemctl restart ssh
+# systemctl status ssh
 ```
 
 ##### 1.3.2.3.安装docker
 
 ```bash
 step 1: 安装必要的一些系统工具
-# sudo apt-get update
-# sudo apt-get -y install apt-transport-https ca-certificates curl software-properties-common
+$ sudo -i
+# apt-get update
+# apt-get -y install apt-transport-https ca-certificates curl software-properties-common
 step 2: 安装GPG证书
 # curl -fsSL https://mirrors.aliyun.com/docker-ce/linux/ubuntu/gpg | sudo apt-key add -
 Step 3: 写入软件源信息
-# sudo add-apt-repository "deb [arch=amd64] https://mirrors.aliyun.com/docker-ce/linux/ubuntu $(lsb_release -cs) stable"
+# add-apt-repository "deb [arch=amd64] https://mirrors.aliyun.com/docker-ce/linux/ubuntu $(lsb_release -cs) stable"
 Step 4: 更新并安装Docker-CE
-# sudo apt-get -y update
-# sudo apt-get -y install docker-ce
-# sudo systemctl enable --now docker
-# sudo systemctl status docker
+# apt-get -y update
+# apt-get -y install docker-ce
+# systemctl enable --now docker
+# systemctl status docker
 
 安装指定版本的Docker-CE:
 Step 1: 查找Docker-CE的版本:
@@ -171,12 +187,12 @@ Step 1: 查找Docker-CE的版本:
   docker-ce | 17.03.1~ce-0~ubuntu-xenial | https://mirrors.aliyun.com/docker-ce/linux/ubuntu xenial/stable amd64 Packages
   docker-ce | 17.03.0~ce-0~ubuntu-xenial | https://mirrors.aliyun.com/docker-ce/linux/ubuntu xenial/stable amd64 Packages
 Step 2: 安装指定版本的Docker-CE: (VERSION例如上面的17.03.1~ce-0~ubuntu-xenial)
-# sudo apt-get -y install docker-ce=[VERSION]
+# apt-get -y install docker-ce=[VERSION]
 ```
 
 ```bash
-#修改默认仓库
-# sudo -i
+修改默认仓库
+$ sudo -i
 # mkdir /etc/docker
 # tee /etc/docker/daemon.json <<-'EOF'
 {
@@ -424,6 +440,553 @@ CentOS Linux release 8.4.2105
 
 ```
 
+### 2.容器镜像
+#### 2.1.容器镜像结构
+```
+Linux操作系统结构
+--- kernel: Linux系统内核，/boot
+--- rootfs: Linux系统中的用户空间文件系统，除了/boot外的其他文件目录
+
+官网https://www.kernel.org/
+```
+
+```bash
+# cd /boot
+# ls
+config-5.15.0-43-generic  efi   initrd.img                    initrd.img-5.15.0-56-generic  memtest86+.bin  memtest86+_multiboot.bin      System.map-5.15.0-56-generic  vmlinuz-5.15.0-43-generic  vmlinuz.old
+config-5.15.0-56-generic  grub  initrd.img-5.15.0-43-generic  initrd.img.old                memtest86+.elf  System.map-5.15.0-43-generic  vmlinuz                       `vmlinuz-5.15.0-56-generic`
+# uname -a
+Linux ubuntu001-virtual-machine `5.15.0-56-generic` #62-Ubuntu SMP Tue Nov 22 19:54:14 UTC 2022 x86_64 x86_64 x86_64 GNU/Linux
+```
+
+
+
+```
+容器镜像
+--- 容器镜像是容器的模板，容器是镜像的运行实例，runtime(比如docker)根据容器镜像创建容器
+--- 容器镜像挂载在容器根目录下，是为容器中的应用提供隔离后执行环境的文件系统
+       容器镜像打包了整个操作系统的文件和目录(rootfs)，当然也包括应用本身。即，应用及其运行所需的所有依赖，都在被封装在容器镜像中
+--- 容器镜像采用分层结构
+       所有容器共享宿主机Kernel，并且不能修改宿主机Kernel。即，容器运行过程中使用容器镜像里的文件，使用宿主机OS上的Kernel 
+```
+```bash
+容器运行时，不能删除相关容器镜像
+# docker ps
+CONTAINER ID   IMAGE     COMMAND                  CREATED        STATUS        PORTS                                   NAMES
+0dfd41b80266   httpd     "httpd-foreground"       35 hours ago   Up 24 hours   0.0.0.0:8080->80/tcp, :::8080->80/tcp   exciting_jemison
+# docker images
+REPOSITORY   TAG       IMAGE ID       CREATED         SIZE
+httpd        latest    dabbfbe0c57b   11 months ago   144MB
+httpd        v9.1      dabbfbe0c57b   11 months ago   144MB
+
+# docker rmi dabbfbe0c57b
+Error response from daemon: conflict: unable to delete dabbfbe0c57b (must be forced) - image is referenced in multiple repositories
+
+# docker rmi httpd:latest 
+Untagged: httpd:latest
+root@ubuntu001-virtual-machine:~# docker images
+REPOSITORY   TAG       IMAGE ID       CREATED         SIZE
+httpd        v9.1      dabbfbe0c57b   11 months ago   144MB
+
+# docker rmi httpd:v9.1 
+Error response from daemon: conflict: unable to remove repository reference "httpd:v9.1" (must force) - container 0dfd41b80266 is using its referenced image dabbfbe0c57b
+
+先停止后删除容器后，再删除容器镜像
+# docker stop 0dfd41b80266
+# docker rm 0dfd41b80266
+
+# docker rmi dabbfbe0c57b
+Error response from daemon: conflict: unable to delete dabbfbe0c57b (must be forced) - image is referenced in multiple repositories
+
+# docker images
+REPOSITORY   TAG       IMAGE ID       CREATED         SIZE
+nginx        latest    605c77e624dd   11 months ago   141MB
+httpd        latest    dabbfbe0c57b   11 months ago   144MB
+httpd        v10.1     dabbfbe0c57b   11 months ago   144MB
+centos       latest    5d0da3dc9764   15 months ago   231MB
+# docker rmi httpd:latest 
+Untagged: httpd:latest
+# docker rmi httpd:v10.1 
+Untagged: httpd:v10.1
+Untagged: httpd@sha256:0954cc1af252d824860b2c5dc0a10720af2b7a3d3435581ca788dff8480c7b32
+Deleted: sha256:dabbfbe0c57b6e5cd4bc089818d3f664acfad496dc741c9a501e72d15e803b34
+Deleted: sha256:0e16a5a61bcb4e6b2bb2d746c2d6789d6c0b66198208b831f74b52198d744189
+Deleted: sha256:f79670638074ff7fd293e753c11ea2ca0a2d92ab516d2f6b0bac3f4c6fed5d86
+Deleted: sha256:189d55cdd18e4501032bb700a511c2d69c82fd75f1b619b5218ea6870e71e4aa
+Deleted: sha256:cb038ed3e490a8c0f195cf135ac0d27dd8d3872598b1cb858c2666f2dae95a61
+# docker images
+REPOSITORY   TAG       IMAGE ID       CREATED         SIZE
+
+# docker pull httpd
+Using default tag: latest
+latest: Pulling from library/httpd
+a2abf6c4d29d: Already exists 
+dcc4698797c8: Pull complete 
+41c22baa66ec: Pull complete 
+67283bbdd4a0: Pull complete 
+d982c879c57e: Pull complete 
+Digest: sha256:0954cc1af252d824860b2c5dc0a10720af2b7a3d3435581ca788dff8480c7b32
+Status: Downloaded newer image for httpd:latest
+docker.io/library/httpd:latest
+```
+
+
+```
+base镜像
+--- scratch空镜像
+--- 常用base镜像：ubuntu/CentOS/debian/alpine/BuildRoot
+```
+
+```
+容器镜像分层结构
+--- docker镜像中引入层layer的概念。镜像制作过程中的每一步操作，都会生成一个新的镜像层
+--- 容器由若干只读镜像层和最上面的一个可写容器层构成
+```
+
+
+
+![image-20221215144955248](cka培训截图\image-20221215144955248.png)
+
+
+
+```bash
+检查镜像的分层架构
+# docker images
+REPOSITORY   TAG       IMAGE ID       CREATED         SIZE
+nginx        latest    605c77e624dd   11 months ago   141MB
+
+# docker inspect nginx:latest 
+[
+    {
+        "Id": "sha256:605c77e624ddb75e6110f997c58876baa13f8754486b461117934b24a9dc3a85",
+     .......省略部分.......
+        "GraphDriver": {
+            "Data": {
+                "LowerDir": "/var/lib/docker/overlay2/0397492a4ec7cf671195430a76b2863e4e39a3660ee051473a7ca99d49e3a734/diff:/var/lib/docker/overlay2/9457405d44ebe6080d780835b26a4f6194bf74bb148db95a6748df921e7e0266/diff:/var/lib/docker/overlay2/3a5ce64ff1acc72e562091f88fac96e7f9ba0d45dd03647103f351f6c954f395/diff:/var/lib/docker/overlay2/d8ee1384effeaeeb8c28e498be3bef1366c3a91a1016680db9d5a69014a470c4/diff:/var/lib/docker/overlay2/91f0262328445181897369ccf6a73ab34f472481ca47aa7929f8bfee6f776dce/diff",
+                "MergedDir": "/var/lib/docker/overlay2/455d86552f7cd95e147c34553366f070ca606b726c4a6fd721d068cc8590eb34/merged",
+                "UpperDir": "/var/lib/docker/overlay2/455d86552f7cd95e147c34553366f070ca606b726c4a6fd721d068cc8590eb34/diff",
+                "WorkDir": "/var/lib/docker/overlay2/455d86552f7cd95e147c34553366f070ca606b726c4a6fd721d068cc8590eb34/work"
+            },
+            "Name": "overlay2"
+        },
+        "RootFS": {
+            "Type": "layers",
+            "Layers": [
+                "sha256:2edcec3590a4ec7f40cf0743c15d78fb39d8326bc029073b41ef9727da6c851f",
+                "sha256:e379e8aedd4d72bb4c529a4ca07a4e4d230b5a1d3f7a61bc80179e8f02421ad8",
+                "sha256:b8d6e692a25e11b0d32c5c3dd544b71b1085ddc1fddad08e68cbd7fda7f70221",
+                "sha256:f1db227348d0a5e0b99b15a096d930d1a69db7474a1847acbc31f05e4ef8df8c",
+                "sha256:32ce5f6a5106cc637d09a98289782edf47c32cb082dc475dd47cbf19a4f866da",
+                "sha256:d874fd2bc83bb3322b566df739681fbd2248c58d3369cb25908d68e7ed6040a6"
+            ]
+        },
+        "Metadata": {
+            "LastTagTime": "0001-01-01T00:00:00Z"
+        }
+    }
+]
+
+```
+
+```
+UpperDir---容器层，可读写
+LowerDir---镜像层，只读
+MergeDir---合并层，容器挂载点
+WorkDir---当前工作目录
+```
+
+```
+UnionFS联合文件系统
+--- UnionFS主要的功能是将多个不同位置的目录联合挂载(union mount)到同一个目录下
+    每一个镜像层都是Linux操作系统文件与目录的一部分。在使用镜像时，docker会将所有的镜像层联合挂载到一个统一的挂载点上，表现为一个完整的Linux操作系统供容器使用
+```
+
+```
+容器copy-on-write特性
+对容器的增、删、改、查操作：
+1.创建文件：新文件只能被添加在容器层中
+2.删除文件：依据容器分层结构由上往下依次查找。找到后，在容器层记录该删除操作。具体实现是，UnionFS会在容器层创建一个"whiteout"文件，将被删除的文件"遮挡"起来
+3.修改文件：依据容器分层结构由上往下依次查找。找到后，将镜像层中的数据复制到容器层进行修改，修改后的数据保存在容器层中
+4.读取文件：依据容器分层结构由上往下依次查找
+```
+
+
+
+#### 2.2.构建容器镜像
+
+```
+两种方法：
+1. cmd
+   1) docker  ps
+   2) 修改容器
+   3) docker commit 容器ID 镜像名称
+2. file
+   1) vi dockerfile
+   2) docker build .
+```
+
+
+
+
+##### 2.2.1.docker commit 构建镜像
+
+```
+docker commit命令：可以将一个运行中的容器保存为镜像。
+1. 运行一个容器
+2. 修改容器内容
+3. 将容器保存为镜像
+```
+
+```bash
+Lab1. nginx镜像
+# docker run -d -p 8081:80 nginx
+
+# docker images
+REPOSITORY   TAG       IMAGE ID       CREATED         SIZE
+nginx        latest    605c77e624dd   11 months ago   141MB
+
+# docker ps
+CONTAINER ID   IMAGE     COMMAND                  CREATED          STATUS          PORTS                                   NAMES
+69b43d989318   nginx     "/docker-entrypoint.…"   46 minutes ago   Up 46 minutes   0.0.0.0:8081->80/tcp, :::8081->80/tcp   eager_cerf
+
+# docker exec -it eager_cerf /bin/bash
+root@69b43d989318:/# echo "hello" > /usr/share/nginx/html/index.html
+
+root@69b43d989318:/# cat /usr/share/nginx/html/index.html
+`hello`
+
+# curl localhost:8081
+hello
+
+# docker commit eager_cerf hello
+sha256:e9055ad9d1d497508cfefc2e77fcb944af9e993992d23bec6751588b3b2d6b4e
+
+# docker images
+REPOSITORY   TAG       IMAGE ID       CREATED         SIZE
+hello        latest    e9055ad9d1d4   5 seconds ago   141MB
+nginx        latest    605c77e624dd   11 months ago   141MB
+
+# docker image inspect hello:latest
+[
+    {
+        "Id": "sha256:e9055ad9d1d497508cfefc2e77fcb944af9e993992d23bec6751588b3b2d6b4e",
+        "RepoTags": [
+            "hello:latest"
+        ],
+     ......省略内容......
+        "GraphDriver": {
+            "Data": {
+                "LowerDir": "/var/lib/docker/overlay2/455d86552f7cd95e147c34553366f070ca606b726c4a6fd721d068cc8590eb34/diff:/var/lib/docker/overlay2/0397492a4ec7cf671195430a76b2863e4e39a3660ee051473a7ca99d49e3a734/diff:/var/lib/docker/overlay2/9457405d44ebe6080d780835b26a4f6194bf74bb148db95a6748df921e7e0266/diff:/var/lib/docker/overlay2/3a5ce64ff1acc72e562091f88fac96e7f9ba0d45dd03647103f351f6c954f395/diff:/var/lib/docker/overlay2/d8ee1384effeaeeb8c28e498be3bef1366c3a91a1016680db9d5a69014a470c4/diff:/var/lib/docker/overlay2/91f0262328445181897369ccf6a73ab34f472481ca47aa7929f8bfee6f776dce/diff",
+                "MergedDir": "/var/lib/docker/overlay2/049d3b9edd454e32ed5d3e3fb401bb4980425d37ed2ede4d3c80a38c60652601/merged",
+                "UpperDir": "/var/lib/docker/overlay2/049d3b9edd454e32ed5d3e3fb401bb4980425d37ed2ede4d3c80a38c60652601/diff",
+                "WorkDir": "/var/lib/docker/overlay2/049d3b9edd454e32ed5d3e3fb401bb4980425d37ed2ede4d3c80a38c60652601/work"
+            },
+            "Name": "overlay2"
+        },
+        "RootFS": {
+            "Type": "layers",
+            "Layers": [
+                "sha256:2edcec3590a4ec7f40cf0743c15d78fb39d8326bc029073b41ef9727da6c851f",
+                "sha256:e379e8aedd4d72bb4c529a4ca07a4e4d230b5a1d3f7a61bc80179e8f02421ad8",
+                "sha256:b8d6e692a25e11b0d32c5c3dd544b71b1085ddc1fddad08e68cbd7fda7f70221",
+                "sha256:f1db227348d0a5e0b99b15a096d930d1a69db7474a1847acbc31f05e4ef8df8c",
+                "sha256:32ce5f6a5106cc637d09a98289782edf47c32cb082dc475dd47cbf19a4f866da",
+                "sha256:d874fd2bc83bb3322b566df739681fbd2248c58d3369cb25908d68e7ed6040a6",
+                "sha256:f5a093ffdc14daaabfdbc8fe40e1302f7a62e1d0de1ce9ff27e39c993af883a3"
+            ]
+        },
+        "Metadata": {
+            "LastTagTime": "2022-12-15T15:42:30.739649322+08:00"
+        }
+    }
+]
+
+# docker image inspect nginx:latest 
+[
+    {
+        "Id": "sha256:605c77e624ddb75e6110f997c58876baa13f8754486b461117934b24a9dc3a85",
+        "RepoTags": [
+            "nginx:latest"
+        ],
+        ......省略内容......
+        "GraphDriver": {
+            "Data": {
+                "LowerDir": "/var/lib/docker/overlay2/0397492a4ec7cf671195430a76b2863e4e39a3660ee051473a7ca99d49e3a734/diff:/var/lib/docker/overlay2/9457405d44ebe6080d780835b26a4f6194bf74bb148db95a6748df921e7e0266/diff:/var/lib/docker/overlay2/3a5ce64ff1acc72e562091f88fac96e7f9ba0d45dd03647103f351f6c954f395/diff:/var/lib/docker/overlay2/d8ee1384effeaeeb8c28e498be3bef1366c3a91a1016680db9d5a69014a470c4/diff:/var/lib/docker/overlay2/91f0262328445181897369ccf6a73ab34f472481ca47aa7929f8bfee6f776dce/diff",
+                "MergedDir": "/var/lib/docker/overlay2/455d86552f7cd95e147c34553366f070ca606b726c4a6fd721d068cc8590eb34/merged",
+                "UpperDir": "/var/lib/docker/overlay2/455d86552f7cd95e147c34553366f070ca606b726c4a6fd721d068cc8590eb34/diff",
+                "WorkDir": "/var/lib/docker/overlay2/455d86552f7cd95e147c34553366f070ca606b726c4a6fd721d068cc8590eb34/work"
+            },
+            "Name": "overlay2"
+        },
+        "RootFS": {
+            "Type": "layers",
+            "Layers": [
+                "sha256:2edcec3590a4ec7f40cf0743c15d78fb39d8326bc029073b41ef9727da6c851f",
+                "sha256:e379e8aedd4d72bb4c529a4ca07a4e4d230b5a1d3f7a61bc80179e8f02421ad8",
+                "sha256:b8d6e692a25e11b0d32c5c3dd544b71b1085ddc1fddad08e68cbd7fda7f70221",
+                "sha256:f1db227348d0a5e0b99b15a096d930d1a69db7474a1847acbc31f05e4ef8df8c",
+                "sha256:32ce5f6a5106cc637d09a98289782edf47c32cb082dc475dd47cbf19a4f866da",
+                "sha256:d874fd2bc83bb3322b566df739681fbd2248c58d3369cb25908d68e7ed6040a6"
+            ]
+        },
+        "Metadata": {
+            "LastTagTime": "0001-01-01T00:00:00Z"
+        }
+    }
+]
+
+# docker history hello:latest 
+IMAGE          CREATED          CREATED BY                                      SIZE      COMMENT
+`e9055ad9d1d4   40 minutes ago   nginx -g daemon off;                            1.29kB`    
+605c77e624dd   11 months ago    /bin/sh -c #(nop)  CMD ["nginx" "-g" "daemon…   0B        
+<missing>      11 months ago    /bin/sh -c #(nop)  STOPSIGNAL SIGQUIT           0B        
+<missing>      11 months ago    /bin/sh -c #(nop)  EXPOSE 80                    0B        
+<missing>      11 months ago    /bin/sh -c #(nop)  ENTRYPOINT ["/docker-entr…   0B        
+<missing>      11 months ago    /bin/sh -c #(nop) COPY file:09a214a3e07c919a…   4.61kB    
+<missing>      11 months ago    /bin/sh -c #(nop) COPY file:0fd5fca330dcd6a7…   1.04kB    
+<missing>      11 months ago    /bin/sh -c #(nop) COPY file:0b866ff3fc1ef5b0…   1.96kB    
+<missing>      11 months ago    /bin/sh -c #(nop) COPY file:65504f71f5855ca0…   1.2kB     
+<missing>      11 months ago    /bin/sh -c set -x     && addgroup --system -…   61.1MB    
+<missing>      11 months ago    /bin/sh -c #(nop)  ENV PKG_RELEASE=1~bullseye   0B        
+<missing>      11 months ago    /bin/sh -c #(nop)  ENV NJS_VERSION=0.7.1        0B        
+<missing>      11 months ago    /bin/sh -c #(nop)  ENV NGINX_VERSION=1.21.5     0B        
+<missing>      11 months ago    /bin/sh -c #(nop)  LABEL maintainer=NGINX Do…   0B        
+<missing>      11 months ago    /bin/sh -c #(nop)  CMD ["bash"]                 0B        
+<missing>      11 months ago    /bin/sh -c #(nop) ADD file:09675d11695f65c55…   80.4MB    
+# docker history nginx:latest 
+IMAGE          CREATED         CREATED BY                                      SIZE      COMMENT
+605c77e624dd   11 months ago   /bin/sh -c #(nop)  CMD ["nginx" "-g" "daemon…   0B        
+<missing>      11 months ago   /bin/sh -c #(nop)  STOPSIGNAL SIGQUIT           0B        
+<missing>      11 months ago   /bin/sh -c #(nop)  EXPOSE 80                    0B        
+<missing>      11 months ago   /bin/sh -c #(nop)  ENTRYPOINT ["/docker-entr…   0B        
+<missing>      11 months ago   /bin/sh -c #(nop) COPY file:09a214a3e07c919a…   4.61kB    
+<missing>      11 months ago   /bin/sh -c #(nop) COPY file:0fd5fca330dcd6a7…   1.04kB    
+<missing>      11 months ago   /bin/sh -c #(nop) COPY file:0b866ff3fc1ef5b0…   1.96kB    
+<missing>      11 months ago   /bin/sh -c #(nop) COPY file:65504f71f5855ca0…   1.2kB     
+<missing>      11 months ago   /bin/sh -c set -x     && addgroup --system -…   61.1MB    
+<missing>      11 months ago   /bin/sh -c #(nop)  ENV PKG_RELEASE=1~bullseye   0B        
+<missing>      11 months ago   /bin/sh -c #(nop)  ENV NJS_VERSION=0.7.1        0B        
+<missing>      11 months ago   /bin/sh -c #(nop)  ENV NGINX_VERSION=1.21.5     0B        
+<missing>      11 months ago   /bin/sh -c #(nop)  LABEL maintainer=NGINX Do…   0B        
+<missing>      11 months ago   /bin/sh -c #(nop)  CMD ["bash"]                 0B        
+<missing>      11 months ago   /bin/sh -c #(nop) ADD file:09675d11695f65c55…   80.4MB  
+
+# docker run -d  -p 8080:80  hello
+fbe9a76cb37ea66aa08666f6c2a1a90d5caa107e590ba8046143825295f2bd2c
+
+# docker ps
+CONTAINER ID   IMAGE     COMMAND                  CREATED          STATUS          PORTS                                   NAMES
+fbe9a76cb37e   hello     "/docker-entrypoint.…"   2 seconds ago    Up 1 second     0.0.0.0:8080->80/tcp, :::8080->80/tcp   strange_davinci
+69b43d989318   nginx     "/docker-entrypoint.…"   52 minutes ago   Up 52 minutes   0.0.0.0:8081->80/tcp, :::8081->80/tcp   eager_cerf
+
+# curl localhost:8080
+`hello`
+```
+
+
+
+```bash
+Lab2. centos镜像
+
+# docker run -itd --privileged centos /sbin/init
+Unable to find image 'centos:latest' locally
+latest: Pulling from library/centos
+a1d0c7532777: Pull complete 
+Digest: sha256:a27fd8080b517143cbbbab9dfb7c8571c40d67d534bbdee55bd6c473f432b177
+Status: Downloaded newer image for centos:latest
+d2bbf9ce9faa6076faa9ee463426d5660bd5767337acb5782ef32c55134bd8aa
+
+# docker images
+REPOSITORY   TAG       IMAGE ID       CREATED          SIZE
+centos       latest    5d0da3dc9764   15 months ago    231MB
+# docker ps
+CONTAINER ID   IMAGE     COMMAND                  CREATED              STATUS              PORTS                                   NAMES
+d2bbf9ce9faa   centos    "/sbin/init"             About a minute ago   Up About a minute                                           pedantic_franklin
+
+# docker exec -it pedantic_franklin /bin/bash
+
+[root@d2bbf9ce9faa /]# yum install -y httpd
+Failed to set locale, defaulting to C.UTF-8
+CentOS Linux 8 - AppStream                                                                                                                                                         78  B/s |  38  B     00:00    
+Error: Failed to download metadata for repo 'appstream': Cannot prepare internal mirrorlist: No URLs in mirrorlist
+[root@d2bbf9ce9faa /]# cd /etc/yum.repos.d/
+[root@d2bbf9ce9faa yum.repos.d]# ls
+CentOS-Linux-AppStream.repo  CentOS-Linux-ContinuousRelease.repo  CentOS-Linux-Devel.repo   CentOS-Linux-FastTrack.repo		CentOS-Linux-Media.repo  CentOS-Linux-PowerTools.repo
+CentOS-Linux-BaseOS.repo     CentOS-Linux-Debuginfo.repo	  CentOS-Linux-Extras.repo  CentOS-Linux-HighAvailability.repo	CentOS-Linux-Plus.repo	 CentOS-Linux-Sources.repo
+[root@d2bbf9ce9faa yum.repos.d]# rm -rfv ./*
+
+参考阿里云镜像站修改yum源https://developer.aliyun.com/mirror/centos
+
+[root@d2bbf9ce9faa yum.repos.d]# whereis curl
+curl: /usr/bin/curl
+[root@d2bbf9ce9faa yum.repos.d]# whereis wget
+wget:
+[root@d2bbf9ce9faa yum.repos.d]# curl -o /etc/yum.repos.d/CentOS-Base.repo https://mirrors.aliyun.com/repo/Centos-vault-8.5.2111.repo
+  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                 Dload  Upload   Total   Spent    Left  Speed
+100  2495  100  2495    0     0   1115      0  0:00:02  0:00:02 --:--:--  1115
+[root@d2bbf9ce9faa yum.repos.d]# ls
+CentOS-Base.repo
+[root@d2bbf9ce9faa yum.repos.d]# cd
+[root@d2bbf9ce9faa /]# yum repolist
+Failed to set locale, defaulting to C.UTF-8
+repo id                                                                               repo name
+AppStream                                                                             CentOS-8.5.2111 - AppStream - mirrors.aliyun.com
+base                                                                                  CentOS-8.5.2111 - Base - mirrors.aliyun.com
+extras                                                                                CentOS-8.5.2111 - Extras - mirrors.aliyun.com
+
+
+[root@d2bbf9ce9faa /]# yum install -y httpd
+......省略内容......
+Complete!
+
+[root@d2bbf9ce9faa /]# systemctl status httpd
+● httpd.service - The Apache HTTP Server
+   Loaded: loaded (/usr/lib/systemd/system/httpd.service; disabled; vendor preset: disabled)
+   Active: inactive (dead)
+     Docs: man:httpd.service(8)
+[root@d2bbf9ce9faa /]# systemctl enable --now  httpd
+Created symlink /etc/systemd/system/multi-user.target.wants/httpd.service → /usr/lib/systemd/system/httpd.service.
+
+[root@d2bbf9ce9faa /]# systemctl status httpd
+● httpd.service - The Apache HTTP Server
+   Loaded: loaded (/usr/lib/systemd/system/httpd.service; enabled; vendor preset: disabled)
+   Active: active (running) since Thu 2022-12-15 08:07:32 UTC; 1s ago
+     Docs: man:httpd.service(8)
+ Main PID: 188 (httpd)
+   Status: "Started, listening on: port 80"
+    Tasks: 213 (limit: 3696)
+   Memory: 16.1M
+......省略内容......
+Dec 15 08:07:32 d2bbf9ce9faa systemd[1]: Started The Apache HTTP Server.
+Dec 15 08:07:32 d2bbf9ce9faa httpd[188]: Server configured, listening on: port 80
+
+[root@d2bbf9ce9faa ~]# echo haha > /var/www/html/index.html
+[root@d2bbf9ce9faa ~]# systemctl restart httpd
+[root@d2bbf9ce9faa ~]# curl localhost
+`haha`
+[root@d2bbf9ce9faa ~]# exit
+exit
+
+root@ubuntu001-virtual-machine:~# docker ps
+CONTAINER ID   IMAGE     COMMAND                  CREATED             STATUS             PORTS                                   NAMES
+d2bbf9ce9faa   centos    "/sbin/init"             17 minutes ago      Up 17 minutes                                              pedantic_franklin
+
+root@ubuntu001-virtual-machine:~# docker commit pedantic_franklin testcentos
+sha256:2e4796dfc411fb890c57b0a617f4b2f4ac951beee2d4aede1b46e59c11c5223b
+
+root@ubuntu001-virtual-machine:~# docker images
+REPOSITORY   TAG       IMAGE ID       CREATED          SIZE
+`testcentos`   latest    2e4796dfc411   3 seconds ago    280MB
+  centos       latest    5d0da3dc9764   15 months ago    231MB
+
+# docker history testcentos:latest 
+IMAGE          CREATED         CREATED BY                                      SIZE      COMMENT
+`2e4796dfc411   7 minutes ago   /sbin/init                                      48.5MB` 
+5d0da3dc9764   15 months ago   /bin/sh -c #(nop)  CMD ["/bin/bash"]            0B        
+<missing>      15 months ago   /bin/sh -c #(nop)  LABEL org.label-schema.sc…   0B        
+<missing>      15 months ago   /bin/sh -c #(nop) ADD file:805cb5e15fb6e0bb0…   231MB     
+# docker history centos:latest 
+IMAGE          CREATED         CREATED BY                                      SIZE      COMMENT
+5d0da3dc9764   15 months ago   /bin/sh -c #(nop)  CMD ["/bin/bash"]            0B        
+<missing>      15 months ago   /bin/sh -c #(nop)  LABEL org.label-schema.sc…   0B        
+<missing>      15 months ago   /bin/sh -c #(nop) ADD file:805cb5e15fb6e0bb0…   231MB  
+
+# docker images
+REPOSITORY   TAG       IMAGE ID       CREATED          SIZE
+testcentos   latest    2e4796dfc411   9 minutes ago    280MB
+centos       latest    5d0da3dc9764   15 months ago    231MB
+# docker ps
+CONTAINER ID   IMAGE     COMMAND                  CREATED          STATUS          PORTS                                   NAMES
+d2bbf9ce9faa   centos    "/sbin/init"             27 minutes ago   Up 27 minutes                                           pedantic_franklin
+
+# docker run -itd --privileged testcentos /sbin/init
+d9177a39a3e8ca61ab3c471fbb9bd30dd5d361267c91c08e9576b73c70b81454
+# docker ps
+CONTAINER ID   IMAGE        COMMAND                  CREATED          STATUS          PORTS                                   NAMES
+d9177a39a3e8   testcentos   "/sbin/init"             5 seconds ago    Up 4 seconds                                            vigilant_rubin
+d2bbf9ce9faa   centos       "/sbin/init"             27 minutes ago   Up 27 minutes                                           pedantic_franklin
+
+# docker exec -it vigilant_rubin /bin/bash
+[root@d9177a39a3e8 /]# curl localhost 
+`haha`
+
+[root@d9177a39a3e8 /]# cat /var/www/html/index.html 
+haha
+[root@d9177a39a3e8 /]# rpm -q httpd
+httpd-2.4.37-43.module_el8.5.0+1022+b541f3b1.x86_64
+
+[root@d9177a39a3e8 /]# systemctl status httpd
+● httpd.service - The Apache HTTP Server
+   Loaded: loaded (/usr/lib/systemd/system/httpd.service; enabled; vendor preset: disabled)
+   Active: active (running) since Thu 2022-12-15 08:24:28 UTC; 1min 52s ago
+     Docs: man:httpd.service(8)
+ Main PID: 55 (httpd)
+   Status: "Total requests: 1; Idle/Busy workers 100/0;Requests/sec: 0.00917; Bytes served/sec:   2 B/sec"
+    Tasks: 213 (limit: 3696)
+   Memory: 16.3M
+......省略内容......
+Dec 15 08:24:28 d9177a39a3e8 systemd[1]: Started The Apache HTTP Server.
+Dec 15 08:24:29 d9177a39a3e8 httpd[55]: Server configured, listening on: port 80
+
+[root@d9177a39a3e8 /]# curl localhost 
+`haha`
+[root@d9177a39a3e8 /]# exit
+
+注意：使用centos镜像时，如果容器中要使用systemctl，必须在docker run时加上--privileged和/sbin/init
+     不然容器中会报错：
+# systemctl enable --now httpd
+Created symlink /etc/systemd/system/multi-user.target.wants/httpd.service → /usr/lib/systemd/system/httpd.service.
+System has not been booted with systemd as init system (PID 1). Can't operate.
+Failed to connect to bus: Host is down
+# systemctl status  httpd
+System has not been booted with systemd as init system (PID 1). Can't operate.
+Failed to connect to bus: Host is down
+```
+
+
+
+
+
+
+##### 2.2.2.dockerfile 构建镜像
+
+```
+Dockerfile
+---文件指令集，描述如何自动创建docker镜像
+1. 是包含若干指令的文本文件，可以通过这些指令创建出docker image
+2. 文件中的指令执行后，会创建出一个个新的镜像层
+3. 文件中的注释以"#"开始
+4. 一般由4部分组成：
+   1) 基础镜像信息
+   2) 容器启动指令
+   3) 维护者信息
+   4) 镜像操作指令
+5. build context: 为镜像构建提供所需的文件或目录
+```
+
+Dockerfile常用命令
+
+|         指令          |                       作用                        |                           命令格式                           | 例子                                                         |
+| :-------------------: | :-----------------------------------------------: | :----------------------------------------------------------: | :----------------------------------------------------------- |
+|         FROM          |                   指定base镜像                    |   FROM [--platform=<platform>] <image>[:<tag>] [AS <name>]   | FROM  centos                                                 |
+| MAINTAINER<br />LABEL |                    维护者信息                     |     LABEL <key>=<value> <key>=<value> <key>=<value> ...      | LABEL "com.example.vendor"="ACME Incorporated" <br />LABEL com.example.label-with-value="foo" LABEL version="1.0" |
+|          RUN          |                  运行指定的命令                   | RUN <command>：<br />Linux: /bin/sh -c, Windows: cmd /S /C<br />RUN ["executable", "param1", "param2"] | RUN /bin/bash -c 'source $HOME/.bashrc; echo $HOME'<br />RUN ["/bin/bash", "-c", "echo hello"]<br />RUN ["c:\\windows\\system32\\tasklist.exe"] |
+|          ADD          | 将文件从build context复制到镜像中<br />可以解压缩 | ADD [--chown=<user>:<group>] [--checksum=<checksum>] <src>... <dest><br/>ADD [--chown=<user>:<group>] ["<src>",... "<dest>"] | ADD hom* /mydir/<br /><br />ADD --chown=55:mygroup files* /somedir/ |
+|         COPY          |         将文件从build context复制到镜像中         | COPY [--chown=<user>:<group>] <src>... <dest><br/>COPY [--chown=<user>:<group>] ["<src>",... "<dest>"] | COPY hom* /mydir/<br />COPY --chown=55:mygroup files* /somedir/ |
+|          ENV          |                   设置环境变量                    |                    ENV <key>=<value> ...                     | ENV MY_NAME="John Doe"<br/>ENV MY_DOG=Rex\ The\ Dog<br/>ENV MY_CAT=fluffy |
+|        EXPOSE         |            指定容器中的应用坚挺的端口             |             EXPOSE <port> [<port>/<protocol>...]             | EXPOSE 80/tcp<br/>EXPOSE 80/udp                              |
+|         USER          |                设置启动容器的用户                 |                    USER <user>[:<group>]                     | USER tommy                                                   |
+|          CMD          |       设置在容器启动时运行指定的脚本或命令        | `CMD ["executable","param1","param2"]` (*exec* form, this is the preferred form) <br />`CMD ["param1","param2"]` (as *default parameters to ENTRYPOINT*) <br />`CMD command param1 param2` (*shell* form) | CMD echo "This is a test." \| wc -<br />CMD ["/usr/bin/wc","--help"] |
+|      ENTRYPOINT       |      指定的是一个可执行的脚本或者程序的路径       |               ENTRYPOINT command param1 param2               | FROM ubuntu<br/>ENTRYPOINT ["top", "-b"]<br/>CMD ["-c"]<br />-------------<br />FROM debian:stable<br/>RUN apt-get update && apt-get install -y --force-yes apache2<br/>EXPOSE 80 443<br/>VOLUME ["/var/www", "/var/log/apache2", "/etc/apache2"]<br/>ENTRYPOINT ["/usr/sbin/apache2ctl", "-D", "FOREGROUND"] |
+|        VOLUME         |      将文件或目录声明为volume，挂载到容器中       |                       VOLUME ["/data"]                       | FROM ubuntu <br />RUN mkdir /myvol <br />RUN echo "hello world" > /myvol/greeting <br />VOLUME /myvol |
+|        WORKDIR        |              设置镜像的当前工作目录               |                   WORKDIR /path/to/workdir                   | WORKDIR /a<br/>WORKDIR b<br/>WORKDIR c<br/>RUN pwd           |
+
+```
+官网https://docs.docker.com/engine/reference/builder/
+```
+
+dockfile示例
 
 
 
@@ -442,19 +1005,11 @@ CentOS Linux release 8.4.2105
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
+```
+疑问：
+1. dockerfile 创建时，是否自动拉取基础镜像；
+2. docker tag后，删除docker imageID，是否两个全部删除---
+```
 
 
 
@@ -493,17 +1048,17 @@ CentOS Linux release 8.4.2105
 
 #### A2.相关软件
 
-| step |   NAME   |                             URL                              |         FUNC          |
-| :--: | :------: | :----------------------------------------------------------: | :-------------------: |
-|  1   | 欧路词典 |                    https://www.eudic.net/                    |       翻译软件        |
-|  2   |  Typora  |                     https://typoraio.cn                      |   MarkDown格式文档    |
-|  3   |  VMware  |                   https://www.vmware.com/                    |      虚拟化软件       |
-|  4   |  ubunt   |                     https://ubuntu.com/                      |      系统光盘iso      |
-|  5   |  docker  |       https://docs.docker.com/desktop/install/ubuntu/        |         国外          |
-|      |          | https://developer.aliyun.com/mirror/docker-ce?spm=a2c6h.13651102.0.0.4ea21b11CvJUSb |      国内阿里云       |
-|      |          | https://cr.console.aliyun.com/cn-hangzhou/instances/mirrors  | 仓库加速器daemon.json |
-|  6   |          |                                                              |                       |
-|      |          |                                                              |                       |
+| step |   NAME   |                             URL                              |            FUNC            |
+| :--: | :------: | :----------------------------------------------------------: | :------------------------: |
+|  1   | 欧路词典 |                    https://www.eudic.net/                    |          翻译软件          |
+|  2   |  Typora  |                     https://typoraio.cn                      |      MarkDown格式文档      |
+|  3   |  VMware  |                   https://www.vmware.com/                    |         虚拟化软件         |
+|  4   |  ubunt   |                     https://ubuntu.com/                      |        系统光盘iso         |
+|  5   |  docker  |       https://docs.docker.com/desktop/install/ubuntu/        |            国外            |
+|      |          | https://developer.aliyun.com/mirror/docker-ce?spm=a2c6h.13651102.0.0.4ea21b11CvJUSb |         国内阿里云         |
+|      |          | https://cr.console.aliyun.com/cn-hangzhou/instances/mirrors  |   仓库加速器daemon.json    |
+|      |          |              https://docs.docker.com/reference/              | docker命令及dockerfile介绍 |
+|  6   |          |                                                              |                            |
 
 
 
@@ -519,14 +1074,22 @@ CentOS Linux release 8.4.2105
 
 
 
-#### A4.vi快捷键
+#### A4.vim
 
-| step |    快捷键     |       FUNC        |
-| :--: | :-----------: | :---------------: |
-|  1   |   :%s/^/#/g   | 全部行首快速添加# |
-|  2   |   :%s/$/#/g   | 全部行尾快速添加# |
-|  3   | :r !seq 1 100 |     递归数字      |
-|  4   |               |                   |
+| mode |   模式   |                |              |                     |
+| :--: | :------: | :------------: | :----------: | :-----------------: |
+|  1   | 命令模式 |  <kbd>i</kbd>  |              |   默认的工作模式    |
+|  2   | 输入模式 | <kbd>Esc</kbd> | -- INSERT -- |    退出输入模式     |
+|  3   | 末行模式 |      :wq       |              | write quit 保存退出 |
+
+
+
+| step |    快捷键     |                FUNC                |
+| :--: | :-----------: | :--------------------------------: |
+|  1   |   :%s/^/#/g   |         全部行首快速添加#          |
+|  2   |   :%s/$/#/g   |         全部行尾快速添加#          |
+|  3   | :r !seq 1 100 |              递归数字              |
+|  4   | :r dockerfile | 导入所在文件夹下的dockerfile的内容 |
 
 
 
