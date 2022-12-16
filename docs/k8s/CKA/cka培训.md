@@ -7,6 +7,7 @@
 #### 1.1.容器技术发展
 
 #docker镜像
+
 ```
 ---打包了应用及其依赖(包括完整操作系统的所有文件和目录)
 ---包含了应用运行所需要的所有依赖
@@ -296,8 +297,8 @@ CONTAINER ID   IMAGE     COMMAND              CREATED        STATUS         PORT
 --- 直接进入已启容器的命令终端，不会启用新的进程
 --- Usage:  docker attach [OPTIONS] CONTAINER
 --- 通过<ctrl+p><ctrl+q> 退出attach命令 
---- 官网：https://docs.docker.com/engine/reference/commandline/attach/
 ```
+> 官网：https://docs.docker.com/engine/reference/commandline/attach/
 ```bash
 A场景：-it interactive交互模式，tty终端。可以用<ctrl+p><ctrl+q>快捷键退出attach
 # docker run -d -it centos /bin/bash -c 'while true; do sleep 1; echo hello; done'
@@ -446,9 +447,8 @@ CentOS Linux release 8.4.2105
 Linux操作系统结构
 --- kernel: Linux系统内核，/boot
 --- rootfs: Linux系统中的用户空间文件系统，除了/boot外的其他文件目录
-
-官网https://www.kernel.org/
 ```
+> 官网https://www.kernel.org/
 
 ```bash
 # cd /boot
@@ -484,7 +484,7 @@ Error response from daemon: conflict: unable to delete dabbfbe0c57b (must be for
 
 # docker rmi httpd:latest 
 Untagged: httpd:latest
-root@ubuntu001-virtual-machine:~# docker images
+# docker images
 REPOSITORY   TAG       IMAGE ID       CREATED         SIZE
 httpd        v9.1      dabbfbe0c57b   11 months ago   144MB
 
@@ -868,14 +868,14 @@ Dec 15 08:07:32 d2bbf9ce9faa httpd[188]: Server configured, listening on: port 8
 [root@d2bbf9ce9faa ~]# exit
 exit
 
-root@ubuntu001-virtual-machine:~# docker ps
+# docker ps
 CONTAINER ID   IMAGE     COMMAND                  CREATED             STATUS             PORTS                                   NAMES
 d2bbf9ce9faa   centos    "/sbin/init"             17 minutes ago      Up 17 minutes                                              pedantic_franklin
 
-root@ubuntu001-virtual-machine:~# docker commit pedantic_franklin testcentos
+# docker commit pedantic_franklin testcentos
 sha256:2e4796dfc411fb890c57b0a617f4b2f4ac951beee2d4aede1b46e59c11c5223b
 
-root@ubuntu001-virtual-machine:~# docker images
+# docker images
 REPOSITORY   TAG       IMAGE ID       CREATED          SIZE
 `testcentos`   latest    2e4796dfc411   3 seconds ago    280MB
   centos       latest    5d0da3dc9764   15 months ago    231MB
@@ -945,10 +945,6 @@ Failed to connect to bus: Host is down
 ```
 
 
-
-
-
-
 ##### 2.2.2.dockerfile 构建镜像
 
 ```
@@ -967,49 +963,764 @@ Dockerfile
 
 Dockerfile常用命令
 
-|         指令          |                       作用                        |                           命令格式                           | 例子                                                         |
-| :-------------------: | :-----------------------------------------------: | :----------------------------------------------------------: | :----------------------------------------------------------- |
-|         FROM          |                   指定base镜像                    |   FROM [--platform=<platform>] <image>[:<tag>] [AS <name>]   | FROM  centos                                                 |
-| MAINTAINER<br />LABEL |                    维护者信息                     |     LABEL <key>=<value> <key>=<value> <key>=<value> ...      | LABEL "com.example.vendor"="ACME Incorporated" <br />LABEL com.example.label-with-value="foo" LABEL version="1.0" |
-|          RUN          |                  运行指定的命令                   | RUN <command>：<br />Linux: /bin/sh -c, Windows: cmd /S /C<br />RUN ["executable", "param1", "param2"] | RUN /bin/bash -c 'source $HOME/.bashrc; echo $HOME'<br />RUN ["/bin/bash", "-c", "echo hello"]<br />RUN ["c:\\windows\\system32\\tasklist.exe"] |
-|          ADD          | 将文件从build context复制到镜像中<br />可以解压缩 | ADD [--chown=<user>:<group>] [--checksum=<checksum>] <src>... <dest><br/>ADD [--chown=<user>:<group>] ["<src>",... "<dest>"] | ADD hom* /mydir/<br /><br />ADD --chown=55:mygroup files* /somedir/ |
-|         COPY          |         将文件从build context复制到镜像中         | COPY [--chown=<user>:<group>] <src>... <dest><br/>COPY [--chown=<user>:<group>] ["<src>",... "<dest>"] | COPY hom* /mydir/<br />COPY --chown=55:mygroup files* /somedir/ |
-|          ENV          |                   设置环境变量                    |                    ENV <key>=<value> ...                     | ENV MY_NAME="John Doe"<br/>ENV MY_DOG=Rex\ The\ Dog<br/>ENV MY_CAT=fluffy |
-|        EXPOSE         |            指定容器中的应用坚挺的端口             |             EXPOSE <port> [<port>/<protocol>...]             | EXPOSE 80/tcp<br/>EXPOSE 80/udp                              |
-|         USER          |                设置启动容器的用户                 |                    USER <user>[:<group>]                     | USER tommy                                                   |
-|          CMD          |       设置在容器启动时运行指定的脚本或命令        | `CMD ["executable","param1","param2"]` (*exec* form, this is the preferred form) <br />`CMD ["param1","param2"]` (as *default parameters to ENTRYPOINT*) <br />`CMD command param1 param2` (*shell* form) | CMD echo "This is a test." \| wc -<br />CMD ["/usr/bin/wc","--help"] |
-|      ENTRYPOINT       |      指定的是一个可执行的脚本或者程序的路径       |               ENTRYPOINT command param1 param2               | FROM ubuntu<br/>ENTRYPOINT ["top", "-b"]<br/>CMD ["-c"]<br />-------------<br />FROM debian:stable<br/>RUN apt-get update && apt-get install -y --force-yes apache2<br/>EXPOSE 80 443<br/>VOLUME ["/var/www", "/var/log/apache2", "/etc/apache2"]<br/>ENTRYPOINT ["/usr/sbin/apache2ctl", "-D", "FOREGROUND"] |
-|        VOLUME         |      将文件或目录声明为volume，挂载到容器中       |                       VOLUME ["/data"]                       | FROM ubuntu <br />RUN mkdir /myvol <br />RUN echo "hello world" > /myvol/greeting <br />VOLUME /myvol |
-|        WORKDIR        |              设置镜像的当前工作目录               |                   WORKDIR /path/to/workdir                   | WORKDIR /a<br/>WORKDIR b<br/>WORKDIR c<br/>RUN pwd           |
+见附录A.6
+
+|       指令       |                     作用                     |                           命令格式                           | 例子                                                         |
+| :--------------: | :------------------------------------------: | :----------------------------------------------------------: | :----------------------------------------------------------- |
+|       FROM       |                 指定base镜像                 |  `FROM [--platform=<platform>] <image>[:<tag>] [AS <name>]`  | FROM  centos                                                 |
+| MAINTAINER LABEL |                  维护者信息                  |    `LABEL <key>=<value> <key>=<value> <key>=<value> ...`     | LABEL "com.example.vendor"="ACME Incorporated"  <br/>LABEL com.example.label-with-value="foo" <br/>LABEL version="1.0" |
+|       RUN        |                运行指定的命令                | RUN <command>： <br/>Linux: /bin/sh -c  <br/>Windows: cmd /S /C <br/> <br/>RUN ["executable", "param1", "param2"] | RUN /bin/bash -c 'source $HOME/.bashrc; echo $HOME' <br/> <br/>RUN ["/bin/bash", "-c", "echo hello"] <br/>RUN ["c:\windows\system32\tasklist.exe"] |
+|       ADD        | 将文件从build context复制到镜像中 可以解压缩 | `ADD [--chown=<user>:<group>] [--checksum=<checksum>] <src>... <dest>`  <br/>`ADD [--chown=<user>:<group>] ["<src>",... "<dest>"]` | ADD hom* /mydir/  <br/>ADD --chown=55:mygroup files* /somedir/ |
+|       COPY       |      将文件从build context复制到镜像中       | `COPY [--chown=<user>:<group>] <src>... <dest>`  <br/>`COPY [--chown=<user>:<group>] ["<src>",... "<dest>"]` | COPY hom* /mydir/  <br/>COPY --chown=55:mygroup files* /somedir/ |
+|       ENV        |                 设置环境变量                 |                   `ENV <key>=<value> ...`                    | ENV MY_NAME="John Doe" <br/>ENV MY_DOG=Rex\ The\ Dog <br/>ENV MY_CAT=fluffy |
+|      EXPOSE      |          指定容器中的应用坚挺的端口          |            `EXPOSE <port> [<port>/<protocol>...]`            | EXPOSE 80/tcp <br/>EXPOSE 80/udp                             |
+|       USER       |              设置启动容器的用户              |                   `USER <user>[:<group>]`                    | USER tommy                                                   |
+|       CMD        |     设置在容器启动时运行指定的脚本或命令     | CMD ["executable","param1","param2"] (*exec* form, this is the preferred form)  CMD ["param1","param2"] (as *default parameters to ENTRYPOINT*) CMD command param1 param2 (*shell* form) | CMD echo "This is a test." \|wc - <br/>CMD ["/usr/bin/wc","--help"] |
+|    ENTRYPOINT    |    指定的是一个可执行的脚本或者程序的路径    |               ENTRYPOINT command param1 param2               | FROM ubuntu<br/>ENTRYPOINT ["top", "-b"]<br/>CMD ["-c"]  <br/> <br/>FROM debian:stable <br/>RUN apt-get update && apt-get install -y --force-yes apache2  <br/>EXPOSE 80 443  <br/>VOLUME ["/var/www", "/var/log/apache2", "/etc/apache2"] <br/>ENTRYPOINT ["/usr/sbin/apache2ctl", "-D", "FOREGROUND"] |
+|      VOLUME      |    将文件或目录声明为volume，挂载到容器中    |                       VOLUME ["/data"]                       | FROM ubuntu <br/>RUN mkdir /myvol  <br/>RUN echo "hello world" > /myvol/greeting <br/>VOLUME /myvol |
+|     WORKDIR      |            设置镜像的当前工作目录            |                   WORKDIR /path/to/workdir                   | WORKDIR /a <br>WORKDIR b <br/>WORKDIR c <br/>RUN pwd         |
+>  官网https://docs.docker.com/engine/reference/builder/
+
+
+
+```bash
+dockerfile示例
+1. 本地创建index.html
+# echo hello > index.html
+
+2. # vim dockerfile
+```
+
+```dockerfile
+FROM httpd
+COPY index.html /
+RUN echo haha
+```
+```bash
+3. docker build
+# docker build -t testhttpd01 .
+```
+```bash
+过程记录:
+# docker images
+REPOSITORY   TAG       IMAGE ID       CREATED         SIZE
+
+# cat index.html 
+hello
+f# cat dockerfile 
+FROM  httpd
+COPY index.html /
+RUN echo haha
+
+# docker build -t testhttpd01 .
+Sending build context to Docker daemon  3.072kB
+Step 1/3 : FROM  httpd
+latest: Pulling from library/httpd
+a2abf6c4d29d: Already exists 
+dcc4698797c8: Pull complete 
+41c22baa66ec: Pull complete 
+67283bbdd4a0: Pull complete 
+d982c879c57e: Pull complete 
+Digest: sha256:0954cc1af252d824860b2c5dc0a10720af2b7a3d3435581ca788dff8480c7b32
+Status: Downloaded newer image for httpd:latest
+ ---> dabbfbe0c57b
+Step 2/3 : COPY index.html /
+ ---> e1e6bd941212
+Step 3/3 : RUN echo haha
+ ---> Running in f9b581ca2762
+haha
+Removing intermediate container f9b581ca2762
+ ---> 17de6194e75f
+Successfully built 17de6194e75f
+Successfully tagged testhttpd01:latest
+
+
+# docker images
+REPOSITORY    TAG       IMAGE ID       CREATED          SIZE
+testhttpd01   latest    17de6194e75f   29 seconds ago   144MB
+httpd         latest    dabbfbe0c57b   12 months ago    144MB
+
+# docker history testhttpd01:latest 
+IMAGE          CREATED              CREATED BY                                      SIZE      COMMENT
+`17de6194e75f   About a minute ago   /bin/sh -c echo haha                            0B`        
+`e1e6bd941212   About a minute ago   /bin/sh -c #(nop) COPY file:44be4544761aa076…   6B`        
+dabbfbe0c57b   12 months ago        /bin/sh -c #(nop)  CMD ["httpd-foreground"]     0B        
+<missing>      12 months ago        /bin/sh -c #(nop)  EXPOSE 80                    0B        
+<missing>      12 months ago        /bin/sh -c #(nop) COPY file:c432ff61c4993ecd…   138B      
+<missing>      12 months ago        /bin/sh -c #(nop)  STOPSIGNAL SIGWINCH          0B        
+<missing>      12 months ago        /bin/sh -c set -eux;   savedAptMark="…          60.5MB    
+<missing>      12 months ago        /bin/sh -c #(nop)  ENV HTTPD_PATCHES=           0B        
+<missing>      12 months ago        /bin/sh -c #(nop)  ENV HTTPD_SHA256=0127f7dc…   0B        
+<missing>      12 months ago        /bin/sh -c #(nop)  ENV HTTPD_VERSION=2.4.52     0B        
+<missing>      12 months ago        /bin/sh -c set -eux;  apt-get update;  apt-g…   2.63MB    
+<missing>      12 months ago        /bin/sh -c #(nop) WORKDIR /usr/local/apache2    0B        
+<missing>      12 months ago        /bin/sh -c mkdir -p "$HTTPD_PREFIX"  && chow…   0B        
+<missing>      12 months ago        /bin/sh -c #(nop)  ENV PATH=/usr/local/apach…   0B        
+<missing>      12 months ago        /bin/sh -c #(nop)  ENV HTTPD_PREFIX=/usr/loc…   0B        
+<missing>      12 months ago        /bin/sh -c #(nop)  CMD ["bash"]                 0B        
+<missing>      12 months ago        /bin/sh -c #(nop) ADD file:09675d11695f65c55…   80.4MB    
+f# docker history httpd:latest 
+IMAGE          CREATED         CREATED BY                                      SIZE      COMMENT
+dabbfbe0c57b   12 months ago   /bin/sh -c #(nop)  CMD ["httpd-foreground"]     0B        
+<missing>      12 months ago   /bin/sh -c #(nop)  EXPOSE 80                    0B        
+<missing>      12 months ago   /bin/sh -c #(nop) COPY file:c432ff61c4993ecd…   138B      
+<missing>      12 months ago   /bin/sh -c #(nop)  STOPSIGNAL SIGWINCH          0B        
+<missing>      12 months ago   /bin/sh -c set -eux;   savedAptMark="…          60.5MB    
+<missing>      12 months ago   /bin/sh -c #(nop)  ENV HTTPD_PATCHES=           0B        
+<missing>      12 months ago   /bin/sh -c #(nop)  ENV HTTPD_SHA256=0127f7dc…   0B        
+<missing>      12 months ago   /bin/sh -c #(nop)  ENV HTTPD_VERSION=2.4.52     0B        
+<missing>      12 months ago   /bin/sh -c set -eux;  apt-get update;  apt-g…   2.63MB    
+<missing>      12 months ago   /bin/sh -c #(nop) WORKDIR /usr/local/apache2    0B        
+<missing>      12 months ago   /bin/sh -c mkdir -p "$HTTPD_PREFIX"  && chow…   0B        
+<missing>      12 months ago   /bin/sh -c #(nop)  ENV PATH=/usr/local/apach…   0B        
+<missing>      12 months ago   /bin/sh -c #(nop)  ENV HTTPD_PREFIX=/usr/loc…   0B        
+<missing>      12 months ago   /bin/sh -c #(nop)  CMD ["bash"]                 0B        
+<missing>      12 months ago   /bin/sh -c #(nop) ADD file:09675d11695f65c55…   80.4MB 
+```
+
+
+
+```bash
+容器镜像缓存特性
+--- docker会缓存已有镜像的镜像层，构建或下载镜像时，如果某镜像层已经存在，则直接使用，无需重新创建或下载
+```
+
+
+
+```bash
+在上面dockerfile里末尾添加一条指令：MAINTAINER test@163.com
+
+# echo "MAINTAINER test@163.com" >> dockerfile 
+
+# docker build -t testhttpd02 .
+Sending build context to Docker daemon  3.072kB
+Step 1/4 : FROM  httpd
+ ---> dabbfbe0c57b
+Step 2/4 : COPY index.html /
+ ---> `Using cache`
+ ---> e1e6bd941212
+Step 3/4 : RUN echo haha
+ ---> `Using cache`
+ ---> 17de6194e75f
+Step 4/4 : MAINTAINER test@163.com
+ ---> Running in 49f2c610e9c4
+Removing intermediate container 49f2c610e9c4
+ ---> f1764c18d0fc
+Successfully built f1764c18d0fc
+Successfully tagged testhttpd02:latest
+
+# docker images
+REPOSITORY    TAG       IMAGE ID       CREATED              SIZE
+testhttpd02   latest    f1764c18d0fc   About a minute ago   144MB
+testhttpd01   latest    17de6194e75f   23 minutes ago       144MB
+httpd         latest    dabbfbe0c57b   12 months ago        144MB
+
+# docker history testhttpd02
+IMAGE          CREATED          CREATED BY                                      SIZE      COMMENT
+`f1764c18d0fc   2 minutes ago    /bin/sh -c #(nop)  MAINTAINER test@163.com      0B`        
+17de6194e75f   23 minutes ago   /bin/sh -c echo haha                            0B        
+e1e6bd941212   23 minutes ago   /bin/sh -c #(nop) COPY file:44be4544761aa076…   6B        
+dabbfbe0c57b   12 months ago    /bin/sh -c #(nop)  CMD ["httpd-foreground"]     0B        
+<missing>      12 months ago    /bin/sh -c #(nop)  EXPOSE 80                    0B        
+<missing>      12 months ago    /bin/sh -c #(nop) COPY file:c432ff61c4993ecd…   138B      
+<missing>      12 months ago    /bin/sh -c #(nop)  STOPSIGNAL SIGWINCH          0B        
+<missing>      12 months ago    /bin/sh -c set -eux;   savedAptMark="…          60.5MB    
+<missing>      12 months ago    /bin/sh -c #(nop)  ENV HTTPD_PATCHES=           0B        
+<missing>      12 months ago    /bin/sh -c #(nop)  ENV HTTPD_SHA256=0127f7dc…   0B        
+<missing>      12 months ago    /bin/sh -c #(nop)  ENV HTTPD_VERSION=2.4.52     0B        
+<missing>      12 months ago    /bin/sh -c set -eux;  apt-get update;  apt-g…   2.63MB    
+<missing>      12 months ago    /bin/sh -c #(nop) WORKDIR /usr/local/apache2    0B        
+<missing>      12 months ago    /bin/sh -c mkdir -p "$HTTPD_PREFIX"  && chow…   0B        
+<missing>      12 months ago    /bin/sh -c #(nop)  ENV PATH=/usr/local/apach…   0B        
+<missing>      12 months ago    /bin/sh -c #(nop)  ENV HTTPD_PREFIX=/usr/loc…   0B        
+<missing>      12 months ago    /bin/sh -c #(nop)  CMD ["bash"]                 0B        
+<missing>      12 months ago    /bin/sh -c #(nop) ADD file:09675d11695f65c55…   80.4MB    
+```
+
+
+
+```bash
+对比试验，如果dockerfile里的指令进行了不同行的顺序交换，即使全部内容不变，那么也会重新创建，不会使用上面的缓存技术
+# cat dockerfile 
+FROM  httpd
+MAINTAINER test@163.com
+COPY index.html /
+RUN echo haha
+
+# docker build -t testhttpd03 .
+Sending build context to Docker daemon  3.072kB
+Step 1/4 : FROM  httpd
+ ---> dabbfbe0c57b
+Step 2/4 : MAINTAINER test@163.com
+ ---> Running in 3bbf21256403
+Removing intermediate container 3bbf21256403
+ ---> da7b660ac80d
+Step 3/4 : COPY index.html /
+ ---> fb85b0e2235a
+Step 4/4 : RUN echo haha
+ ---> Running in fb933e50449e
+haha
+Removing intermediate container fb933e50449e
+ ---> b710b771c28c
+Successfully built b710b771c28c
+Successfully tagged testhttpd03:latest
+
+# docker images
+REPOSITORY    TAG       IMAGE ID       CREATED          SIZE
+`testhttpd03   latest    b710b771c28c   9 seconds ago    144MB`
+testhttpd02   latest    f1764c18d0fc   5 minutes ago    144MB
+testhttpd01   latest    17de6194e75f   26 minutes ago   144MB
+testcentos    latest    2e4796dfc411   18 hours ago     280MB
+hello         latest    e9055ad9d1d4   18 hours ago     141MB
+nginx         latest    605c77e624dd   11 months ago    141MB
+httpd         latest    dabbfbe0c57b   12 months ago    144MB
+centos        latest    5d0da3dc9764   15 months ago    231MB
+# docker history testhttpd03
+IMAGE          CREATED          CREATED BY                                      SIZE      COMMENT
+b710b771c28c   18 seconds ago   /bin/sh -c echo haha                            0B        
+fb85b0e2235a   19 seconds ago   /bin/sh -c #(nop) COPY file:44be4544761aa076…   6B        
+da7b660ac80d   19 seconds ago   /bin/sh -c #(nop)  MAINTAINER test@163.com      0B        
+dabbfbe0c57b   12 months ago    /bin/sh -c #(nop)  CMD ["httpd-foreground"]     0B        
+<missing>      12 months ago    /bin/sh -c #(nop)  EXPOSE 80                    0B        
+<missing>      12 months ago    /bin/sh -c #(nop) COPY file:c432ff61c4993ecd…   138B      
+<missing>      12 months ago    /bin/sh -c #(nop)  STOPSIGNAL SIGWINCH          0B        
+<missing>      12 months ago    /bin/sh -c set -eux;   savedAptMark="$(apt-m…   60.5MB    
+<missing>      12 months ago    /bin/sh -c #(nop)  ENV HTTPD_PATCHES=           0B        
+<missing>      12 months ago    /bin/sh -c #(nop)  ENV HTTPD_SHA256=0127f7dc…   0B        
+<missing>      12 months ago    /bin/sh -c #(nop)  ENV HTTPD_VERSION=2.4.52     0B        
+<missing>      12 months ago    /bin/sh -c set -eux;  apt-get update;  apt-g…   2.63MB    
+<missing>      12 months ago    /bin/sh -c #(nop) WORKDIR /usr/local/apache2    0B        
+<missing>      12 months ago    /bin/sh -c mkdir -p "$HTTPD_PREFIX"  && chow…   0B        
+<missing>      12 months ago    /bin/sh -c #(nop)  ENV PATH=/usr/local/apach…   0B        
+<missing>      12 months ago    /bin/sh -c #(nop)  ENV HTTPD_PREFIX=/usr/loc…   0B        
+<missing>      12 months ago    /bin/sh -c #(nop)  CMD ["bash"]                 0B        
+<missing>      12 months ago    /bin/sh -c #(nop) ADD file:09675d11695f65c55…   80.4MB    
+```
+
+#### 2.3.容器镜像命名
+```
+镜像命名格式
+--- image name = repository:tag
+--- tag 一般用于描述镜像版本。若未指定tag，则默认为"latest"
+```
+```bash
+# docker images
+REPOSITORY    TAG       IMAGE ID       CREATED          SIZE
+testhttpd03   latest    b710b771c28c   9 minutes ago    144MB
+testhttpd02   latest    f1764c18d0fc   15 minutes ago   144MB
+testhttpd01   latest    17de6194e75f   36 minutes ago   144MB
+httpd         latest    dabbfbe0c57b   12 months ago    144MB
+# docker tag httpd:latest httpd:v8.1
+# docker images
+REPOSITORY    TAG       IMAGE ID       CREATED          SIZE
+testhttpd03   latest    b710b771c28c   10 minutes ago   144MB
+testhttpd02   latest    f1764c18d0fc   15 minutes ago   144MB
+testhttpd01   latest    17de6194e75f   37 minutes ago   144MB
+httpd         latest    dabbfbe0c57b   12 months ago    144MB
+httpd         v8.1      dabbfbe0c57b   12 months ago    144MB
+
+因为有testhttpd等依赖镜像，所以无法通过imageID将两个image一起删除
+# docker rmi dabbfbe0c57b -f
+Error response from daemon: conflict: unable to delete dabbfbe0c57b (cannot be forced) - image has dependent child images
+
+首先删除testhttpd镜像，再来删除httpd镜像
+# docker rmi testhttpd03
+Untagged: testhttpd03:latest
+Deleted: sha256:b710b771c28c0ab1bcc0278131fc8073f03e72c4f1bad2b3b67161f312fa197d
+Deleted: sha256:fb85b0e2235a3bce40a258b510173c3d4ae753fa6fa570ecc8092832657f28b4
+Deleted: sha256:da7b660ac80db9931d90d2c7312e86c5e31c91b25b23cf7a007822c36614658e
+# docker rmi testhttpd02
+Untagged: testhttpd02:latest
+Deleted: sha256:f1764c18d0fcdcb940c35566518f483ce2864dc3394bc2aec79f6162fd7934b5
+# docker rmi testhttpd01
+Untagged: testhttpd01:latest
+Deleted: sha256:17de6194e75f6d68a9ab365b5c7b976646ef938aa8b788576cbedb0346bf3ffb
+Deleted: sha256:e1e6bd9412124c49400db4e852fed360a62e03be8652b7d23083b7aeb1c2d697
+Deleted: sha256:f19d5718d851e18cd24667f8d0a21e21f57494ac162c3f583ab9235e91cdfc00
+# docker images
+REPOSITORY   TAG       IMAGE ID       CREATED         SIZE
+httpd        latest    dabbfbe0c57b   12 months ago   144MB
+httpd        v8.1      dabbfbe0c57b   12 months ago   144MB
+# docker rmi dabbfbe0c57b -f
+Untagged: httpd:latest
+Untagged: httpd:v8.1
+Untagged: httpd@sha256:0954cc1af252d824860b2c5dc0a10720af2b7a3d3435581ca788dff8480c7b32
+Deleted: sha256:dabbfbe0c57b6e5cd4bc089818d3f664acfad496dc741c9a501e72d15e803b34
+Deleted: sha256:0e16a5a61bcb4e6b2bb2d746c2d6789d6c0b66198208b831f74b52198d744189
+Deleted: sha256:f79670638074ff7fd293e753c11ea2ca0a2d92ab516d2f6b0bac3f4c6fed5d86
+Deleted: sha256:189d55cdd18e4501032bb700a511c2d69c82fd75f1b619b5218ea6870e71e4aa
+Deleted: sha256:cb038ed3e490a8c0f195cf135ac0d27dd8d3872598b1cb858c2666f2dae95a61
+
+# docker images
+REPOSITORY   TAG       IMAGE ID       CREATED         SIZE
+```
+
+#### 2.4.搭建私有仓库
+```
+仓库分两类：
+--- 公有镜像仓库：dockerhub.com     quay.io
+--- 私有镜像仓库：docker registry  harbor
+```
+##### 2.4.1.搭建私有仓库docker registry
+```bash
+$ sudo -i
+# mkdir /root/myregistry
+
+# docker run -d -p 1000:5000 -v /root/myregistry:/var/lib/registry registry
+Unable to find image 'registry:latest' locally
+latest: Pulling from library/registry
+79e9f2f55bf5: Pull complete 
+0d96da54f60b: Pull complete 
+5b27040df4a2: Pull complete 
+e2ead8259a04: Pull complete 
+3790aef225b9: Pull complete 
+Digest: sha256:169211e20e2f2d5d115674681eb79d21a217b296b43374b8e39f97fcf866b375
+Status: Downloaded newer image for registry:latest
+f50ba994cd98200ee7afbf389063fd8d868bbc453d872e59e667e5173b61efed
+# docker ps
+CONTAINER ID   IMAGE        COMMAND                  CREATED          STATUS          PORTS                                       NAMES
+f50ba994cd98   registry     "/entrypoint.sh /etc…"   40 seconds ago   Up 39 seconds   0.0.0.0:1000->5000/tcp, :::1000->5000/tcp   mystifying_allen
+# docker images
+REPOSITORY   TAG       IMAGE ID       CREATED         SIZE
+hello        latest    e9055ad9d1d4   23 hours ago    141MB
+registry     latest    b8604a3fe854   13 months ago   26.2MB
+
+# vim /etc/docker/daemon.json 
+# cat /etc/docker/daemon.json 
+{
+ "registry-mirrors": ["https://ktjk1d0g.mirror.aliyuncs.com"],
+ "insecure-registries": ["192.168.1.240:1000"]
+}
+
+# systemctl daemon-reload
+# systemctl restart docker
+
+# docker ps
+CONTAINER ID   IMAGE     COMMAND   CREATED   STATUS    PORTS     NAMES
+# docker ps -a
+CONTAINER ID   IMAGE        COMMAND                  CREATED         STATUS                            PORTS     NAMES
+f50ba994cd98   registry     "/entrypoint.sh /etc…"   6 minutes ago   Exited (2) 10 seconds ago                   mystifying_allen
+# docker start mystifying_allen 
+mystifying_allen
+# docker ps
+CONTAINER ID   IMAGE      COMMAND                  CREATED         STATUS        PORTS                                       NAMES
+f50ba994cd98   registry   "/entrypoint.sh /etc…"   6 minutes ago   Up 1 second   0.0.0.0:1000->5000/tcp, :::1000->5000/tcp   mystifying_allen
+
+# docker tag hello:latest 192.168.1.240:1000/library/hello:v1.0
+# docker push 192.168.1.240:1000/library/hello:v1.0
+The push refers to repository [192.168.1.240:1000/library/hello]
+f5a093ffdc14: Pushed 
+d874fd2bc83b: Pushed 
+32ce5f6a5106: Pushed 
+f1db227348d0: Pushed 
+b8d6e692a25e: Pushed 
+e379e8aedd4d: Pushed 
+2edcec3590a4: Pushed 
+v1.0: digest: sha256:0dac7c6943143d8122ee23e04aeb7757d46ce8b7392cb86143b0f45c937516a4 size: 1778
+
+
+# docker images
+REPOSITORY                         TAG       IMAGE ID       CREATED         SIZE
+192.168.1.240:1000/library/hello   v1.0      e9055ad9d1d4   23 hours ago    141MB
+hello                              latest    e9055ad9d1d4   23 hours ago    141MB
+registry                           latest    b8604a3fe854   13 months ago   26.2MB
+
+# docker image inspect registry:latest 
+[
+    {
+        "Id": "sha256:b8604a3fe8543c9e6afc29550de05b36cd162a97aa9b2833864ea8a5be11f3e2",
+        "RepoTags": [
+            "registry:latest"
+        ],
+       ...................
+       "ContainerConfig": {
+            "Image": "sha256:0d072f831f2a6137443ac3a59c3814d19d84047afdf81ccc8ddb3b41930c2fcd",
+            "Volumes": {
+                "/var/lib/registry": {}
+       .................省略部分.............
+       "Config": {
+            "Hostname": "",
+            "Domainname": "",
+            "User": "",
+            "ExposedPorts": {
+                "5000/tcp": {}
+            },
+       .................省略部分.............
+
+# curl -v  http://localhost:1000
+*   Trying 127.0.0.1:1000...
+* Connected to localhost (127.0.0.1) port 1000 (#0)
+> GET / HTTP/1.1
+> Host: localhost:1000
+> User-Agent: curl/7.81.0
+> Accept: */*
+> 
+* Mark bundle as not supporting multiuse
+< `HTTP/1.1 200 OK`
+< Cache-Control: no-cache
+< Date: Fri, 16 Dec 2022 06:26:32 GMT
+< Content-Length: 0
+< 
+* Connection #0 to host localhost left intact
+
+# netstat -tnulp|grep :1000
+Command 'netstat' not found, but can be installed with:
+apt install net-tools
+
+# apt install net-tools
+
+# netstat -tnulp|grep :1000
+tcp        0      0 0.0.0.0:1000            0.0.0.0:*               LISTEN      946289/docker-proxy 
+tcp6       0      0 :::1000                 :::*                    LISTEN      946294/docker-proxy 
+
+# cd /root/myregistry/docker/registry/v2/repositories/library/hello/
+# ls
+_layers  _manifests  _uploads
+# cd _layers/sha256
+# ls
+186b1aaa4aa6c480e92fbd982ee7c08037ef85114fbed73dbb62503f24c1dd7d  a0bcbecc962ed2552e817f45127ffb3d14be31642ef3548997f58ae054deb5b2  b4df32aa5a72e2a4316aad3414508ccd907d87b4ad177abd7cbd62fa4dab2a2f
+1b2e261a0dfcaecfea4545b6fbf4fa1dd1cc44f99aafe46c711ee243539f54e1  a2abf6c4d29d43a4bf9fbb769f524d0fb36a2edab49819c1bf3e76f409f953ea  e9055ad9d1d497508cfefc2e77fcb944af9e993992d23bec6751588b3b2d6b4e
+589b7251471a3d5fe4daccdddfefa02bdc32ffcba0a6d6a2768bf2c401faf115  a9edb18cadd1336142d6567ebee31be2a03c0905eeefe26cb150de7b0fbc520b
+
+# docker images
+REPOSITORY                         TAG       IMAGE ID       CREATED         SIZE
+192.168.1.240:1000/library/hello   v1.0      e9055ad9d1d4   23 hours ago    141MB
+hello                              latest    e9055ad9d1d4   23 hours ago    141MB
+registry                           latest    b8604a3fe854   13 months ago   26.2MB
+
+# docker rmi 192.168.1.240:1000/library/hello:v1.0
+
+# docker images
+REPOSITORY                         TAG       IMAGE ID       CREATED         SIZE
+hello                              latest    e9055ad9d1d4   23 hours ago    141MB
+registry                           latest    b8604a3fe854   13 months ago   26.2MB
+
+# docker pull 192.168.1.240:1000/library/hello:v1.0
+v1.0: Pulling from library/hello
+Digest: sha256:0dac7c6943143d8122ee23e04aeb7757d46ce8b7392cb86143b0f45c937516a4
+Status: Downloaded newer image for 192.168.1.240:1000/library/hello:v1.0
+192.168.1.240:1000/library/hello:v1.0
+
+# docker images
+REPOSITORY                         TAG       IMAGE ID       CREATED         SIZE
+192.168.1.240:1000/library/hello   v1.0      e9055ad9d1d4   23 hours ago    141MB
+hello                              latest    e9055ad9d1d4   23 hours ago    141MB
+registry                           latest    b8604a3fe854   13 months ago   26.2MB
+
+
+如果不设置/etc/docker/daemon.json，那么会报https错误
+# cat /etc/docker/daemon.json 
+{
+ "registry-mirrors": ["https://ktjk1d0g.mirror.aliyuncs.com"]
+}
+
+# docker images
+REPOSITORY   TAG       IMAGE ID       CREATED         SIZE
+hello        latest    e9055ad9d1d4   23 hours ago    141MB
+nginx        latest    605c77e624dd   11 months ago   141MB
+registry     latest    b8604a3fe854   13 months ago   26.2MB
+
+# docker tag nginx:latest 192.168.1.240:1000/library/nginx:v10.0
+
+# docker push 192.168.1.240:1000/library/nginx:v10.0
+The push refers to repository [192.168.1.240:1000/library/nginx]
+Get "https://192.168.1.240:1000/v2/": http: server gave HTTP response to HTTPS client
+
+# echo $?
+1
+
+私有仓库registry可视化：
+# docker run -d -p 1000:5000 -v /root/myregistry:/var/lib/registry --restart always --name registry registry
+# docker ps
+CONTAINER ID   IMAGE      COMMAND                  CREATED             STATUS          PORTS                                       NAMES
+f50ba994cd98   registry   "/entrypoint.sh /etc…"   About an hour ago   Up 29 minutes   0.0.0.0:1000->5000/tcp, :::1000->5000/tcp   mystifying_allen
+
+# docker run -it -p 8080:8080 --name registry-web --link mystifying_allen -e REGISTRY_URL=http://mystifying_allen:5000/v2 -e REGISTRY_NAME=localhost:1000 hyper/docker-registry-web 
+Unable to find image 'hyper/docker-registry-web:latest' locally
+latest: Pulling from hyper/docker-registry-web
+04c996abc244: Pull complete 
+d394d3da86fe: Pull complete 
+bac77aae22d4: Pull complete 
+b48b86b78e97: Pull complete 
+09b3dd842bf5: Pull complete 
+69f4c5394729: Pull complete 
+b012980650e9: Pull complete 
+7c7921c6fda1: Pull complete 
+e20331c175ea: Pull complete 
+40d5e82892a5: Pull complete 
+a414fa9c865a: Pull complete 
+0304ae3409f3: Pull complete 
+13effc1a664f: Pull complete 
+e5628d0e6f8c: Pull complete 
+0b0e130a3a52: Pull complete 
+d0c73ab65cd2: Pull complete 
+240c0b145309: Pull complete 
+f1fd6f874e5e: Pull complete 
+40b5e021928e: Pull complete 
+88a8c7267fbc: Pull complete 
+f9371a03010e: Pull complete 
+Digest: sha256:723ffa29aed2c51417d8bd32ac93a1cd0e7ef857a0099c1e1d7593c09f7910ae
+Status: Downloaded newer image for hyper/docker-registry-web:latest
+CATALINA_OPTS: -Djava.security.egd=file:/dev/./urandom -Dcontext.path=
+Using CATALINA_BASE:   /var/lib/tomcat7
+Using CATALINA_HOME:   /usr/share/tomcat7
+Using CATALINA_TMPDIR: /var/lib/tomcat7/temp
+Using JRE_HOME:        /usr/lib/jvm/java-7-openjdk-amd64
+Using CLASSPATH:       /usr/share/tomcat7/bin/bootstrap.jar:/usr/share/tomcat7/bin/tomcat-juli.jar
+Dec 16, 2022 7:25:42 AM org.apache.coyote.AbstractProtocol init
+INFO: Initializing ProtocolHandler ["http-bio-8080"]
+Dec 16, 2022 7:25:42 AM org.apache.catalina.startup.Catalina load
+INFO: Initialization processed in 997 ms
+Dec 16, 2022 7:25:42 AM org.apache.catalina.core.StandardService startInternal
+INFO: Starting service Catalina
+Dec 16, 2022 7:25:42 AM org.apache.catalina.core.StandardEngine startInternal
+INFO: Starting Servlet Engine: Apache Tomcat/7.0.52 (Ubuntu)
+
+2022-12-16 07:26:12,128 [localhost-startStop-1] INFO  hibernate4.HibernatePluginSupport  - Set db generation strategy to 'update' for datasource DEFAULT
+
+Configuring Spring Security Core ...
+... finished configuring Spring Security Core
+
+2022-12-16 07:26:13,679 [localhost-startStop-1] INFO  cache.CacheBeanPostProcessor  - postProcessBeanDefinitionRegistry start
+2022-12-16 07:26:13,693 [localhost-startStop-1] INFO  cache.CacheBeanPostProcessor  - postProcessBeanFactory
+2022-12-16 07:26:15,675 [localhost-startStop-1] WARN  config.ConfigurationFactory  - No configuration found. Configuring ehcache from ehcache-failsafe.xml  found in the classpath: jar:file:/var/lib/tomcat7/webapps/ROOT/WEB-INF/lib/ehcache-2.9.0.jar!/ehcache-failsafe.xml
+2022-12-16 07:26:17,240 [localhost-startStop-1] INFO  sql.DatabaseMetaData  - HHH000262: Table not found: access_control
+2022-12-16 07:26:17,250 [localhost-startStop-1] INFO  sql.DatabaseMetaData  - HHH000262: Table not found: event
+2022-12-16 07:26:17,252 [localhost-startStop-1] INFO  sql.DatabaseMetaData  - HHH000262: Table not found: role
+2022-12-16 07:26:17,254 [localhost-startStop-1] INFO  sql.DatabaseMetaData  - HHH000262: Table not found: role_access
+2022-12-16 07:26:17,256 [localhost-startStop-1] INFO  sql.DatabaseMetaData  - HHH000262: Table not found: user
+2022-12-16 07:26:17,257 [localhost-startStop-1] INFO  sql.DatabaseMetaData  - HHH000262: Table not found: user_role
+2022-12-16 07:26:17,265 [localhost-startStop-1] INFO  sql.DatabaseMetaData  - HHH000262: Table not found: access_control
+2022-12-16 07:26:17,267 [localhost-startStop-1] INFO  sql.DatabaseMetaData  - HHH000262: Table not found: event
+2022-12-16 07:26:17,268 [localhost-startStop-1] INFO  sql.DatabaseMetaData  - HHH000262: Table not found: role
+2022-12-16 07:26:17,271 [localhost-startStop-1] INFO  sql.DatabaseMetaData  - HHH000262: Table not found: role_access
+2022-12-16 07:26:17,273 [localhost-startStop-1] INFO  sql.DatabaseMetaData  - HHH000262: Table not found: user
+2022-12-16 07:26:17,275 [localhost-startStop-1] INFO  sql.DatabaseMetaData  - HHH000262: Table not found: user_role
+2022-12-16 07:26:17,281 [localhost-startStop-1] INFO  sql.DatabaseMetaData  - HHH000262: Table not found: access_control
+2022-12-16 07:26:17,282 [localhost-startStop-1] INFO  sql.DatabaseMetaData  - HHH000262: Table not found: event
+2022-12-16 07:26:17,283 [localhost-startStop-1] INFO  sql.DatabaseMetaData  - HHH000262: Table not found: role
+2022-12-16 07:26:17,289 [localhost-startStop-1] INFO  sql.DatabaseMetaData  - HHH000262: Table not found: role_access
+2022-12-16 07:26:17,291 [localhost-startStop-1] INFO  sql.DatabaseMetaData  - HHH000262: Table not found: user
+2022-12-16 07:26:17,292 [localhost-startStop-1] INFO  sql.DatabaseMetaData  - HHH000262: Table not found: user_role
+2022-12-16 07:26:17,849 [localhost-startStop-1] INFO  ehcache.GrailsEhCacheManagerFactoryBean  - Initializing EHCache CacheManager
+2022-12-16 07:26:21,825 [localhost-startStop-1] WARN  web.TokenService  - Authorization disabled
+
+2022-12-16 07:26:26,626 [localhost-startStop-1] INFO  filter.AnnotationSizeOfFilter  - Using regular expression provided through VM argument net.sf.ehcache.pool.sizeof.ignore.pattern for IgnoreSizeOf annotation : ^.*cache\..*IgnoreSizeOf$
+2022-12-16 07:26:26,638 [localhost-startStop-1] INFO  sizeof.AgentLoader  - Located valid 'tools.jar' at '/usr/lib/jvm/java-7-openjdk-amd64/jre/../lib/tools.jar'
+2022-12-16 07:26:26,650 [localhost-startStop-1] INFO  sizeof.JvmInformation  - Detected JVM data model settings of: 64-Bit OpenJDK JVM with Compressed OOPs
+2022-12-16 07:26:26,894 [localhost-startStop-1] INFO  sizeof.AgentLoader  - Extracted agent jar to temporary file /var/lib/tomcat7/temp/ehcache-sizeof-agent1842321385303346490.jar
+2022-12-16 07:26:26,895 [localhost-startStop-1] INFO  sizeof.AgentLoader  - Trying to load agent @ /var/lib/tomcat7/temp/ehcache-sizeof-agent1842321385303346490.jar
+2022-12-16 07:26:26,901 [localhost-startStop-1] INFO  impl.DefaultSizeOfEngine  - using Agent sizeof engine
+2022-12-16 07:26:26,953 [localhost-startStop-1] INFO  impl.DefaultSizeOfEngine  - using Agent sizeof engine
+2022-12-16 07:26:27,010 [localhost-startStop-1] INFO  context.GrailsConfigUtils  - [GrailsContextLoader] Grails application loaded.
+2022-12-16 07:26:27,090 [localhost-startStop-1] INFO  conf.BootStrap  - Starting registry-web ver. 0.1.3-SNAPSHOT-bededf47611365f0a6d2bb87942e3b86c1e92d9f
+2022-12-16 07:26:27,173 [localhost-startStop-1] INFO  web.ConfigService  - [environmentProperties, localProperties]
+2022-12-16 07:26:27,184 [localhost-startStop-1] INFO  web.ConfigService  - resolved config:
+2022-12-16 07:26:27,188 [localhost-startStop-1] INFO  web.ConfigService  - registry.url: http://mystifying_allen:5000/v2
+2022-12-16 07:26:27,189 [localhost-startStop-1] INFO  web.ConfigService  - registry.auth.key: /config/auth.key
+2022-12-16 07:26:27,190 [localhost-startStop-1] INFO  web.ConfigService  - registry.readonly: true
+2022-12-16 07:26:27,196 [localhost-startStop-1] INFO  web.ConfigService  - registry.trust_any_ssl: false
+2022-12-16 07:26:27,197 [localhost-startStop-1] INFO  web.ConfigService  - registry.basic_auth: 
+2022-12-16 07:26:27,198 [localhost-startStop-1] INFO  web.ConfigService  - registry.auth.enabled: false
+2022-12-16 07:26:27,198 [localhost-startStop-1] INFO  web.ConfigService  - registry.context_path: 
+2022-12-16 07:26:27,199 [localhost-startStop-1] INFO  web.ConfigService  - registry.auth.issuer: test-issuer
+2022-12-16 07:26:27,200 [localhost-startStop-1] INFO  web.ConfigService  - registry.name: localhost:1000
+2022-12-16 07:26:27,203 [localhost-startStop-1] INFO  conf.BootStrap  - auth enabled: false
+Dec 16, 2022 7:26:27 AM org.apache.coyote.AbstractProtocol start
+INFO: Starting ProtocolHandler ["http-bio-8080"]
+Dec 16, 2022 7:26:27 AM org.apache.catalina.startup.Catalina start
+INFO: Server startup in 45453 ms
+
+
+# docker ps
+CONTAINER ID   IMAGE                       COMMAND                  CREATED             STATUS          PORTS                                       NAMES
+f4ae4764efa8   hyper/docker-registry-web   "start.sh"               11 minutes ago      Up 11 minutes   0.0.0.0:8080->8080/tcp, :::8080->8080/tcp   registry-web
+f50ba994cd98   registry                    "/entrypoint.sh /etc…"   About an hour ago   Up 43 minutes   0.0.0.0:1000->5000/tcp, :::1000->5000/tcp   mystifying_allen
+```
+
+
+
+![image-20221216152930360](cka培训截图\image-20221216152930360.png)
+
+```bash
+registry删除镜像
+# cd /root/myregistry/docker/registry/v2/repositories/library
+# ls
+hello  nginx
+# rm -rfv hello/
+
+# docker ps
+CONTAINER ID   IMAGE                       COMMAND                  CREATED          STATUS          PORTS                                       NAMES
+f50ba994cd98   registry                    "/entrypoint.sh /etc…"   2 hours ago      Up 2 hours      0.0.0.0:1000->5000/tcp, :::1000->5000/tcp   mystifying_allen
+
+# docker exec mystifying_allen bin/registry garbage-collect /etc/docker/registry/config.yml
+```
+
+![image-20221216162710489](cka培训截图\image-20221216162710489.png)
+
+##### 2.4.2.搭建私有仓库harbor
+
+###### 2.4.2.1.生成root证书信息
+
+```bash
+openssl genrsa -out /etc/ssl/private/selfsignroot.key 4096
+openssl req -x509 -new -nodes -sha512 -days 3650 -subj "/C=CN/ST=Shanghai/L=Shanghai/O=Company/OU=SH/CN=Root" \
+-key /etc/ssl/private/selfsignroot.key \
+-out /usr/local/share/ca-certificates/selfsignroot.crt
 
 ```
-官网https://docs.docker.com/engine/reference/builder/
-```
 
-dockfile示例
+###### 2.4.2.2.生成服务器私钥以及证书请求文件
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+```bash
+openssl genrsa -out /etc/ssl/private/registry.key 4096
+openssl req -sha512 -new \
+-subj "/C=CN/ST=Shanghai/L=Shanghai/O=Company/OU=SH/CN=xiaohui.cn" \
+-key /etc/ssl/private/registry.key \
+-out registry.csr
 
 ```
-疑问：
-1. dockerfile 创建时，是否自动拉取基础镜像；
-2. docker tag后，删除docker imageID，是否两个全部删除---
+
+###### 2.4.2.3.生成openssl cnf扩展文件
+
+```bash
+cat > certs.cnf << EOF
+[req]
+req_extensions = v3_req
+distinguished_name = req_distinguished_name
+[req_distinguished_name]
+[v3_req ]
+basicConstraints = CA:FALSE
+keyUsage = nonRepudiation, digitalSignature, keyEncipherment
+subjectAltName = @alt_names
+[alt_names]
+DNS.1 = registry.xiaohui.cn
+EOF
+
 ```
+
+###### 2.4.2.4.签发证书
+
+```bash
+openssl x509 -req -in registry.csr \
+-CA /usr/local/share/ca-certificates/selfsignroot.crt \
+-CAkey /etc/ssl/private/selfsignroot.key -CAcreateserial \
+-out /etc/ssl/certs/registry.crt \
+-days 3650 -extensions v3_req -extfile certs.cnf
+
+```
+
+###### 2.4.2.5.信任根证书
+
+```bash
+update-ca-certificates
+```
+
+###### 2.4.2.6.部署Harbor仓库
+
+先部署Docker CE
+
+```bash
+sudo apt-get update
+sudo apt-get install -y \
+    ca-certificates \
+    curl \
+    gnupg \
+    lsb-release
+
+sudo mkdir -p /etc/apt/keyrings
+curl -fsSL https://mirror.nju.edu.cn/docker-ce/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+
+echo \
+  "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://mirror.nju.edu.cn/docker-ce/linux/ubuntu \
+  $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+
+sudo apt-get update
+
+sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
+
+```
+
+再添加Docker 镜像加速器，这里只限在国内部署时才需要加速，在国外这样加速反而缓慢
+
+```bash
+
+sudo mkdir -p /etc/docker
+sudo tee /etc/docker/daemon.json <<-'EOF'
+{
+  "registry-mirrors": ["http://hub-mirror.c.163.com"]
+}
+EOF
+
+```
+添加Compose支持，并启动Docker服务
+
+```bash
+curl -L "https://ghproxy.com/https://github.com/docker/compose/releases/download/v2.13.0/docker-compose-linux-x86_64" -o /usr/local/bin/docker-compose
+chmod +x /usr/local/bin/docker-compose
+sudo systemctl daemon-reload
+sudo systemctl restart docker
+
+```
+
+```bash
+wget https://ghproxy.com/https://github.com/goharbor/harbor/releases/download/v1.10.15/harbor-offline-installer-v1.10.15.tgz
+tar xf harbor-offline-installer-v1.10.15.tgz -C /usr/local/bin
+cd /usr/local/bin/harbor
+docker load -i harbor.v1.10.15.tar.gz
+
+```
+
+在harbor.yml中，修改以下参数，定义了网址、证书、密码
+
+```bash
+vim harbor.yml
+# 修改hostname为registry.xiaohui.cn
+# 修改https处的certificate为/etc/ssl/certs/registry.crt
+# 修改https处的private_key为/etc/ssl/private/registry.key
+# 修改harbor_admin_password为admin
+```
+
+```bash
+./prepare
+./install.sh
+```
+
+###### 2.4.2.7.生成服务文件
+
+```bash
+cat > /etc/systemd/system/harbor.service <<EOF
+[Unit]
+Description=Harbor
+After=docker.service systemd-networkd.service systemd-resolved.service
+Requires=docker.service
+Documentation=http://github.com/vmware/harbor
+[Service]
+Type=simple
+Restart=on-failure
+RestartSec=5
+ExecStart=/usr/local/bin/docker-compose -f /usr/local/bin/harbor/docker-compose.yml up
+ExecStop=/usr/local/bin/docker-compose -f /usr/local/bin/harbor/docker-compose.yml down
+[Install]
+WantedBy=multi-user.target
+EOF
+sudo systemctl daemon-reload
+systemctl enable harbor --now
+```
+
+在所有的机器上，将registry.xiaohui.cn以及其对应的IP添加到/etc/hosts，然后将上述实验中的httpd:v1镜像，改名为带上IP:PORT形式，尝试上传我们的镜像到本地仓库
+
+```bash
+docker login registry.xiaohui.cn
+docker tag httpd:v1 registry.xiaohui.cn/library/httpd:v1
+docker push registry.xiaohui.cn/library/httpd:v1
+```
+
+
+### 3.容器网络
+
+#### 3.1.容器镜像结构
+
 
 
 
@@ -1105,6 +1816,33 @@ dockfile示例
 ```
 
 ```
+
+
+
+#### A6.dockerfile
+
+Dockerfile常用命令
+
+
+
+
+|         指令          |                       作用                        |                           命令格式                           | 例子                                                         |
+| :-------------------: | :-----------------------------------------------: | :----------------------------------------------------------: | :----------------------------------------------------------- |
+|         FROM          |                   指定base镜像                    |   FROM [--platform=<platform>] <image>[:<tag>] [AS <name>]   | FROM  centos                                                 |
+| MAINTAINER<br />LABEL |                    维护者信息                     |     LABEL <key>=<value> <key>=<value> <key>=<value> ...      | LABEL "com.example.vendor"="ACME Incorporated" <br />LABEL com.example.label-with-value="foo" LABEL version="1.0" |
+|          RUN          |                  运行指定的命令                   | RUN <command>：<br />Linux: /bin/sh -c, Windows: cmd /S /C<br />RUN ["executable", "param1", "param2"] | RUN /bin/bash -c 'source $HOME/.bashrc; echo $HOME'<br />RUN ["/bin/bash", "-c", "echo hello"]<br />RUN ["c:\\windows\\system32\\tasklist.exe"] |
+|          ADD          | 将文件从build context复制到镜像中<br />可以解压缩 | ADD [--chown=<user>:<group>] [--checksum=<checksum>] <src>... <dest><br/>ADD [--chown=<user>:<group>] ["<src>",... "<dest>"] | ADD hom* /mydir/<br /><br />ADD --chown=55:mygroup files* /somedir/ |
+|         COPY          |         将文件从build context复制到镜像中         | COPY [--chown=<user>:<group>] <src>... <dest><br/>COPY [--chown=<user>:<group>] ["<src>",... "<dest>"] | COPY hom* /mydir/<br />COPY --chown=55:mygroup files* /somedir/ |
+|          ENV          |                   设置环境变量                    |                    ENV <key>=<value> ...                     | ENV MY_NAME="John Doe"<br/>ENV MY_DOG=Rex\ The\ Dog<br/>ENV MY_CAT=fluffy |
+|        EXPOSE         |            指定容器中的应用坚挺的端口             |             EXPOSE <port> [<port>/<protocol>...]             | EXPOSE 80/tcp<br/>EXPOSE 80/udp                              |
+|         USER          |                设置启动容器的用户                 |                    USER <user>[:<group>]                     | USER tommy                                                   |
+|          CMD          |       设置在容器启动时运行指定的脚本或命令        | `CMD ["executable","param1","param2"]` (*exec* form, this is the preferred form) <br />`CMD ["param1","param2"]` (as *default parameters to ENTRYPOINT*) <br />`CMD command param1 param2` (*shell* form) | CMD echo "This is a test." \| wc -<br />CMD ["/usr/bin/wc","--help"] |
+|      ENTRYPOINT       |      指定的是一个可执行的脚本或者程序的路径       |               ENTRYPOINT command param1 param2               | FROM ubuntu<br/>ENTRYPOINT ["top", "-b"]<br/>CMD ["-c"]<br /><br />FROM debian:stable<br/>RUN apt-get update && apt-get install -y --force-yes apache2<br/>EXPOSE 80 443<br/>VOLUME ["/var/www", "/var/log/apache2", "/etc/apache2"]<br/>ENTRYPOINT ["/usr/sbin/apache2ctl", "-D", "FOREGROUND"] |
+|        VOLUME         |      将文件或目录声明为volume，挂载到容器中       |                       VOLUME ["/data"]                       | FROM ubuntu <br />RUN mkdir /myvol <br />RUN echo "hello world" > /myvol/greeting <br />VOLUME /myvol |
+|        WORKDIR        |              设置镜像的当前工作目录               |                   WORKDIR /path/to/workdir                   | WORKDIR /a<br/>WORKDIR b<br/>WORKDIR c<br/>RUN pwd           |
+
+
+> 官网https://docs.docker.com/engine/reference/builder/
 
 
 
