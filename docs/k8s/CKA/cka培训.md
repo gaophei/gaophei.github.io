@@ -1,3 +1,5 @@
+
+
 ***CKA培训***
 
 [TOC]
@@ -29,11 +31,14 @@ docker: docker CE/docker EE
 主要是隔离、封装
 ```
 
+
+
 #container VS VM
+
 ```
 VM: Infrastructure--->Hypervisor--->Virtual Machine: Guest OS---App A/App B/App C...
 
-Container Applications: Infrastructure--->Host OS--->docker: App A/App B/App C...
+Containerized Applications: Infrastructure--->Host OS--->docker: App A/App B/App C...
 ```
 
 ![image-20221211103247528](cka培训截图\image-20221211103247528.png)
@@ -66,15 +71,16 @@ Container Applications: Infrastructure--->Host OS--->docker: App A/App B/App C..
 ![image-20221213100038103](cka培训截图\image-20221213100038103.png)
 
 #dockers架构
+
 ```
-cs架构：docker cli----docker server
+cs架构：
 ```
 
 ![image-20221213100425634](cka培训截图\image-20221213100425634.png)
 
 
 #### 1.3.docker安装
-##### 1.3.0.步骤
+##### 1.3.0.步骤  
 ```
 1)安装虚拟化软件，比如：vmware
 2)安装虚拟机操作系统，比如：ubuntu 
@@ -165,7 +171,7 @@ $ sudo -i
 # systemctl status ssh
 ```
 
-##### 1.3.2.3.安装docker
+##### 1.3.2.3.安装docker---22.04
 
 ```bash
 step 1: 安装必要的一些系统工具
@@ -208,8 +214,58 @@ EOF
 # docker search nginx
 ```
 
+##### 1.3.2.4.安装docker---20.04
+```bash
+step 1: 安装必要的一些系统工具
+$ sudo -i
+# apt-get update
+# apt-get install -y ca-certificates curl gnupg lsb-release
+step 2: 安装GPG证书
+# mkdir -p /etc/apt/keyrings
+#  curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+# curl -fsSL https://mirrors.aliyun.com/docker-ce/linux/ubuntu/gpg | sudo apt-key add -
+Step 3: 写入软件源信息
+# add-apt-repository "deb [arch=amd64] https://mirrors.aliyun.com/docker-ce/linux/ubuntu $(lsb_release -cs) stable"
+Step 4: 更新并安装Docker-CE
+# apt-get -y update
+# apt-get -y install docker-ce
+# systemctl enable --now docker
+# systemctl status docker
 
+安装指定版本的Docker-CE:
+Step 1: 查找Docker-CE的版本: apt-cache madison docker-ce 
+# apt-cache madison docker-ce | awk '{ print $3 }'
+  5:19.03.15~3-0~ubuntu-focal
+  5:20.10.22~3-0~ubuntu-focal
+  .......输出省略......
+Step 2: 安装指定版本的Docker-CE: (VERSION例如上面的17.03.1~ce-0~ubuntu-xenial)
+# VERSION_STRING=5:20.10.13~3-0~ubuntu-jammy
+# apt-get install -y docker-ce=$VERSION_STRING docker-ce-cli=$VERSION_STRING containerd.io docker-compose-plugin
 
+#systemctl status docker
+#docker run hello-world
+```
+
+```bash
+修改默认仓库
+$ sudo -i
+# mkdir /etc/docker
+# tee /etc/docker/daemon.json <<-'EOF'
+{
+ "registry-mirrors": ["https://ktjk1d0g.mirror.aliyuncs.com"]
+}
+EOF
+
+# systemctl daemon-reload
+# systemctl restart docker
+# systemctl status docker
+
+# docker search nginx
+# docker run hello-world
+# mkdir -p /etc/xiaoya
+# touch /etc/xiaoya/mytoken.txt
+# docker run -d -p 5678:80 -v /etc/xiaoya/mytoken.txt:/mytoken.txt --restart=always --name=xiaoya xiaoyaliu/alist:latest
+```
 
 
 #### 1.4.容器基本操作
@@ -217,6 +273,7 @@ EOF
 ##### 1.4.1.运行一个容器
 
 ```bash
+$ sudo -i
 # docker run --help
 # man docker run
 
@@ -312,8 +369,6 @@ Status: Downloaded newer image for centos:latest
 # docker ps
 CONTAINER ID   IMAGE     COMMAND                  CREATED          STATUS          PORTS                                   NAMES
 03aed8b857b7   centos    "/bin/bash -c 'while…"   3 seconds ago    Up 2 seconds                                            cool_bouman
-b064fc7ce564   nginx     "/docker-entrypoint.…"   23 minutes ago   Up 23 minutes   0.0.0.0:8081->80/tcp, :::8081->80/tcp   stoic_wilson
-0dfd41b80266   httpd     "httpd-foreground"       11 hours ago     Up 11 minutes   0.0.0.0:8080->80/tcp, :::8080->80/tcp   exciting_jemison
 
 # docker logs cool_bouman 
 hello
@@ -346,8 +401,6 @@ cf375cdfeaf57573c772335f16153c37ca9e6e0f8f41b52b3bd6caa4d75a8464
 CONTAINER ID   IMAGE     COMMAND                  CREATED             STATUS             PORTS                                   NAMES
 cf375cdfeaf5   centos    "/bin/bash -c 'while…"   3 seconds ago       Up 1 second                                                inspiring_fermat
 03aed8b857b7   centos    "/bin/bash -c 'while…"   41 minutes ago      Up 41 minutes                                              cool_bouman
-b064fc7ce564   nginx     "/docker-entrypoint.…"   About an hour ago   Up About an hour   0.0.0.0:8081->80/tcp, :::8081->80/tcp   stoic_wilson
-0dfd41b80266   httpd     "httpd-foreground"       12 hours ago        Up 53 minutes      0.0.0.0:8080->80/tcp, :::8080->80/tcp   exciting_jemison
 
 通过<ctrl+p><ctrl+q>无法退出attach命令；只能通过关闭这个终端界面或者kill 线程号来结束
 # docker attach inspiring_fermat
@@ -361,10 +414,6 @@ haha
 kill 线程号无效
 # ps -ef|grep docker
 root        8797       1  0 10:01 ?        00:00:10 /usr/bin/dockerd -H fd:// --containerd=/run/containerd/containerd.sock
-root       13742    8797  0 10:19 ?        00:00:00 /usr/bin/docker-proxy -proto tcp -host-ip 0.0.0.0 -host-port 8081 -container-ip 172.17.0.3 -container-port 80
-root       13747    8797  0 10:19 ?        00:00:00 /usr/bin/docker-proxy -proto tcp -host-ip :: -host-port 8081 -container-ip 172.17.0.3 -container-port 80
-root       16263    8797  0 10:31 ?        00:00:00 /usr/bin/docker-proxy -proto tcp -host-ip 0.0.0.0 -host-port 8080 -container-ip 172.17.0.2 -container-port 80
-root       16268    8797  0 10:31 ?        00:00:00 /usr/bin/docker-proxy -proto tcp -host-ip :: -host-port 8080 -container-ip 172.17.0.2 -container-port 80
 root       25497   13612  0 11:26 pts/7    00:00:00 docker attach inspiring_fermat
 root       25800   25266  0 11:28 pts/2    00:00:00 grep --color=auto docker
 
@@ -373,22 +422,19 @@ root       25800   25266  0 11:28 pts/2    00:00:00 grep --color=auto docker
 
 # ps -ef|grep docker
 root        8797       1  0 10:01 ?        00:00:10 /usr/bin/dockerd -H fd:// --containerd=/run/containerd/containerd.sock
-root       13742    8797  0 10:19 ?        00:00:00 /usr/bin/docker-proxy -proto tcp -host-ip 0.0.0.0 -host-port 8081 -container-ip 172.17.0.3 -container-port 80
-root       13747    8797  0 10:19 ?        00:00:00 /usr/bin/docker-proxy -proto tcp -host-ip :: -host-port 8081 -container-ip 172.17.0.3 -container-port 80
-root       16263    8797  0 10:31 ?        00:00:00 /usr/bin/docker-proxy -proto tcp -host-ip 0.0.0.0 -host-port 8080 -container-ip 172.17.0.2 -container-port 80
-root       16268    8797  0 10:31 ?        00:00:00 /usr/bin/docker-proxy -proto tcp -host-ip :: -host-port 8080 -container-ip 172.17.0.2 -container-port 80
-root       25877   13612  0 11:28 pts/7    00:00:00 docker attach inspiring_fermat
+root       `25877`   `13612`  0 11:28 pts/7    00:00:00 docker attach inspiring_fermat
 root       26013   25266  0 11:29 pts/2    00:00:00 grep --color=auto docker
 
 kill 父线程号才有效
+# ps -ef|grep 13612
+root     `13612` `13600`  0 15:29 pts/1    00:00:00 -bash
+root       `25877`   `13612`  0 11:28 pts/7    00:00:00 docker attach inspiring_fermat
+root     3398883 3360424  0 15:45 pts/2    00:00:00 grep --color=auto 13612
+
 # kill -9 13612
 
 # ps -ef|grep docker
 root        8797       1  0 10:01 ?        00:00:10 /usr/bin/dockerd -H fd:// --containerd=/run/containerd/containerd.sock
-root       13742    8797  0 10:19 ?        00:00:00 /usr/bin/docker-proxy -proto tcp -host-ip 0.0.0.0 -host-port 8081 -container-ip 172.17.0.3 -container-port 80
-root       13747    8797  0 10:19 ?        00:00:00 /usr/bin/docker-proxy -proto tcp -host-ip :: -host-port 8081 -container-ip 172.17.0.3 -container-port 80
-root       16263    8797  0 10:31 ?        00:00:00 /usr/bin/docker-proxy -proto tcp -host-ip 0.0.0.0 -host-port 8080 -container-ip 172.17.0.2 -container-port 80
-root       16268    8797  0 10:31 ?        00:00:00 /usr/bin/docker-proxy -proto tcp -host-ip :: -host-port 8080 -container-ip 172.17.0.2 -container-port 80
 root       26067   25266  0 11:29 pts/2    00:00:00 grep --color=auto docker
 ```
 
@@ -444,8 +490,8 @@ CentOS Linux release 8.4.2105
 ### 2.容器镜像
 #### 2.1.容器镜像结构
 ```
-Linux操作系统结构
---- kernel: Linux系统内核，/boot
+Linux操作系统结构由内核空间和用户空间构成
+--- kernel: bootfs，Linux系统内核，/boot
 --- rootfs: Linux系统中的用户空间文件系统，除了/boot外的其他文件目录
 ```
 > 官网https://www.kernel.org/
@@ -556,6 +602,8 @@ REPOSITORY   TAG       IMAGE ID       CREATED         SIZE
 nginx        latest    605c77e624dd   11 months ago   141MB
 
 # docker inspect nginx:latest 
+# docker image inspect nginx:latest
+
 [
     {
         "Id": "sha256:605c77e624ddb75e6110f997c58876baa13f8754486b461117934b24a9dc3a85",
@@ -600,13 +648,17 @@ UnionFS联合文件系统
 --- UnionFS主要的功能是将多个不同位置的目录联合挂载(union mount)到同一个目录下
     每一个镜像层都是Linux操作系统文件与目录的一部分。在使用镜像时，docker会将所有的镜像层联合挂载到一个统一的挂载点上，表现为一个完整的Linux操作系统供容器使用
 ```
+#aaa
+
+![image-20230203182304524](cka培训截图\image-20230203182304524.png)
+
 
 ```
-容器copy-on-write特性
+容器copy-on-write特性(写时复制)
 对容器的增、删、改、查操作：
 1.创建文件：新文件只能被添加在容器层中
 2.删除文件：依据容器分层结构由上往下依次查找。找到后，在容器层记录该删除操作。具体实现是，UnionFS会在容器层创建一个"whiteout"文件，将被删除的文件"遮挡"起来
-3.修改文件：依据容器分层结构由上往下依次查找。找到后，将镜像层中的数据复制到容器层进行修改，修改后的数据保存在容器层中
+3.修改文件：依据容器分层结构由上往下依次查找。找到后，将镜像层中的数据复制到容器层进行修改，修改后的数据保存在容器层中(copy-on-write)
 4.读取文件：依据容器分层结构由上往下依次查找
 ```
 
@@ -1719,8 +1771,299 @@ docker push registry.xiaohui.cn/library/httpd:v1
 
 ### 3.容器网络
 
-#### 3.1.容器镜像结构
+#### 3.1.容器网络
 
+```bash
+docker native network drivers
+docker提供了5中原生的网络驱动
+```
+
+|      | 模型    | 说明                                                         |
+| ---- | ------- | ------------------------------------------------------------ |
+| 1    | bridge  | 默认网络驱动程序。主要用于多个容器在同一个docker宿主机上进行通信 |
+| 2    | host    | 容器加入到宿主机的network namespace，容器直接使用宿主机网络  |
+| 3    | none    | none网络中的容器，不能与外部通信                             |
+| 4    | Overlay | Overlay网络可基于Linux网桥和Vxlan，实现跨主机的容器通信      |
+| 5    | Macvlan | Macvlan用于跨主机通信场景                                    |
+
+```bash
+# man docker run
+/--network
+```
+```
+--network=type
+          Set the Network mode for the container. Supported values are:
+
+       ┌────────────────────────┬───────────────────────────────────────────────────────────────┐
+       │Value                   │ Description                                                   │
+       ├────────────────────────┼───────────────────────────────────────────────────────────────┤
+       │none                    │ No networking in the container.                               │
+       ├────────────────────────┼───────────────────────────────────────────────────────────────┤
+       │bridge                  │ Connect the container to the default Docker bridge  via  veth │
+       │                        │ interfaces.                                                   │
+       ├────────────────────────┼───────────────────────────────────────────────────────────────┤
+       │host                    │ Use the host's network stack inside the container.            │
+       ├────────────────────────┼───────────────────────────────────────────────────────────────┤
+       │container:name|id       │ Use the network stack of another container, specified via its │
+       │                        │ name or id.                                                   │
+       ├────────────────────────┼───────────────────────────────────────────────────────────────┤
+       │network-name|network-id │ Connects the container  to  a  user  created  network  (using │
+       │                        │ docker network create command)                                │
+       └────────────────────────┴───────────────────────────────────────────────────────────────┘
+    
+       Default is bridge.
+       
+       --network="bridge" : Connect a container to a network
+                      'bridge': create a network stack on the default Docker bridge
+                      'none': no networking
+                      'container:<name|id>': reuse another container's network stack
+                      'host': use the Docker host network stack
+                      '<network-name>|<network-id>': connect to a user-defined network
+```
+
+```bash
+docker安装时，自动在host上创建了如下3个网络：
+# docker network ls
+NETWORK ID     NAME      DRIVER    SCOPE
+6236b3d380dc   bridge    bridge    local
+4d726e7f4251   host      host      local
+b138d0f41e9b   none      null      local
+```
+
+|      |      none      |         host         | bridge |
+| :--: | :------------: | :------------------: | :----: |
+|  1   | container/`lo` | container == phsical |        |
+|  2   |                |                      |        |
+
+
+
+#### 3.1.1.none网络
+
+```bash
+none网络的driver类型是null，IPAM字段为空
+挂在none网络上的容器只有lo，无法与外界通信
+# docker network inspect none
+[
+    {
+        "Name": "none",
+        "Id": "b138d0f41e9bf57d7809af2a7c96ca17b4b029455fbad52da74ebfe69beef524",
+        "Created": "2022-12-13T18:08:44.904333584+08:00",
+        "Scope": "local",
+        `"Driver": "null"`,
+        "EnableIPv6": false,
+        "IPAM": {
+            "Driver": "default",
+            "Options": null,
+            `"Config": []`
+        },
+        "Internal": false,
+        "Attachable": false,
+        "Ingress": false,
+        "ConfigFrom": {
+            "Network": ""
+        },
+        "ConfigOnly": false,
+        "Containers": {},
+        "Options": {},
+        "Labels": {}
+    }
+]
+
+# docker run -itd --network none centos
+6a40a2d2a72d096e300aa053f2f130f6d860cd56834081b515f617b6381ac309
+# docker ps
+CONTAINER ID   IMAGE      COMMAND                  CREATED         STATUS        PORTS                                       NAMES
+6a40a2d2a72d   centos     "/bin/bash"              3 seconds ago   Up 1 second                                               laughing_williamson
+
+# docker exec -it laughing_williamson /bin/bash
+[root@6a40a2d2a72d /]# ifconfig
+bash: ifconfig: command not found
+[root@6a40a2d2a72d /]# ip a
+1: `lo`: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN group default qlen 1000
+    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
+    inet 127.0.0.1/8 scope host lo
+       valid_lft forever preferred_lft forever
+
+[root@6a40a2d2a72d /]# ping localhost
+PING localhost (127.0.0.1) 56(84) bytes of data.
+64 bytes from localhost (127.0.0.1): icmp_seq=1 ttl=64 time=0.028 ms
+64 bytes from localhost (127.0.0.1): icmp_seq=2 ttl=64 time=0.033 ms
+^C
+--- localhost ping statistics ---
+2 packets transmitted, 2 received, 0% packet loss, time 1001ms
+rtt min/avg/max/mdev = 0.028/0.030/0.033/0.006 ms
+[root@6a40a2d2a72d /]# ping 8.8.8.8
+connect: Network is unreachable
+[root@6a40a2d2a72d /]# exit
+exit
+
+# docker inspect laughing_williamson 
+...输出省略...
+        "HostConfig": {
+            "Binds": null,
+            "ContainerIDFile": "",
+            "LogConfig": {
+                "Type": "json-file",
+                "Config": {}
+            },
+            "NetworkMode": "none",
+            "PortBindings": {},
+            "RestartPolicy": {
+                "Name": "no",
+                "MaximumRetryCount": 0
+            },
+        ...输出省略...
+        "NetworkSettings": {
+        ...输出省略...
+            "Networks": {
+                "none": {
+                    `"IPAMConfig": null`,
+                    "Links": null,
+                    "Aliases": null,
+                    "NetworkID": "b138d0f41e9bf57d7809af2a7c96ca17b4b029455fbad52da74ebfe69beef524",
+                    "EndpointID": "14c636e55215df738f616d6b81c2b245906ed5a76cd99d4923fc2634b547f323",
+                    "Gateway": "",
+                    "IPAddress": "",
+                    "IPPrefixLen": 0,
+                    "IPv6Gateway": "",
+                    "GlobalIPv6Address": "",
+                    "GlobalIPv6PrefixLen": 0,
+                    "MacAddress": "",
+                    "DriverOpts": null
+                }
+            }
+...输出省略...
+
+```
+#### 3.1.2.host网络
+
+```
+挂在host网络上的容器共享宿主机的network namespace
+即容器的网络配置与host网络配置完全一样
+```
+
+![image-20221217111121082](cka培训截图\image-20221217111121082.png)
+
+
+
+```bash
+# ip a
+1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN group default qlen 1000
+    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
+    inet 127.0.0.1/8 scope host lo
+       valid_lft forever preferred_lft forever
+    inet6 ::1/128 scope host 
+       valid_lft forever preferred_lft forever
+2: ens160: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc fq_codel state UP group default qlen 1000
+    link/ether 00:0c:29:b6:9b:17 brd ff:ff:ff:ff:ff:ff
+    altname enp3s0
+    inet 192.168.1.240/24 brd 192.168.1.255 scope global noprefixroute ens160
+       valid_lft forever preferred_lft forever
+3: docker0: <NO-CARRIER,BROADCAST,MULTICAST,UP> mtu 1500 qdisc noqueue state DOWN group default 
+    link/ether 02:42:96:88:d3:21 brd ff:ff:ff:ff:ff:ff
+    inet 172.17.0.1/16 brd 172.17.255.255 scope global docker0
+       valid_lft forever preferred_lft forever
+    inet6 fe80::42:96ff:fe88:d321/64 scope link 
+       valid_lft forever preferred_lft forever
+
+# docker run -itd --network host centos
+eda0b197442386dc351ce145b540f76a02dfc65e88024152153a6494fe306d67
+root@ubuntu001-virtual-machine:~# docker ps
+CONTAINER ID   IMAGE     COMMAND       CREATED          STATUS          PORTS     NAMES
+eda0b1974423   centos    "/bin/bash"   2 seconds ago    Up 1 second               practical_pasteur
+
+# docker exec -it practical_pasteur /bin/bash
+[root@ubuntu001-virtual-machine /]# ip a
+1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN group default qlen 1000
+    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
+    inet 127.0.0.1/8 scope host lo
+       valid_lft forever preferred_lft forever
+    inet6 ::1/128 scope host 
+       valid_lft forever preferred_lft forever
+2: ens160: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc fq_codel state UP group default qlen 1000
+    link/ether 00:0c:29:b6:9b:17 brd ff:ff:ff:ff:ff:ff
+    altname enp3s0
+    inet 192.168.1.240/24 brd 192.168.1.255 scope global noprefixroute ens160
+       valid_lft forever preferred_lft forever
+3: docker0: <NO-CARRIER,BROADCAST,MULTICAST,UP> mtu 1500 qdisc noqueue state DOWN group default 
+    link/ether 02:42:96:88:d3:21 brd ff:ff:ff:ff:ff:ff
+    inet 172.17.0.1/16 brd 172.17.255.255 scope global docker0
+       valid_lft forever preferred_lft forever
+    inet6 fe80::42:96ff:fe88:d321/64 scope link 
+       valid_lft forever preferred_lft forever
+[root@ubuntu001-virtual-machine /]# ping localhost -c 3
+PING localhost (127.0.0.1) 56(84) bytes of data.
+64 bytes from localhost (127.0.0.1): icmp_seq=1 ttl=64 time=0.087 ms
+64 bytes from localhost (127.0.0.1): icmp_seq=2 ttl=64 time=0.041 ms
+64 bytes from localhost (127.0.0.1): icmp_seq=3 ttl=64 time=0.052 ms
+
+--- localhost ping statistics ---
+3 packets transmitted, 3 received, 0% packet loss, time 2027ms
+rtt min/avg/max/mdev = 0.041/0.060/0.087/0.019 ms
+
+[root@ubuntu001-virtual-machine /]# ping 8.8.8.8 -c 3
+PING 8.8.8.8 (8.8.8.8) 56(84) bytes of data.
+64 bytes from 8.8.8.8: icmp_seq=1 ttl=108 time=32.0 ms
+64 bytes from 8.8.8.8: icmp_seq=2 ttl=108 time=31.10 ms
+64 bytes from 8.8.8.8: icmp_seq=3 ttl=108 time=31.7 ms
+
+--- 8.8.8.8 ping statistics ---
+3 packets transmitted, 3 received, 0% packet loss, time 2002ms
+rtt min/avg/max/mdev = 31.737/31.908/32.012/0.190 ms
+[root@ubuntu001-virtual-machine /]# ifconfig
+bash: ifconfig: command not found
+[root@ubuntu001-virtual-machine /]# exit
+exit
+# 
+
+# docker run -itd --network host --name centosnew centos
+d086e86e6cc868cb260bd8c51f06fd622ff8697604eb9e381365f40e0ac50412
+root@ubuntu001-virtual-machine:~# docker ps
+CONTAINER ID   IMAGE     COMMAND       CREATED          STATUS          PORTS     NAMES
+d086e86e6cc8   centos    "/bin/bash"   2 seconds ago    Up 1 second               centosnew
+eda0b1974423   centos    "/bin/bash"   15 minutes ago   Up 15 minutes             practical_pasteur
+
+root@ubuntu001-virtual-machine:~# docker exec -it centosnew /bin/bash
+[root@ubuntu001-virtual-machine /]# ip a
+1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN group default qlen 1000
+    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
+    inet 127.0.0.1/8 scope host lo
+       valid_lft forever preferred_lft forever
+    inet6 ::1/128 scope host 
+       valid_lft forever preferred_lft forever
+2: ens160: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc fq_codel state UP group default qlen 1000
+    link/ether 00:0c:29:b6:9b:17 brd ff:ff:ff:ff:ff:ff
+    altname enp3s0
+    inet 192.168.1.240/24 brd 192.168.1.255 scope global noprefixroute ens160
+       valid_lft forever preferred_lft forever
+3: docker0: <NO-CARRIER,BROADCAST,MULTICAST,UP> mtu 1500 qdisc noqueue state DOWN group default 
+    link/ether 02:42:96:88:d3:21 brd ff:ff:ff:ff:ff:ff
+    inet 172.17.0.1/16 brd 172.17.255.255 scope global docker0
+       valid_lft forever preferred_lft forever
+    inet6 fe80::42:96ff:fe88:d321/64 scope link 
+       valid_lft forever preferred_lft forever
+[root@ubuntu001-virtual-machine /]# ping localhost -c 3
+PING localhost (127.0.0.1) 56(84) bytes of data.
+64 bytes from localhost (127.0.0.1): icmp_seq=1 ttl=64 time=0.087 ms
+64 bytes from localhost (127.0.0.1): icmp_seq=2 ttl=64 time=0.041 ms
+64 bytes from localhost (127.0.0.1): icmp_seq=3 ttl=64 time=0.052 ms
+
+--- localhost ping statistics ---
+3 packets transmitted, 3 received, 0% packet loss, time 2027ms
+rtt min/avg/max/mdev = 0.041/0.060/0.087/0.019 ms
+[root@ubuntu001-virtual-machine /]# ping 8.8.8.8 -c 3
+PING 8.8.8.8 (8.8.8.8) 56(84) bytes of data.
+64 bytes from 8.8.8.8: icmp_seq=1 ttl=108 time=32.1 ms
+64 bytes from 8.8.8.8: icmp_seq=2 ttl=108 time=31.10 ms
+64 bytes from 8.8.8.8: icmp_seq=3 ttl=108 time=31.7 ms
+
+--- 8.8.8.8 ping statistics ---
+3 packets transmitted, 3 received, 0% packet loss, time 2002ms
+rtt min/avg/max/mdev = 31.694/31.945/32.146/0.237 ms
+[root@ubuntu001-virtual-machine /]# exit
+#
+
+```
 
 
 
@@ -1764,7 +2107,7 @@ docker push registry.xiaohui.cn/library/httpd:v1
 |  1   | 欧路词典 |                    https://www.eudic.net/                    |          翻译软件          |
 |  2   |  Typora  |                     https://typoraio.cn                      |      MarkDown格式文档      |
 |  3   |  VMware  |                   https://www.vmware.com/                    |         虚拟化软件         |
-|  4   |  ubunt   |                     https://ubuntu.com/                      |        系统光盘iso         |
+|  4   |  ubuntu  |                     https://ubuntu.com/                      |        系统光盘iso         |
 |  5   |  docker  |       https://docs.docker.com/desktop/install/ubuntu/        |            国外            |
 |      |          | https://developer.aliyun.com/mirror/docker-ce?spm=a2c6h.13651102.0.0.4ea21b11CvJUSb |         国内阿里云         |
 |      |          | https://cr.console.aliyun.com/cn-hangzhou/instances/mirrors  |   仓库加速器daemon.json    |
@@ -1843,6 +2186,9 @@ Dockerfile常用命令
 
 
 > 官网https://docs.docker.com/engine/reference/builder/
+
+#### 3.1.3.bridge网络
+
 
 
 
