@@ -693,6 +693,7 @@ docker commit命令：可以将一个运行中的容器保存为镜像。
 Lab1. nginx镜像
 # docker run -d -p 8081:80 nginx
 
+
 # docker images
 REPOSITORY   TAG       IMAGE ID       CREATED         SIZE
 nginx        latest    605c77e624dd   11 months ago   141MB
@@ -1015,6 +1016,8 @@ Dockerfile
 
 Dockerfile常用命令
 
+![image-20230204200034148](cka培训截图\image-20230204200034148.png)
+
 见附录A.6
 
 |       指令       |                     作用                     |                           命令格式                           | 例子                                                         |
@@ -1250,10 +1253,12 @@ dabbfbe0c57b   12 months ago    /bin/sh -c #(nop)  CMD ["httpd-foreground"]     
 ```
 
 #### 2.3.容器镜像命名
-```
+```bash
 镜像命名格式
 --- image name = repository:tag
 --- tag 一般用于描述镜像版本。若未指定tag，则默认为"latest"
+
+# docker pull harbor.hello.com/admin-platform/account-center:1.0.2-RELEASE
 ```
 ```bash
 # docker images
@@ -1310,7 +1315,7 @@ REPOSITORY   TAG       IMAGE ID       CREATED         SIZE
 #### 2.4.搭建私有仓库
 ```
 仓库分两类：
---- 公有镜像仓库：dockerhub.com     quay.io
+--- 公有镜像仓库：hub.docker.com  quay.io
 --- 私有镜像仓库：docker registry  harbor
 ```
 ##### 2.4.1.搭建私有仓库docker registry
@@ -1318,7 +1323,7 @@ REPOSITORY   TAG       IMAGE ID       CREATED         SIZE
 $ sudo -i
 # mkdir /root/myregistry
 
-# docker run -d -p 1000:5000 -v /root/myregistry:/var/lib/registry registry
+# docker run -d -p 1000:5000 -v /root/myregistry:/var/lib/registry --restart always registry
 Unable to find image 'registry:latest' locally
 latest: Pulling from library/registry
 79e9f2f55bf5: Pull complete 
@@ -1398,6 +1403,8 @@ registry                           latest    b8604a3fe854   13 months ago   26.2
                 "5000/tcp": {}
             },
        .................省略部分.............
+       
+## ss -anutlp|grep 1000       
 
 # curl -v  http://localhost:1000
 *   Trying 127.0.0.1:1000...
@@ -1717,6 +1724,9 @@ sudo systemctl restart docker
 
 ```bash
 wget https://ghproxy.com/https://github.com/goharbor/harbor/releases/download/v1.10.15/harbor-offline-installer-v1.10.15.tgz
+
+wget https://ghproxy.com/https://github.com/goharbor/harbor/releases/download/v2.6.3/harbor-offline-installer-v2.6.3.tgz
+
 tar xf harbor-offline-installer-v1.10.15.tgz -C /usr/local/bin
 cd /usr/local/bin/harbor
 docker load -i harbor.v1.10.15.tar.gz
@@ -1726,6 +1736,8 @@ docker load -i harbor.v1.10.15.tar.gz
 在harbor.yml中，修改以下参数，定义了网址、证书、密码
 
 ```bash
+cp harbor.yml.tmpl harbor.yml
+
 vim harbor.yml
 # 修改hostname为registry.xiaohui.cn
 # 修改https处的certificate为/etc/ssl/certs/registry.crt
@@ -2071,7 +2083,6 @@ rtt min/avg/max/mdev = 31.694/31.945/32.146/0.237 ms
 
 
 
-
 ===abc===
 
 --cd--
@@ -2129,6 +2140,13 @@ rtt min/avg/max/mdev = 31.694/31.945/32.146/0.237 ms
 
 
 #### A4.vim
+
+```bash
+# vim
+# apt install vim
+```
+
+
 
 | mode |   模式   |                |              |                     |
 | :--: | :------: | :------------: | :----------: | :-----------------: |
