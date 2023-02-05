@@ -1768,9 +1768,36 @@ ExecStop=/usr/local/bin/docker-compose -f /usr/local/bin/harbor/docker-compose.y
 [Install]
 WantedBy=multi-user.target
 EOF
+
 sudo systemctl daemon-reload
 systemctl enable harbor --now
 ```
+
+
+
+```bash
+#centos的与ubuntu的有些区别：位置、依赖的服务等不同
+cat > /usr/lib/systemd/system/harbor.service <<EOF
+[Unit]
+Description=Harbor
+After=network-online.target firewalld.service docker.service
+Requires=docker.service
+Documentation=http://github.com/vmware/harbor
+[Service]
+Type=simple
+Restart=on-failure
+RestartSec=5
+ExecStart=/usr/local/bin/docker-compose -f /root/harbor/docker-compose.yml up
+ExecStop=/usr/local/bin/docker-compose -f /root/harbor/docker-compose.yml down
+[Install]
+WantedBy=multi-user.target
+EOF
+
+systemctl daemon-reload
+systemctl enable harbor --now
+```
+
+
 
 在所有的机器上，将registry.xiaohui.cn以及其对应的IP添加到/etc/hosts，然后将上述实验中的httpd:v1镜像，改名为带上IP:PORT形式，尝试上传我们的镜像到本地仓库
 
@@ -1847,6 +1874,105 @@ b138d0f41e9b   none      null      local
 |  1   | container/`lo` | container == phsical |        |
 |  2   |                |                      |        |
 
+```bash
+默认bridge网络驱动：
+# docker run -d --privileged -p 8088:80 httpdcentos /sbin/init
+31ff339b9356f4452f377e4b34d67ff95219fa46910d6e9b309fdc89e6118f32
+# docker ps
+CONTAINER ID   IMAGE         COMMAND        CREATED         STATUS        PORTS                                   NAMES
+31ff339b9356   httpdcentos   "/sbin/init"   2 seconds ago   Up 1 second   0.0.0.0:8088->80/tcp, :::8088->80/tcp   bold_bouman
+# curl localhost:8088
+haha
+
+# docker exec -it bold_bouman /bin/bash
+[root@31ff339b9356 /]# curl localhost
+haha
+
+none网络驱动：
+# docker run -d --privileged --network=none -p 8089:80 httpdcentos /sbin/init
+7ac110757eecbf8ce2a552ab2ba2a42059ab985470dd8b927baf4a20b7ee41c7
+# docker ps
+CONTAINER ID   IMAGE         COMMAND        CREATED         STATUS         PORTS                                   NAMES
+7ac110757eec   httpdcentos   "/sbin/init"   2 seconds ago   Up 1 second                                            loving_beaver
+31ff339b9356   httpdcentos   "/sbin/init"   2 minutes ago   Up 2 minutes   0.0.0.0:8088->80/tcp, :::8088->80/tcp   bold_bouman
+
+# curl localhost:8089
+curl: (7) Failed to connect to localhost port 8089 after 0 ms: Connection refused
+
+# docker exec -it loving_beaver /bin/bash
+[root@7ac110757eec /]# curl localhost
+haha
+[root@7ac110757eec /]# ip a
+1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN group default qlen 1000
+    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
+    inet 127.0.0.1/8 scope host lo
+       valid_lft forever preferred_lft forever
+
+host网络驱动：
+# docker run -d --privileged --network=host -p 8090:80 httpdcentos /sbin/init
+WARNING: Published ports are discarded when using host network mode
+ffcca87fbf7720ae56bd3df71a44f3c6d0a8b0f4b5a55dc96083ceeef7f1905e
+# docker ps
+CONTAINER ID   IMAGE         COMMAND        CREATED          STATUS          PORTS                                   NAMES
+ffcca87fbf77   httpdcentos   "/sbin/init"   45 seconds ago   Up 44 seconds                                           great_liskov
+7ac110757eec   httpdcentos   "/sbin/init"   3 minutes ago    Up 3 minutes                                            loving_beaver
+31ff339b9356   httpdcentos   "/sbin/init"   5 minutes ago    Up 5 minutes    0.0.0.0:8088->80/tcp, :::8088->80/tcp   bold_bouman
+
+# curl localhost:8090
+curl: (7) Failed to connect to localhost port 8090 after 0 ms: Connection refused
+root@ubuntu001-virtual-machine:~# curl localhost
+haha
+
+# docker exec -it great_liskov /bin/bash
+[root@ubuntu001-virtual-machine /]# ip a
+1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN group default qlen 1000
+    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
+    inet 127.0.0.1/8 scope host lo
+       valid_lft forever preferred_lft forever
+    inet6 ::1/128 scope host 
+       valid_lft forever preferred_lft forever
+2: ens160: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc fq_codel state UP group default qlen 1000
+    link/ether 00:0c:29:b6:9b:17 brd ff:ff:ff:ff:ff:ff
+    altname enp3s0
+    inet 192.168.1.240/24 brd 192.168.1.255 scope global noprefixroute ens160
+       valid_lft forever preferred_lft forever
+3: docker0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue state UP group default 
+    link/ether 02:42:96:88:d3:21 brd ff:ff:ff:ff:ff:ff
+    inet 172.17.0.1/16 brd 172.17.255.255 scope global docker0
+       valid_lft forever preferred_lft forever
+    inet6 fe80::42:96ff:fe88:d321/64 scope link 
+       valid_lft forever preferred_lft forever
+124: veth897064e@if123: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue master docker0 state UP group default 
+    link/ether 6e:a5:9c:43:b8:9e brd ff:ff:ff:ff:ff:ff link-netnsid 0
+    inet6 fe80::6ca5:9cff:fe43:b89e/64 scope link 
+       valid_lft forever preferred_lft forever
+[root@ubuntu001-virtual-machine /]# exit
+exit
+
+# ip a
+1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN group default qlen 1000
+    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
+    inet 127.0.0.1/8 scope host lo
+       valid_lft forever preferred_lft forever
+    inet6 ::1/128 scope host 
+       valid_lft forever preferred_lft forever
+2: ens160: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc fq_codel state UP group default qlen 1000
+    link/ether 00:0c:29:b6:9b:17 brd ff:ff:ff:ff:ff:ff
+    altname enp3s0
+    inet 192.168.1.240/24 brd 192.168.1.255 scope global noprefixroute ens160
+       valid_lft forever preferred_lft forever
+3: docker0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue state UP group default 
+    link/ether 02:42:96:88:d3:21 brd ff:ff:ff:ff:ff:ff
+    inet 172.17.0.1/16 brd 172.17.255.255 scope global docker0
+       valid_lft forever preferred_lft forever
+    inet6 fe80::42:96ff:fe88:d321/64 scope link 
+       valid_lft forever preferred_lft forever
+124: veth897064e@if123: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue master docker0 state UP group default 
+    link/ether 6e:a5:9c:43:b8:9e brd ff:ff:ff:ff:ff:ff link-netnsid 0
+    inet6 fe80::6ca5:9cff:fe43:b89e/64 scope link 
+       valid_lft forever preferred_lft forever
+```
+
 
 
 #### 3.1.1.none网络
@@ -1918,7 +2044,7 @@ exit
                 "Type": "json-file",
                 "Config": {}
             },
-            "NetworkMode": "none",
+            "NetworkMode": `"none"`,
             "PortBindings": {},
             "RestartPolicy": {
                 "Name": "no",
@@ -1945,6 +2071,8 @@ exit
                 }
             }
 ...输出省略...
+
+
 
 ```
 #### 3.1.2.host网络
