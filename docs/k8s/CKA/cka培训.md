@@ -1869,10 +1869,10 @@ NETWORK ID     NAME      DRIVER    SCOPE
 b138d0f41e9b   none      null      local
 ```
 
-|      |      none      |         host         | bridge |
-| :--: | :------------: | :------------------: | :----: |
-|  1   | container/`lo` | container == phsical |        |
-|  2   |                |                      |        |
+|      |      none      |         host         |                   bridge                   |
+| :--: | :------------: | :------------------: | :----------------------------------------: |
+|  1   | container/`lo` | container == phsical | container/eth0-net1<br>container/eth1-net2 |
+|  2   |                |                      |                                            |
 
 ```bash
 默认bridge网络驱动：
@@ -2054,8 +2054,8 @@ exit
         "NetworkSettings": {
         ...输出省略...
             "Networks": {
-                "none": {
-                    `"IPAMConfig": null`,
+                `"none"`: {
+                    "IPAMConfig": null,
                     "Links": null,
                     "Aliases": null,
                     "NetworkID": "b138d0f41e9bf57d7809af2a7c96ca17b4b029455fbad52da74ebfe69beef524",
@@ -2080,6 +2080,7 @@ exit
 ```
 挂在host网络上的容器共享宿主机的network namespace
 即容器的网络配置与host网络配置完全一样
+当docker run 两个容器都采用host网络时，监听端口不能一样，否则冲突，后面第二个容器的服务会异常
 ```
 
 ![image-20221217111121082](cka培训截图\image-20221217111121082.png)
@@ -2203,7 +2204,695 @@ rtt min/avg/max/mdev = 31.694/31.945/32.146/0.237 ms
 [root@ubuntu001-virtual-machine /]# exit
 #
 
+# docker network inspect host
+[
+    {
+        "Name": "host",
+        "Id": "4d726e7f42510ee1a8d40233b35e819f1490418488a8b125a031790557a44026",
+        "Created": "2022-12-13T18:08:44.919053249+08:00",
+        "Scope": "local",
+        "Driver": "host",
+        "EnableIPv6": false,
+        "IPAM": {
+            "Driver": "default",
+            "Options": null,
+            "Config": []
+        },
+        "Internal": false,
+        "Attachable": false,
+        "Ingress": false,
+        "ConfigFrom": {
+            "Network": ""
+        },
+        "ConfigOnly": false,
+        "Containers": {},
+        "Options": {},
+        "Labels": {}
+    }
+]
+
+# docker inspect centosnew |grep -A 15 Networks
+            "Networks": {
+                `"host"`: {
+                    "IPAMConfig": null,
+                    "Links": null,
+                    "Aliases": null,
+                    "NetworkID": "4d726e7f42510ee1a8d40233b35e819f1490418488a8b125a031790557a44026",
+                    "EndpointID": "9e8d76f15ae9a7b4ed6911cc8e4779014687810de46a066c554d445b285a1085",
+                    "Gateway": "",
+                    "IPAddress": "",
+                    "IPPrefixLen": 0,
+                    "IPv6Gateway": "",
+                    "GlobalIPv6Address": "",
+                    "GlobalIPv6PrefixLen": 0,
+                    "MacAddress": "",
+                    "DriverOpts": null
+                }
 ```
+
+#### 3.1.3.bridge网络
+
+```
+docker0网络
+---容器创建时，默认挂载在docker0上
+---docker0是一个linux bridge
+---docker0网络创建时已默认配置了Subnet
+```
+
+![image-20230206211608368](cka培训截图/image-20230206211608368.png)
+
+
+
+```bash
+# docker run -d --privileged -p 8088:80 httpdcentos /sbin/init
+31ff339b9356f4452f377e4b34d67ff95219fa46910d6e9b309fdc89e6118f32
+# docker ps
+CONTAINER ID   IMAGE         COMMAND        CREATED        STATUS              PORTS                                   NAMES
+31ff339b9356   httpdcentos   "/sbin/init"   34 hours ago   Up About a minute   0.0.0.0:8088->80/tcp, :::8088->80/tcp   bold_bouman
+
+# ip a
+1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN group default qlen 1000
+    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
+    inet 127.0.0.1/8 scope host lo
+       valid_lft forever preferred_lft forever
+    inet6 ::1/128 scope host 
+       valid_lft forever preferred_lft forever
+2: ens160: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc fq_codel state UP group default qlen 1000
+    link/ether 00:0c:29:b6:9b:17 brd ff:ff:ff:ff:ff:ff
+    altname enp3s0
+    inet 192.168.1.240/24 brd 192.168.1.255 scope global noprefixroute ens160
+       valid_lft forever preferred_lft forever
+3: docker0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue state UP group default 
+    link/ether 02:42:96:88:d3:21 brd ff:ff:ff:ff:ff:ff
+    inet 172.17.0.1/16 brd 172.17.255.255 scope global docker0
+       valid_lft forever preferred_lft forever
+    inet6 fe80::42:96ff:fe88:d321/64 scope link 
+       valid_lft forever preferred_lft forever
+128: vethf44d9fa@if127: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue master docker0 state UP group default 
+    link/ether 5a:86:a3:9f:ed:2e brd ff:ff:ff:ff:ff:ff link-netnsid 0
+    inet6 fe80::5886:a3ff:fe9f:ed2e/64 scope link 
+       valid_lft forever preferred_lft forever
+
+# docker exec -it bold_bouman  /bin/bash
+[root@31ff339b9356 /]# ip a
+1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN group default qlen 1000
+    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
+    inet 127.0.0.1/8 scope host lo
+       valid_lft forever preferred_lft forever
+127: eth0@if128: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue state UP group default 
+    link/ether 02:42:ac:11:00:02 brd ff:ff:ff:ff:ff:ff link-netnsid 0
+    inet 172.17.0.2/16 brd 172.17.255.255 scope global eth0
+       valid_lft forever preferred_lft forever
+       
+# docker network inspect bridge
+[
+    {
+        "Name": "bridge",
+        "Id": "6236b3d380dcd135aec85b1be1c033b2bf08bcd9b140b61009a6c317eb79d469",
+        "Created": "2022-12-16T14:53:31.345859172+08:00",
+        "Scope": "local",
+        "Driver": "bridge",
+        "EnableIPv6": false,
+        "IPAM": {
+            "Driver": "default",
+            "Options": null,
+            "Config": [
+                {
+                    "Subnet": "172.17.0.0/16",
+                    "Gateway": "172.17.0.1"
+                }
+            ]
+        },
+        "Internal": false,
+        "Attachable": false,
+        "Ingress": false,
+        "ConfigFrom": {
+            "Network": ""
+        },
+        "ConfigOnly": false,
+        "Containers": {
+            "31ff339b9356f4452f377e4b34d67ff95219fa46910d6e9b309fdc89e6118f32": {
+                "Name": "bold_bouman",
+                "EndpointID": "9cc65c90c85e96c4b0ae91b6476f291413d2a5a0835638111bc18f3501b0d2c9",
+                "MacAddress": "02:42:ac:11:00:02",
+                "IPv4Address": "172.17.0.2/16",
+                "IPv6Address": ""
+            }
+        },
+        "Options": {
+            "com.docker.network.bridge.default_bridge": "true",
+            "com.docker.network.bridge.enable_icc": "true",
+            "com.docker.network.bridge.enable_ip_masquerade": "true",
+            "com.docker.network.bridge.host_binding_ipv4": "0.0.0.0",
+            "com.docker.network.bridge.name": "docker0",
+            "com.docker.network.driver.mtu": "1500"
+        },
+        "Labels": {}
+    }
+]
+
+
+# docker inspect bold_bouman |grep -A 15 Networks
+            "Networks": {
+                "bridge": {
+                    "IPAMConfig": null,
+                    "Links": null,
+                    "Aliases": null,
+                    "NetworkID": "6236b3d380dcd135aec85b1be1c033b2bf08bcd9b140b61009a6c317eb79d469",
+                    "EndpointID": "9cc65c90c85e96c4b0ae91b6476f291413d2a5a0835638111bc18f3501b0d2c9",
+                    "Gateway": "172.17.0.1",
+                    "IPAddress": "172.17.0.2",
+                    "IPPrefixLen": 16,
+                    "IPv6Gateway": "",
+                    "GlobalIPv6Address": "",
+                    "GlobalIPv6PrefixLen": 0,
+                    "MacAddress": "02:42:ac:11:00:02",
+                    "DriverOpts": null
+                }
+                
+docker run 第二个容器：
+# docker run -d -p 8092:80 nginx
+ad90470fa726dff4b09e53bd6d6a77af5d6314abdc67aab2060d15479bf2d14f
+# docker ps
+CONTAINER ID   IMAGE         COMMAND                  CREATED         STATUS         PORTS                                   NAMES
+ad90470fa726   nginx         "/docker-entrypoint.…"   4 seconds ago   Up 2 seconds   0.0.0.0:8092->80/tcp, :::8092->80/tcp   sleepy_bhaskara
+31ff339b9356   httpdcentos   "/sbin/init"             34 hours ago    Up 7 minutes   0.0.0.0:8088->80/tcp, :::8088->80/tcp   bold_bouman
+
+# ip a
+1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN group default qlen 1000
+    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
+    inet 127.0.0.1/8 scope host lo
+       valid_lft forever preferred_lft forever
+    inet6 ::1/128 scope host 
+       valid_lft forever preferred_lft forever
+2: ens160: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc fq_codel state UP group default qlen 1000
+    link/ether 00:0c:29:b6:9b:17 brd ff:ff:ff:ff:ff:ff
+    altname enp3s0
+    inet 192.168.1.240/24 brd 192.168.1.255 scope global noprefixroute ens160
+       valid_lft forever preferred_lft forever
+3: docker0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue state UP group default 
+    link/ether 02:42:96:88:d3:21 brd ff:ff:ff:ff:ff:ff
+    inet 172.17.0.1/16 brd 172.17.255.255 scope global docker0
+       valid_lft forever preferred_lft forever
+    inet6 fe80::42:96ff:fe88:d321/64 scope link 
+       valid_lft forever preferred_lft forever
+128: vethf44d9fa@if127: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue master docker0 state UP group default 
+    link/ether 5a:86:a3:9f:ed:2e brd ff:ff:ff:ff:ff:ff link-netnsid 0
+    inet6 fe80::5886:a3ff:fe9f:ed2e/64 scope link 
+       valid_lft forever preferred_lft forever
+130: vethf942135@if129: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue master docker0 state UP group default 
+    link/ether b2:1e:41:62:1a:01 brd ff:ff:ff:ff:ff:ff link-netnsid 1
+    inet6 fe80::b01e:41ff:fe62:1a01/64 scope link 
+       valid_lft forever preferred_lft forever
+
+# route -n
+Kernel IP routing table
+Destination     Gateway         Genmask         Flags Metric Ref    Use Iface
+0.0.0.0         192.168.1.1     0.0.0.0         UG    100    0        0 ens160
+169.254.0.0     0.0.0.0         255.255.0.0     U     1000   0        0 ens160
+172.17.0.0      0.0.0.0         255.255.0.0     U     0      0        0 docker0
+192.168.1.0     0.0.0.0         255.255.255.0   U     100    0        0 ens160
+
+# docker inspect sleepy_bhaskara |grep -A 15 Networks
+            "Networks": {
+                "bridge": {
+                    "IPAMConfig": null,
+                    "Links": null,
+                    "Aliases": null,
+                    "NetworkID": "6236b3d380dcd135aec85b1be1c033b2bf08bcd9b140b61009a6c317eb79d469",
+                    "EndpointID": "34c2bf3ac825b9012ebe54df24734bf5684caab361baa9f168e21e7daa8c5c4f",
+                    "Gateway": "172.17.0.1",
+                    "IPAddress": "172.17.0.3",
+                    "IPPrefixLen": 16,
+                    "IPv6Gateway": "",
+                    "GlobalIPv6Address": "",
+                    "GlobalIPv6PrefixLen": 0,
+                    "MacAddress": "02:42:ac:11:00:03",
+                    "DriverOpts": null
+                }
+# docker network inspect bridge
+[
+    {
+        "Name": "bridge",
+        "Id": "6236b3d380dcd135aec85b1be1c033b2bf08bcd9b140b61009a6c317eb79d469",
+        "Created": "2022-12-16T14:53:31.345859172+08:00",
+        "Scope": "local",
+        "Driver": "bridge",
+        "EnableIPv6": false,
+        "IPAM": {
+            "Driver": "default",
+            "Options": null,
+            "Config": [
+                {
+                    "Subnet": "172.17.0.0/16",
+                    "Gateway": "172.17.0.1"
+                }
+            ]
+        },
+        "Internal": false,
+        "Attachable": false,
+        "Ingress": false,
+        "ConfigFrom": {
+            "Network": ""
+        },
+        "ConfigOnly": false,
+        "Containers": {
+            "31ff339b9356f4452f377e4b34d67ff95219fa46910d6e9b309fdc89e6118f32": {
+                "Name": "bold_bouman",
+                "EndpointID": "9cc65c90c85e96c4b0ae91b6476f291413d2a5a0835638111bc18f3501b0d2c9",
+                "MacAddress": "02:42:ac:11:00:02",
+                "IPv4Address": "172.17.0.2/16",
+                "IPv6Address": ""
+            },
+            "ad90470fa726dff4b09e53bd6d6a77af5d6314abdc67aab2060d15479bf2d14f": {
+                "Name": "sleepy_bhaskara",
+                "EndpointID": "34c2bf3ac825b9012ebe54df24734bf5684caab361baa9f168e21e7daa8c5c4f",
+                "MacAddress": "02:42:ac:11:00:03",
+                "IPv4Address": "172.17.0.3/16",
+                "IPv6Address": ""
+            }
+        },
+        "Options": {
+            "com.docker.network.bridge.default_bridge": "true",
+            "com.docker.network.bridge.enable_icc": "true",
+            "com.docker.network.bridge.enable_ip_masquerade": "true",
+            "com.docker.network.bridge.host_binding_ipv4": "0.0.0.0",
+            "com.docker.network.bridge.name": "docker0",
+            "com.docker.network.driver.mtu": "1500"
+        },
+        "Labels": {}
+    }
+]
+```
+
+#### 3.1.3.1.user-defined Bridge网络
+```
+用户可按需创建bridge网桥，成为user-defined bridge
+```
+
+
+
+![image-20230206214842408](cka培训截图/image-20230206214842408.png)
+
+
+
+```bash
+创建第一个网桥：
+# docker network create --driver bridge net1
+8a47db528c58e1c2ec3f299030e8d4dbf5658ebdad33d199533ff32c5202a9c5
+# docker network ls
+NETWORK ID     NAME      DRIVER    SCOPE
+6236b3d380dc   bridge    bridge    local
+4d726e7f4251   host      host      local
+8a47db528c58   net1      bridge    local
+b138d0f41e9b   none      null      local
+
+# docker network inspect net1
+[
+    {
+        "Name": "net1",
+        "Id": "8a47db528c58e1c2ec3f299030e8d4dbf5658ebdad33d199533ff32c5202a9c5",
+        "Created": "2023-02-06T21:52:30.419641306+08:00",
+        "Scope": "local",
+        "Driver": "bridge",
+        "EnableIPv6": false,
+        "IPAM": {
+            "Driver": "default",
+            "Options": {},
+            "Config": [
+                {
+                    "Subnet": "172.19.0.0/16",
+                    "Gateway": "172.19.0.1"
+                }
+            ]
+        },
+        "Internal": false,
+        "Attachable": false,
+        "Ingress": false,
+        "ConfigFrom": {
+            "Network": ""
+        },
+        "ConfigOnly": false,
+        "Containers": {},
+        "Options": {},
+        "Labels": {}
+    }
+]
+
+创建第二个网桥：
+# docker network create --driver=bridge --subnet=172.20.0.0/24 --gateway=172.20.0.1 net2
+b8087febf61e639f27fd9cf5fb57c8c583f991bc84e39c38243ed058f8496e25
+# docker network ls
+NETWORK ID     NAME      DRIVER    SCOPE
+6236b3d380dc   bridge    bridge    local
+4d726e7f4251   host      host      local
+8a47db528c58   net1      bridge    local
+b8087febf61e   net2      bridge    local
+b138d0f41e9b   none      null      local
+
+# docker inspect net2
+[
+    {
+        "Name": "net2",
+        "Id": "b8087febf61e639f27fd9cf5fb57c8c583f991bc84e39c38243ed058f8496e25",
+        "Created": "2023-02-06T21:58:16.432573175+08:00",
+        "Scope": "local",
+        "Driver": "bridge",
+        "EnableIPv6": false,
+        "IPAM": {
+            "Driver": "default",
+            "Options": {},
+            "Config": [
+                {
+                    "Subnet": "172.20.0.0/24",
+                    "Gateway": "172.20.0.1"
+                }
+            ]
+        },
+        "Internal": false,
+        "Attachable": false,
+        "Ingress": false,
+        "ConfigFrom": {
+            "Network": ""
+        },
+        "ConfigOnly": false,
+        "Containers": {},
+        "Options": {},
+        "Labels": {}
+    }
+]
+
+
+启动3个centos容器，分别命名为c1、c2、c3
+其中c1加入到net1，c2加入到net2，c3加入net2并配置静态IP
+
+# docker ps
+CONTAINER ID   IMAGE     COMMAND   CREATED   STATUS    PORTS     NAMES
+
+# docker run -itd --network=net1 --name=c1 centos
+496d4ddad025a9c624a5cc5741e944cfb3cb3441cbe4115a1c1689b593b64fe4
+
+# docker run -itd --network=net2 --name=c2 centos
+f4dc0cf34db6ffeb9b4ea8fa5a9bfc4934d265ac587b0156ba019cc09323f927
+
+# docker run -itd --network=net2 --name=c3 --ip=172.20.0.100 centos
+94e0bc6720f311d9bfbfb7ec63dbd08847b516bb3cd4d5fcd97d0ca3451602fc
+
+# docker ps
+CONTAINER ID   IMAGE     COMMAND       CREATED              STATUS              PORTS     NAMES
+94e0bc6720f3   centos    "/bin/bash"   48 seconds ago       Up 46 seconds                 c3
+f4dc0cf34db6   centos    "/bin/bash"   About a minute ago   Up About a minute             c2
+496d4ddad025   centos    "/bin/bash"   About a minute ago   Up About a minute             c1
+
+# ip a
+1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN group default qlen 1000
+    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
+    inet 127.0.0.1/8 scope host lo
+       valid_lft forever preferred_lft forever
+    inet6 ::1/128 scope host 
+       valid_lft forever preferred_lft forever
+2: ens160: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc fq_codel state UP group default qlen 1000
+    link/ether 00:0c:29:b6:9b:17 brd ff:ff:ff:ff:ff:ff
+    altname enp3s0
+    inet 192.168.1.240/24 brd 192.168.1.255 scope global noprefixroute ens160
+       valid_lft forever preferred_lft forever
+3: docker0: <NO-CARRIER,BROADCAST,MULTICAST,UP> mtu 1500 qdisc noqueue state DOWN group default 
+    link/ether 02:42:96:88:d3:21 brd ff:ff:ff:ff:ff:ff
+    inet 172.17.0.1/16 brd 172.17.255.255 scope global docker0
+       valid_lft forever preferred_lft forever
+    inet6 fe80::42:96ff:fe88:d321/64 scope link 
+       valid_lft forever preferred_lft forever
+131: br-8a47db528c58: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue state UP group default 
+    link/ether 02:42:8e:76:7a:26 brd ff:ff:ff:ff:ff:ff
+    inet 172.19.0.1/16 brd 172.19.255.255 scope global br-8a47db528c58
+       valid_lft forever preferred_lft forever
+    inet6 fe80::42:8eff:fe76:7a26/64 scope link 
+       valid_lft forever preferred_lft forever
+132: br-b8087febf61e: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue state UP group default 
+    link/ether 02:42:cc:85:2d:2f brd ff:ff:ff:ff:ff:ff
+    inet 172.20.0.1/24 brd 172.20.0.255 scope global br-b8087febf61e
+       valid_lft forever preferred_lft forever
+    inet6 fe80::42:ccff:fe85:2d2f/64 scope link 
+       valid_lft forever preferred_lft forever
+140: vethf6fae61@if139: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue master br-8a47db528c58 state UP group default 
+    link/ether 8a:8c:16:32:67:66 brd ff:ff:ff:ff:ff:ff link-netnsid 0
+    inet6 fe80::888c:16ff:fe32:6766/64 scope link 
+       valid_lft forever preferred_lft forever
+142: vethb90b0d4@if141: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue master br-b8087febf61e state UP group default 
+    link/ether d6:ab:98:43:2c:8b brd ff:ff:ff:ff:ff:ff link-netnsid 1
+    inet6 fe80::d4ab:98ff:fe43:2c8b/64 scope link 
+       valid_lft forever preferred_lft forever
+144: veth6461145@if143: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue master br-b8087febf61e state UP group default 
+    link/ether ba:6c:88:2f:4b:b5 brd ff:ff:ff:ff:ff:ff link-netnsid 2
+    inet6 fe80::b86c:88ff:fe2f:4bb5/64 scope link 
+       valid_lft forever preferred_lft forever
+
+# docker ps
+CONTAINER ID   IMAGE     COMMAND       CREATED          STATUS          PORTS     NAMES
+94e0bc6720f3   centos    "/bin/bash"   37 minutes ago   Up 37 minutes             c3
+f4dc0cf34db6   centos    "/bin/bash"   38 minutes ago   Up 38 minutes             c2
+496d4ddad025   centos    "/bin/bash"   38 minutes ago   Up 38 minutes             c1
+
+查看容器IP地址：
+# docker inspect c1 |grep -A 15 Networks
+            "Networks": {
+                "net1": {
+                    "IPAMConfig": null,
+                    "Links": null,
+                    "Aliases": [
+                        "496d4ddad025"
+                    ],
+                    "NetworkID": "8a47db528c58e1c2ec3f299030e8d4dbf5658ebdad33d199533ff32c5202a9c5",
+                    "EndpointID": "61d79767658364f19da6591f339b2180ab07653472b90837ed6c215fc0ecb371",
+                    "Gateway": "172.19.0.1",
+                    "IPAddress": "172.19.0.2",
+                    "IPPrefixLen": 16,
+                    "IPv6Gateway": "",
+                    "GlobalIPv6Address": "",
+                    "GlobalIPv6PrefixLen": 0,
+                    "MacAddress": "02:42:ac:13:00:02",
+# docker inspect c2 |grep -A 15 Networks
+            "Networks": {
+                "net2": {
+                    "IPAMConfig": null,
+                    "Links": null,
+                    "Aliases": [
+                        "f4dc0cf34db6"
+                    ],
+                    "NetworkID": "b8087febf61e639f27fd9cf5fb57c8c583f991bc84e39c38243ed058f8496e25",
+                    "EndpointID": "d1b73acbbf484f6f7ec4a63b054ae74cc123b23ca6555f15990c8f161a7b8288",
+                    "Gateway": "172.20.0.1",
+                    "IPAddress": "172.20.0.2",
+                    "IPPrefixLen": 24,
+                    "IPv6Gateway": "",
+                    "GlobalIPv6Address": "",
+                    "GlobalIPv6PrefixLen": 0,
+                    "MacAddress": "02:42:ac:14:00:02",
+# docker inspect c3 |grep -A 15 Networks
+            "Networks": {
+                "net2": {
+                    "IPAMConfig": {
+                        "IPv4Address": "172.20.0.100"
+                    },
+                    "Links": null,
+                    "Aliases": [
+                        "94e0bc6720f3"
+                    ],
+                    "NetworkID": "b8087febf61e639f27fd9cf5fb57c8c583f991bc84e39c38243ed058f8496e25",
+                    "EndpointID": "4ff7ab19f2dbc0682c0c8487be5e60b059ed2a31139d6de34ff904aa1f3554c3",
+                    "Gateway": "172.20.0.1",
+                    "IPAddress": "172.20.0.100",
+                    "IPPrefixLen": 24,
+                    "IPv6Gateway": "",
+                    "GlobalIPv6Address": "",
+
+容器的IP必须在子网范围内，不然会报错：
+# docker run -itd --name=c4 --network=net2 --ip=172.21.0.101 centos
+32f6fd999f2b96345d665d1a7b35d64d5b2a320b6279107aefe7bef0b4ff4866
+docker: Error response from daemon: Invalid address 172.21.0.101: It does not belong to any of this network's subnets.
+
+# docker ps -a|grep c4
+32f6fd999f2b   centos        "/bin/bash"              About a minute ago   Created    c4 
+
+
+
+# docker inspect c1 |grep -i ipaddress
+            "SecondaryIPAddresses": null,
+            "IPAddress": "",
+                    "IPAddress": "172.19.0.2",
+# docker inspect c2 |grep -i ipaddress
+            "SecondaryIPAddresses": null,
+            "IPAddress": "",
+                    "IPAddress": "172.20.0.2",
+# docker inspect c3 |grep -i ipaddress
+            "SecondaryIPAddresses": null,
+            "IPAddress": "",
+                    "IPAddress": "172.20.0.100",
+
+容器c2与c3在同一个子网，可以相互通信，与c1不在一个子网，不能相互通信
+# docker exec -it c1 ping -c 3 172.20.0.2
+PING 172.20.0.2 (172.20.0.2) 56(84) bytes of data.
+^C
+--- 172.20.0.2 ping statistics ---
+3 packets transmitted, 0 received, 100% packet loss, time 2027ms
+
+# docker exec -it c3 ping -c 3 172.20.0.2
+PING 172.20.0.2 (172.20.0.2) 56(84) bytes of data.
+64 bytes from 172.20.0.2: icmp_seq=1 ttl=64 time=0.101 ms
+64 bytes from 172.20.0.2: icmp_seq=2 ttl=64 time=0.072 ms
+64 bytes from 172.20.0.2: icmp_seq=3 ttl=64 time=0.071 ms
+
+--- 172.20.0.2 ping statistics ---
+3 packets transmitted, 3 received, 0% packet loss, time 2037ms
+rtt min/avg/max/mdev = 0.071/0.081/0.101/0.015 ms
+# docker exec -it c2 ping -c 3 172.20.0.100
+PING 172.20.0.100 (172.20.0.100) 56(84) bytes of data.
+64 bytes from 172.20.0.100: icmp_seq=1 ttl=64 time=0.072 ms
+64 bytes from 172.20.0.100: icmp_seq=2 ttl=64 time=0.103 ms
+64 bytes from 172.20.0.100: icmp_seq=3 ttl=64 time=0.088 ms
+
+--- 172.20.0.100 ping statistics ---
+3 packets transmitted, 3 received, 0% packet loss, time 2055ms
+rtt min/avg/max/mdev = 0.072/0.087/0.103/0.016 ms
+
+# docker exec -it c2 ping -c3 172.19.0.2
+PING 172.19.0.2 (172.19.0.2) 56(84) bytes of data.
+^C
+--- 172.19.0.2 ping statistics ---
+3 packets transmitted, 0 received, 100% packet loss, time 2025ms
+
+想要c1与c2或c3相互通信，可以为c1添加一块网卡，加入到net2网络
+# docker network connect net2 c1
+
+# ip a
+1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN group default qlen 1000
+    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
+    inet 127.0.0.1/8 scope host lo
+       valid_lft forever preferred_lft forever
+    inet6 ::1/128 scope host 
+       valid_lft forever preferred_lft forever
+2: ens160: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc fq_codel state UP group default qlen 1000
+    link/ether 00:0c:29:b6:9b:17 brd ff:ff:ff:ff:ff:ff
+    altname enp3s0
+    inet 192.168.1.240/24 brd 192.168.1.255 scope global noprefixroute ens160
+       valid_lft forever preferred_lft forever
+3: docker0: <NO-CARRIER,BROADCAST,MULTICAST,UP> mtu 1500 qdisc noqueue state DOWN group default 
+    link/ether 02:42:96:88:d3:21 brd ff:ff:ff:ff:ff:ff
+    inet 172.17.0.1/16 brd 172.17.255.255 scope global docker0
+       valid_lft forever preferred_lft forever
+    inet6 fe80::42:96ff:fe88:d321/64 scope link 
+       valid_lft forever preferred_lft forever
+131: br-8a47db528c58: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue state UP group default 
+    link/ether 02:42:8e:76:7a:26 brd ff:ff:ff:ff:ff:ff
+    inet 172.19.0.1/16 brd 172.19.255.255 scope global br-8a47db528c58
+       valid_lft forever preferred_lft forever
+    inet6 fe80::42:8eff:fe76:7a26/64 scope link 
+       valid_lft forever preferred_lft forever
+132: br-b8087febf61e: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue state UP group default 
+    link/ether 02:42:cc:85:2d:2f brd ff:ff:ff:ff:ff:ff
+    inet 172.20.0.1/24 brd 172.20.0.255 scope global br-b8087febf61e
+       valid_lft forever preferred_lft forever
+    inet6 fe80::42:ccff:fe85:2d2f/64 scope link 
+       valid_lft forever preferred_lft forever
+140: vethf6fae61@if139: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue master br-8a47db528c58 state UP group default 
+    link/ether 8a:8c:16:32:67:66 brd ff:ff:ff:ff:ff:ff link-netnsid 0
+    inet6 fe80::888c:16ff:fe32:6766/64 scope link 
+       valid_lft forever preferred_lft forever
+142: vethb90b0d4@if141: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue master br-b8087febf61e state UP group default 
+    link/ether d6:ab:98:43:2c:8b brd ff:ff:ff:ff:ff:ff link-netnsid 1
+    inet6 fe80::d4ab:98ff:fe43:2c8b/64 scope link 
+       valid_lft forever preferred_lft forever
+144: veth6461145@if143: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue master br-b8087febf61e state UP group default 
+    link/ether ba:6c:88:2f:4b:b5 brd ff:ff:ff:ff:ff:ff link-netnsid 2
+    inet6 fe80::b86c:88ff:fe2f:4bb5/64 scope link 
+       valid_lft forever preferred_lft forever
+146: veth7a1ad65@if145: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue master br-b8087febf61e state UP group default 
+    link/ether ba:f0:06:a8:e6:14 brd ff:ff:ff:ff:ff:ff link-netnsid 0
+    inet6 fe80::b8f0:6ff:fea8:e614/64 scope link 
+       valid_lft forever preferred_lft forever
+
+# docker inspect c1|grep -i ipaddr
+            "SecondaryIPAddresses": null,
+            "IPAddress": "",
+                    "IPAddress": "172.19.0.2",
+                    "IPAddress": "172.20.0.3",
+# docker inspect c2|grep -i ipaddr
+            "SecondaryIPAddresses": null,
+            "IPAddress": "",
+                    "IPAddress": "172.20.0.2",
+# docker inspect c3|grep -i ipaddr
+            "SecondaryIPAddresses": null,
+            "IPAddress": "",
+                    "IPAddress": "172.20.0.100",
+                    
+# docker exec -it c1 ping -c 2 172.20.0.2
+PING 172.20.0.2 (172.20.0.2) 56(84) bytes of data.
+64 bytes from 172.20.0.2: icmp_seq=1 ttl=64 time=0.135 ms
+64 bytes from 172.20.0.2: icmp_seq=2 ttl=64 time=0.078 ms
+
+--- 172.20.0.2 ping statistics ---
+2 packets transmitted, 2 received, 0% packet loss, time 1002ms
+rtt min/avg/max/mdev = 0.078/0.106/0.135/0.030 ms
+# docker exec -it c1 ping -c 2 172.20.0.100
+PING 172.20.0.100 (172.20.0.100) 56(84) bytes of data.
+64 bytes from 172.20.0.100: icmp_seq=1 ttl=64 time=0.128 ms
+64 bytes from 172.20.0.100: icmp_seq=2 ttl=64 time=0.080 ms
+
+--- 172.20.0.100 ping statistics ---
+2 packets transmitted, 2 received, 0% packet loss, time 1003ms
+rtt min/avg/max/mdev = 0.080/0.104/0.128/0.024 ms
+# docker exec -it c2 ping -c 2 172.20.0.3
+PING 172.20.0.3 (172.20.0.3) 56(84) bytes of data.
+64 bytes from 172.20.0.3: icmp_seq=1 ttl=64 time=0.097 ms
+64 bytes from 172.20.0.3: icmp_seq=2 ttl=64 time=0.075 ms
+
+--- 172.20.0.3 ping statistics ---
+2 packets transmitted, 2 received, 0% packet loss, time 1016ms
+rtt min/avg/max/mdev = 0.075/0.086/0.097/0.011 ms
+# docker exec -it c3 ping -c 2 172.20.0.3
+PING 172.20.0.3 (172.20.0.3) 56(84) bytes of data.
+64 bytes from 172.20.0.3: icmp_seq=1 ttl=64 time=0.077 ms
+64 bytes from 172.20.0.3: icmp_seq=2 ttl=64 time=0.087 ms
+
+--- 172.20.0.3 ping statistics ---
+2 packets transmitted, 2 received, 0% packet loss, time 1019ms
+rtt min/avg/max/mdev = 0.077/0.082/0.087/0.005 ms
+
+# docker exec -it c1 /bin/bash
+[root@496d4ddad025 /]# ip a
+1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN group default qlen 1000
+    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
+    inet 127.0.0.1/8 scope host lo
+       valid_lft forever preferred_lft forever
+155: eth0@if156: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue state UP group default 
+    link/ether 02:42:ac:13:00:02 brd ff:ff:ff:ff:ff:ff link-netnsid 0
+    inet 172.19.0.2/16 brd 172.19.255.255 scope global eth0
+       valid_lft forever preferred_lft forever
+163: eth1@if164: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue state UP group default 
+    link/ether 02:42:ac:14:00:03 brd ff:ff:ff:ff:ff:ff link-netnsid 0
+    inet 172.20.0.3/24 brd 172.20.0.255 scope global eth`
+       valid_lft forever preferred_lft forever
+
+# docker network disconnect net2 c1
+
+# docker inspect c1|grep -i ipaddr
+            "SecondaryIPAddresses": null,
+            "IPAddress": "",
+                    "IPAddress": "172.19.0.2",
+
+
+```
+
+
+
+
+
+
+
+
+
+
+
 
 
 
