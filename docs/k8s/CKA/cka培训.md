@@ -2879,20 +2879,385 @@ rtt min/avg/max/mdev = 0.077/0.082/0.087/0.005 ms
             "SecondaryIPAddresses": null,
             "IPAddress": "",
                     "IPAddress": "172.19.0.2",
+```
+
+### 3.容器存储
+
+![image-20230207192146050](cka培训截图/image-20230207192146050.png)
 
 
+
+官方说明：
+
+```bash
+`Volumes` are stored in a part of the host filesystem which is managed by Docker (`/var/lib/docker/volumes/` on Linux). Non-Docker processes should not modify this part of the filesystem. Volumes are the best way to persist data in Docker.
+docker run -v containerDir
+
+`Bind mounts` may be stored anywhere on the host system. They may even be important system files or directories. Non-Docker processes on the Docker host or a Docker container can modify them at any time.
+docker run -v hostDir:containerDir
+
+`tmpfs` mounts are stored in the host system’s memory only, and are never written to the host system’s filesystem.
 ```
 
 
 
 
 
+```bash
+# man docker run
+
+-v|--volume[=[[HOST-DIR:]CONTAINER-DIR[:OPTIONS]]]
+          Create a bind mount. If you specify, -v /HOST-DIR:/CONTAINER-DIR, Docker
+          bind mounts /HOST-DIR in the host to /CONTAINER-DIR in the Docker
+          container. If 'HOST-DIR' is omitted,  Docker automatically creates the new
+          volume on the host.  The OPTIONS are a comma delimited list and can be:
+
+              • [rw|ro]
+
+              • [z|Z]
+
+              • [[r]shared|[r]slave|[r]private]
+
+              • [delegated|cached|consistent]
+
+              • [nocopy]
+
+       The  CONTAINER-DIR  must be an absolute path such as /src/docs. The HOST-DIR can be an absolute
+       path or a name value.
+       
+--volumes-from=[]
+          Mount volumes from the specified container(s)
+```
+
+#### 3.1.持久存储之volume
+
+测试volume：
+
+```bash
+# docker volume ls
+DRIVER    VOLUME NAME
+
+# docker run -d -p 8094:80 -v /usr/local/apache2/htdocs httpd
+Unable to find image 'httpd:latest' locally
+latest: Pulling from library/httpd
+a2abf6c4d29d: Already exists 
+dcc4698797c8: Pull complete 
+41c22baa66ec: Pull complete 
+67283bbdd4a0: Pull complete 
+d982c879c57e: Pull complete 
+Digest: sha256:0954cc1af252d824860b2c5dc0a10720af2b7a3d3435581ca788dff8480c7b32
+Status: Downloaded newer image for httpd:latest
+47bd9ceb4d9a11a880bb656035b9d823d9d1dbedbe5aeebe32ddcba5cd3fb32f
+
+# docker volume inspect b5a51f86f4a32517d6d3cf491770fce8ac920fe2c89b063d00debbce07792411
+[
+    {
+        "CreatedAt": "2023-02-07T10:21:32+08:00",
+        "Driver": "local",
+        "Labels": null,
+        "Mountpoint": "/var/lib/docker/volumes/b5a51f86f4a32517d6d3cf491770fce8ac920fe2c89b063d00debbce07792411/_data",
+        "Name": "b5a51f86f4a32517d6d3cf491770fce8ac920fe2c89b063d00debbce07792411",
+        "Options": null,
+        "Scope": "local"
+    }
+]
+
+# docker ps
+CONTAINER ID   IMAGE     COMMAND              CREATED         STATUS         PORTS                                   NAMES
+47bd9ceb4d9a   httpd     "httpd-foreground"   7 seconds ago   Up 6 seconds   0.0.0.0:8094->80/tcp, :::8094->80/tcp   amazing_volhard
+
+# docker volume ls
+DRIVER    VOLUME NAME
+local     b5a51f86f4a32517d6d3cf491770fce8ac920fe2c89b063d00debbce07792411
+
+# docker inspect amazing_volhard |grep -A 8 Mounts
+        "Mounts": [
+            {
+                "Type": "volume",
+                "Name": "b5a51f86f4a32517d6d3cf491770fce8ac920fe2c89b063d00debbce07792411",
+                "Source": "/var/lib/docker/volumes/b5a51f86f4a32517d6d3cf491770fce8ac920fe2c89b063d00debbce07792411/_data",
+                "Destination": "/usr/local/apache2/htdocs",
+                "Driver": "local",
+                "Mode": "",
+                "RW": true,
+
+# cd /var/lib/docker/volumes/b5a51f86f4a32517d6d3cf491770fce8ac920fe2c89b063d00debbce07792411/_data
+
+# ls
+index.html
+
+# cat index.html 
+<html><body><h1>It works!</h1></body></html>
+
+# curl localhost:8094
+<html><body><h1>It works!</h1></body></html>
+
+# echo haha > /var/lib/docker/volumes/b5a51f86f4a32517d6d3cf491770fce8ac920fe2c89b063d00debbce07792411/_data/index.html 
+
+# curl localhost:8094
+haha
+
+# docker ps
+CONTAINER ID   IMAGE     COMMAND              CREATED       STATUS       PORTS                                   NAMES
+47bd9ceb4d9a   httpd     "httpd-foreground"   9 hours ago   Up 9 hours   0.0.0.0:8094->80/tcp, :::8094->80/tcp   amazing_volhard
+
+# docker stop amazing_volhard 
+amazing_volhard
+# docker rm amazing_volhard 
+amazing_volhard
+
+# docker volume ls
+DRIVER    VOLUME NAME
+local     b5a51f86f4a32517d6d3cf491770fce8ac920fe2c89b063d00debbce07792411
+
+# cat /var/lib/docker/volumes/b5a51f86f4a32517d6d3cf491770fce8ac920fe2c89b063d00debbce07792411/_data/index.html 
+haha
+
+# docker volume ls
+DRIVER    VOLUME NAME
+local     b5a51f86f4a32517d6d3cf491770fce8ac920fe2c89b063d00debbce07792411
+
+# docker volume rm b5a51f86f4a32517d6d3cf491770fce8ac920fe2c89b063d00debbce07792411 
+b5a51f86f4a32517d6d3cf491770fce8ac920fe2c89b063d00debbce07792411
+
+# docker volume ls
+DRIVER    VOLUME NAME
+
+还可以指定volume的名称：
+# docker run -d -p 8097:80 -v httpdvol:/usr/local/apache2/htdocs --name httpvol httpd
+ad449fa1f1072f7e9c10cf0c0a89e93c9c26da2e393edd480596bbec1251b0ae
+
+# docker ps
+CONTAINER ID   IMAGE     COMMAND              CREATED         STATUS        PORTS                                   NAMES
+ad449fa1f107   httpd     "httpd-foreground"   2 seconds ago   Up 1 second   0.0.0.0:8097->80/tcp, :::8097->80/tcp   httpvol
+
+# docker volume ls
+DRIVER    VOLUME NAME
+local     httpdvol
+
+# docker inspect httpvol |grep -A 8 Mounts
+        "Mounts": [
+            {
+                "Type": "volume",
+                "Name": "httpdvol",
+                "Source": "/var/lib/docker/volumes/httpdvol/_data",
+                "Destination": "/usr/local/apache2/htdocs",
+                "Driver": "local",
+                "Mode": "z",
+                "RW": true,
+```
+
+
+
+
+
+#### 3.2.持久存储之bind mount
+
+![image-20230207191931216](cka培训截图/image-20230207191931216.png)
+
+
+
+```bash
+创建宿主机上要被挂载的目录和文件，也可以不创建，在docker run -v时，宿主机目录会被自动创建
+# mkdir /root/htdocs
+# echo hehe > /root/htdocs/index.html
+
+# docker run -d -p 8095:80 -v /root/htdocs:/usr/local/apache2/htdocs httpd
+98cb0b6c8d5acbc165423cdb9c67ba3269a6cb0ef1c8399fd84792d7b1d9dd45
+
+# docker ps
+CONTAINER ID   IMAGE     COMMAND              CREATED         STATUS         PORTS                                   NAMES
+98cb0b6c8d5a   httpd     "httpd-foreground"   3 seconds ago   Up 2 seconds   0.0.0.0:8095->80/tcp, :::8095->80/tcp   peaceful_feynman
+
+# docker volume ls
+DRIVER    VOLUME NAME
+local     2e79e8bbb087c8e1ca452b1a520c6b5d0113956000ce8c5c1ea25abf815ec953
+local     8e3af73bed3661847a904a0022b621d748be628beae34a796ba230eb5275c4b4
+local     9470255d89b8455f700907f934e40c3e76794f0f7d0a66490c38805e127f73e0
+local     1715027545ac6842754f4c5911a9125e97d9bf80645062d509587373e125c327
+local     a432c7e7cf5c739682be27442ec9246b34938e44e5a48294ee4b33ccc7eb4acb
+local     ae8cf42eade17a00309e6039ed68b9e1e7b51d118cc759276896229a56b4d994
+local     c22a51e19a433475ea9f149b604a7450e81b1ed890aa3f05e04d134247c80e73
+local     d1b3e04182dd1953cf5ef024dc6af3a52726bb8f0d52f2280e5a450675dcea4d
+local     d8699189b9b33c3221730ff230a3c1b33bdeeca34fc7f21e08800765c91215b2
+local     de3b996f07dfaab734393b70847484b9eee2e4f9f669a1bc37ca8d45cdbbd69b
+
+# docker inspect peaceful_feynman |grep -A 8 Mounts
+        "Mounts": [
+            {
+                "Type": "bind",
+                "Source": "/root/htdocs",
+                "Destination": "/usr/local/apache2/htdocs",
+                "Mode": "",
+                "RW": true,
+                "Propagation": "rprivate"
+            }
+
+# curl localhost:8095
+hehe
+
+# echo heihei > /root/htdocs/index.html 
+# curl localhost:8095
+heihei
+
+# docker rm peaceful_feynman -f
+peaceful_feynman
+# docker ps
+CONTAINER ID   IMAGE     COMMAND   CREATED   STATUS    PORTS     NAMES
+
+# cat /root/htdocs/index.html 
+heihei
+```
+
+
+
+#### 3.3.容器间数据共享之bind mount
+#### 3.3.1.主机与容器间
+
+```
+主机与容器数据共享：
+---volume：将Host上的数据copy到容器的volume中
+           也可使用docker cp命令在容器和主机Host之间复制数据
+---bind mount：将Host上的目录或文件mount到容器中
+```
+
+
+
+![image-20230207200732560](cka培训截图/image-20230207200732560.png)
 
 
 
 
 
 
+
+#### 3.3.2.容器与容器间
+
+![image-20230207201123680](cka培训截图/image-20230207201123680.png)
+
+
+
+```bash
+# docker run -d --name=h1 -p 8010:80 -v /root/htdocs:/usr/local/apache2/htdocs httpd 
+eb790644f8d0c09eeee264d7666cd0a9ddd298fc9e87302a5bd7cd530fefccbd
+
+# docker run -d --name=h2 -p 8011:80 -v /root/htdocs:/usr/local/apache2/htdocs httpd 
+bc2edf6f056c34e9928cb7ebeade8e82f6bcc1aa074b690823574a63a78246d5
+
+# docker ps
+CONTAINER ID   IMAGE     COMMAND              CREATED          STATUS          PORTS                                   NAMES
+bc2edf6f056c   httpd     "httpd-foreground"   3 seconds ago    Up 1 second     0.0.0.0:8011->80/tcp, :::8011->80/tcp   h2
+eb790644f8d0   httpd     "httpd-foreground"   31 seconds ago   Up 29 seconds   0.0.0.0:8010->80/tcp, :::8010->80/tcp   h1
+
+# cat /root/htdocs/index.html 
+heihei
+
+# curl localhost:8010
+heihei
+# curl localhost:8011
+heihei
+
+# echo new > /root/htdocs/index.html 
+
+# curl localhost:8010
+new
+# curl localhost:8011
+new
+```
+
+
+
+
+
+#### 3.4.容器间数据共享之volume container
+
+
+
+![image-20230207201456242](cka培训截图/image-20230207201456242.png)
+
+```bash
+# docker run -d --name vc -v /root/htdocs:/usr/local/apache2/htdocs httpdddbeb27b8a7d976f3e0d7e88f80f7a74a0509cb7860ec8fc42424503d6e8ad15
+# docker ps
+CONTAINER ID   IMAGE     COMMAND              CREATED         STATUS        PORTS     NAMES
+ddbeb27b8a7d   httpd     "httpd-foreground"   2 seconds ago   Up 1 second   80/tcp    vc
+# docker inspect vc|grep -A 8  Mounts
+        "Mounts": [
+            {
+                "Type": "bind",
+                "Source": "/root/htdocs",
+                "Destination": "/usr/local/apache2/htdocs",
+                "Mode": "",
+                "RW": true,
+                "Propagation": "rprivate"
+            }
+
+# docker run -d -p 8012:80 --volumes-from=vc --name h3 httpd
+6cc18976bcd8f92a2c7c3b0b9d66a70cbf6a59f1671960f4ad80cdd6191c7dc5
+# docker run -d -p 8013:80 --volumes-from=vc --name h4 httpd
+d246e7b9c11307a003d50e5aaf4add140fe668b915d6667746774d3f0994b7ca
+# docker ps
+CONTAINER ID   IMAGE     COMMAND              CREATED              STATUS              PORTS                                   NAMES
+d246e7b9c113   httpd     "httpd-foreground"   3 seconds ago        Up 1 second         0.0.0.0:8013->80/tcp, :::8013->80/tcp   h4
+6cc18976bcd8   httpd     "httpd-foreground"   13 seconds ago       Up 11 seconds       0.0.0.0:8012->80/tcp, :::8012->80/tcp   h3
+ddbeb27b8a7d   httpd     "httpd-foreground"   About a minute ago   Up About a minute   80/tcp                                  vc
+
+# docker inspect h3|grep -A 8  Mounts
+        "Mounts": [
+            {
+                "Type": "bind",
+                "Source": "/root/htdocs",
+                "Destination": "/usr/local/apache2/htdocs",
+                "Mode": "",
+                "RW": true,
+                "Propagation": "rprivate"
+            }
+# docker inspect h4|grep -A 8  Mounts
+        "Mounts": [
+            {
+                "Type": "bind",
+                "Source": "/root/htdocs",
+                "Destination": "/usr/local/apache2/htdocs",
+                "Mode": "",
+                "RW": true,
+                "Propagation": "rprivate"
+            }
+            
+# curl localhost:8012
+new
+# curl localhost:8013
+new
+
+# echo hehe > /root/htdocs/index.html 
+
+# curl localhost:8012
+hehe
+# curl localhost:8013
+hehe
+
+# docker run -d -p 8014:80 --volumes-from vc --name h5 httpd
+800a8adddb7273be76dcd0d6c606e8abee43ab3062de1f4761c140d9a74a424b
+# docker ps
+CONTAINER ID   IMAGE     COMMAND              CREATED         STATUS         PORTS                                   NAMES
+800a8adddb72   httpd     "httpd-foreground"   2 seconds ago   Up 1 second    0.0.0.0:8014->80/tcp, :::8014->80/tcp   h5
+d246e7b9c113   httpd     "httpd-foreground"   6 minutes ago   Up 6 minutes   0.0.0.0:8013->80/tcp, :::8013->80/tcp   h4
+6cc18976bcd8   httpd     "httpd-foreground"   6 minutes ago   Up 6 minutes   0.0.0.0:8012->80/tcp, :::8012->80/tcp   h3
+ddbeb27b8a7d   httpd     "httpd-foreground"   7 minutes ago   Up 7 minutes   80/tcp                                  vc
+
+# curl localhost:8014
+hehe
+```
+
+
+
+### 4.容器底层实现技术
+
+### 4.1.Namespace和Cgroup
+
+
+
+
+
+### 4.2.cpu和mem资源限制
 
 
 
@@ -3021,8 +3386,6 @@ Dockerfile常用命令
 
 
 > 官网https://docs.docker.com/engine/reference/builder/
-
-#### 3.1.3.bridge网络
 
 
 
