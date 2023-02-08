@@ -101,7 +101,7 @@ mini-install/shanghai
 1core/4G/20Gdisk
 ```
 
-##### 1.3.2.1.网络配置
+###### 1.3.2.1.网络配置
 
 ```bash
 $ sudo -i
@@ -153,7 +153,7 @@ network:
 # netplan apply
 ```
 
-##### 1.3.2.2.安装openssh
+###### 1.3.2.2.安装openssh
 ```bash
 $ sudo -i
 # apt-get update -y && sudo apt upgrade -y
@@ -171,7 +171,7 @@ $ sudo -i
 # systemctl status ssh
 ```
 
-##### 1.3.2.3.安装docker---22.04
+###### 1.3.2.3.安装docker---22.04
 
 ```bash
 step 1: 安装必要的一些系统工具
@@ -214,7 +214,7 @@ EOF
 # docker search nginx
 ```
 
-##### 1.3.2.4.安装docker---20.04
+###### 1.3.2.4.安装docker---20.04
 ```bash
 step 1: 安装必要的一些系统工具
 $ sudo -i
@@ -1975,7 +1975,7 @@ exit
 
 
 
-#### 3.1.1.none网络
+##### 3.1.1.none网络
 
 ```bash
 none网络的driver类型是null，IPAM字段为空
@@ -2075,7 +2075,7 @@ exit
 
 
 ```
-#### 3.1.2.host网络
+##### 3.1.2.host网络
 
 ```
 挂在host网络上的容器共享宿主机的network namespace
@@ -2250,7 +2250,7 @@ rtt min/avg/max/mdev = 31.694/31.945/32.146/0.237 ms
                 }
 ```
 
-#### 3.1.3.bridge网络
+##### 3.1.3.bridge网络
 
 ```
 docker0网络
@@ -2485,7 +2485,7 @@ Destination     Gateway         Genmask         Flags Metric Ref    Use Iface
 ]
 ```
 
-#### 3.1.3.1.user-defined Bridge网络
+###### 3.1.3.1.user-defined Bridge网络
 ```
 用户可按需创建bridge网桥，成为user-defined bridge
 ```
@@ -3112,7 +3112,7 @@ heihei
 
 
 #### 3.3.容器间数据共享之bind mount
-#### 3.3.1.主机与容器间
+##### 3.3.1.主机与容器间
 
 ```
 主机与容器数据共享：
@@ -3131,7 +3131,7 @@ heihei
 
 
 
-#### 3.3.2.容器与容器间
+##### 3.3.2.容器与容器间
 
 ![image-20230207201123680](cka培训截图/image-20230207201123680.png)
 
@@ -3273,9 +3273,9 @@ docker启动一个容器时，实际是创建了带多个namespace参数的进�
 
 
 
-### 4.1.Namespace和Cgroup
+#### 4.1.Namespace和Cgroup
 
-#### 4.1.1.Namespace
+##### 4.1.1.Namespace
 
 ```
 Namespace：命名空间
@@ -3285,7 +3285,7 @@ Namespace：命名空间
 
 ![image-20230208133239340](cka培训截图/image-20230208133239340.png)
 
-##### 4.1.1.1.PID namespace
+###### 4.1.1.1.PID namespace
 
 ```bash
 以交互模式启动一个centos容器，并在其中运行/bin/bash程序
@@ -3342,7 +3342,7 @@ lrwxrwxrwx 1 root root 0  2月  8 13:41 uts -> 'uts:[4026532652]'
 
 
 
-#### 4.1.2.Cgroup
+##### 4.1.2.Cgroup
 
 ```bash
 Cgroup: Linux Control Group
@@ -3351,6 +3351,15 @@ Cgroup: Linux Control Group
 ---原理：将一组进程放在一个Cgroup中，通过给这个Cgroup分配指定的可用资源，达到控制这一组进程可用资源的目的
 ---实现：在Linux中，Cgroups以文件和目录的方式组织在操作系统的/sys/fs/cgroup路径下
         该路径中所有的资源种类均可被cgroup限制
+
+默认路径：
+Putting everything together to look at the memory metrics for a Docker container, take a look at the following paths:
+
+/sys/fs/cgroup/memory/docker/<longid>/ on cgroup v1, cgroupfs driver
+/sys/fs/cgroup/memory/system.slice/docker-<longid>.scope/ on cgroup v1, systemd driver
+/sys/fs/cgroup/docker/<longid>/ on cgroup v2, cgroupfs driver
+/sys/fs/cgroup/system.slice/docker-<longid>.scope/ on cgroup v2, systemd driver
+
 
 # mount -t cgroup
 cgroup on /sys/fs/cgroup/systemd type cgroup (rw,nosuid,nodev,noexec,relatime,xattr,release_agent=/usr/lib/systemd/systemd-cgroups-agent,name=systemd)
@@ -3364,13 +3373,54 @@ cgroup on /sys/fs/cgroup/hugetlb type cgroup (rw,nosuid,nodev,noexec,relatime,hu
 cgroup on /sys/fs/cgroup/cpu,cpuacct type cgroup (rw,nosuid,nodev,noexec,relatime,cpuacct,cpu)
 cgroup on /sys/fs/cgroup/memory type cgroup (rw,nosuid,nodev,noexec,relatime,memory)
 cgroup on /sys/fs/cgroup/cpuset type cgroup (rw,nosuid,nodev,noexec,relatime,cpuset)
+
+注意：当docker的cgroup driver为systemd时，没法查看mount -t cgroup和/sys/fs/cgroup/cpu/docker等信息，需改为cgroup v1才行
+# cat /etc/os-release 
+PRETTY_NAME="Ubuntu 22.04.1 LTS"
+
+# docker info
+Cgroup Driver: systemd
+Cgroup Version: 2
+
+# ls -lrth /sys/fs/cgroup/system.slice/
+drwxr-xr-x 2 root root 0  2月  8 19:08  docker-3fa0ed36aeae4a1e1b69785fdd39ae41cea91130c8d3c98e59d016844dac0954.scope
+drwxr-xr-x 2 root root 0  2月  8 19:08  docker-103c588f565583da77e44e7ac966ef95f1838015533a48b99768c122119558a3.scope
+...输出省略...
+
+# mount -t cgroup
+
+# vi /etc/docker/daemon.json
+添加：
+"exec-opts": ["native.cgroupdriver=cgroupfs"],
+
+# systemctl daemon-reload
+# systemctl restart docker
+
+# docker info
+Cgroup Driver: cgroupfs
+Cgroup Version: 2
+
+修改cgroup版本到1
+编辑 /etc/default/grub，在 GRUB_CMDLINE_LINUX 一行中增加 systemd.unified_cgroup_hierarchy=0 ，然后运行 sudo update-grub ，重启系统后version 被修改成 v1。
+
+# docker info
+Cgroup Driver: cgroupfs
+Cgroup Version: 1
+
+ls -l /sys/fs/cgroup/cpu/docker/
+total 0
+drwxr-xr-x 2 root root 0  2月  8 18:07 103c588f565583da77e44e7ac966ef95f1838015533a48b99768c122119558a3
+drwxr-xr-x 2 root root 0  2月  8 18:07 3fa0ed36aeae4a1e1b69785fdd39ae41cea91130c8d3c98e59d016844dac0954
+...输出省略...
+
+
 ```
 
 
 
-### 4.2.cpu和mem资源限制
+#### 4.2.cpu/memory/Block IO等资源限制---以下基于cgroupfs v1
 
-#### 4.2.1.cpu资源限制
+##### 4.2.1.cpu资源限制
 
 ```bash
 可通过如下参数，对容器的可用cpu资源进行限制：
@@ -3390,6 +3440,7 @@ cgroup on /sys/fs/cgroup/cpuset type cgroup (rw,nosuid,nodev,noexec,relatime,cpu
 
 
 ```bash
+--cpu 1 是progrium/stress里面的命令
 # docker run -it --name yl1 -c 1024 progrium/stress --cpu 1
 Unable to find image 'progrium/stress:latest' locally
 latest: Pulling from progrium/stress
@@ -3417,7 +3468,7 @@ MiB Mem :   3924.2 total,    111.0 free,    598.3 used,   3215.0 buff/cache
 MiB Swap:   2040.0 total,   1639.9 free,    400.1 used.   3043.1 avail Mem 
 
     PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND                                            
-3880020 root      20   0    7320     96      0 R  90.0   0.0   0:28.91 stress          
+9909 root      20   0    7320     96      0 R  90.0   0.0   0:28.91 stress          
 
 在启动一个容器-c 512
 # docker run -it --name yl2 -c 512 polinux/stress-ng --cpu 1
@@ -3442,8 +3493,8 @@ MiB Mem :   3924.2 total,    107.6 free,    662.4 used,   3154.3 buff/cache
 MiB Swap:   2040.0 total,   1638.1 free,    401.9 used.   2976.7 avail Mem 
 
     PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND                                            
-3880020 root      20   0    7320     96      0 R  60.5   0.0  15:52.65 stress                                             
-3903259 root      20   0   66984   6352   3480 R  30.9   0.2   0:25.27 stress-ng-cpu 
+9909 root      20   0    7320     96      0 R  60.5   0.0  15:52.65 stress                                             
+9973 root      20   0   66984   6352   3480 R  30.9   0.2   0:25.27 stress-ng-cpu 
 
 
 # docker ps -f name=yl*
@@ -3452,91 +3503,337 @@ CONTAINER ID   IMAGE               COMMAND                  CREATED          STA
 3fa0ed36aeae   progrium/stress     "/usr/bin/stress --v…"   31 minutes ago   Up 31 minutes             yl1
 
 # docker inspect yl1|grep -w Pid
-            "Pid": 3880020,
+            "Pid": 9909,
+
 # docker inspect yl2|grep -w Pid
-            "Pid": 3903259,
-
-# ls  /sys/fs/cgroup/cpu/docker
-
+            "Pid": 9973,
 
 
 # ls -l /sys/fs/cgroup/cpu/docker/
 total 0
-drwxr-xr-x 2 root root 0 Dec 13 16:30 103c588f565583da77e44e7ac966ef95f1838015533a48b99768c122119558a3
-drwxr-xr-x 2 root root 0 Jan 16 14:17 3fa0ed36aeae4a1e1b69785fdd39ae41cea91130c8d3c98e59d016844dac0954
--rw-r--r-- 1 root root 0 Dec 13 16:30 cgroup.clone_children
---w--w--w- 1 root root 0 Dec 13 16:30 cgroup.event_control
--rw-r--r-- 1 root root 0 Dec 13 16:30 cgroup.procs
--r--r--r-- 1 root root 0 Dec 13 16:30 cpuacct.stat
--rw-r--r-- 1 root root 0 Dec 13 16:30 cpuacct.usage
--r--r--r-- 1 root root 0 Dec 13 16:30 cpuacct.usage_percpu
--rw-r--r-- 1 root root 0 Dec 13 16:30 cpu.cfs_period_us
--rw-r--r-- 1 root root 0 Dec 13 16:30 cpu.cfs_quota_us
--rw-r--r-- 1 root root 0 Dec 13 16:30 cpu.rt_period_us
--rw-r--r-- 1 root root 0 Dec 13 16:30 cpu.rt_runtime_us
--rw-r--r-- 1 root root 0 Dec 13 16:30 cpu.shares
--r--r--r-- 1 root root 0 Dec 13 16:30 cpu.stat
--rw-r--r-- 1 root root 0 Dec 13 16:30 notify_on_release
--rw-r--r-- 1 root root 0 Dec 13 16:30 tasks
+drwxr-xr-x 2 root root 0  2月  8 18:07 103c588f565583da77e44e7ac966ef95f1838015533a48b99768c122119558a3
+drwxr-xr-x 2 root root 0  2月  8 18:07 3fa0ed36aeae4a1e1b69785fdd39ae41cea91130c8d3c98e59d016844dac0954
+-rw-r--r-- 1 root root 0  2月  8 18:07 cgroup.clone_children
+-rw-r--r-- 1 root root 0  2月  8 18:07 cgroup.procs
+-r--r--r-- 1 root root 0  2月  8 18:07 cpuacct.stat
+-rw-r--r-- 1 root root 0  2月  8 18:07 cpuacct.usage
+-r--r--r-- 1 root root 0  2月  8 18:07 cpuacct.usage_all
+-r--r--r-- 1 root root 0  2月  8 18:07 cpuacct.usage_percpu
+-r--r--r-- 1 root root 0  2月  8 18:07 cpuacct.usage_percpu_sys
+-r--r--r-- 1 root root 0  2月  8 18:07 cpuacct.usage_percpu_user
+-r--r--r-- 1 root root 0  2月  8 18:07 cpuacct.usage_sys
+-r--r--r-- 1 root root 0  2月  8 18:07 cpuacct.usage_user
+-rw-r--r-- 1 root root 0  2月  8 18:07 cpu.cfs_burst_us
+-rw-r--r-- 1 root root 0  2月  8 18:07 cpu.cfs_period_us
+-rw-r--r-- 1 root root 0  2月  8 18:07 cpu.cfs_quota_us
+-rw-r--r-- 1 root root 0  2月  8 18:07 cpu.idle
+-rw-r--r-- 1 root root 0  2月  8 18:07 cpu.shares
+-r--r--r-- 1 root root 0  2月  8 18:07 cpu.stat
+-rw-r--r-- 1 root root 0  2月  8 18:07 cpu.uclamp.max
+-rw-r--r-- 1 root root 0  2月  8 18:07 cpu.uclamp.min
+-rw-r--r-- 1 root root 0  2月  8 18:07 notify_on_release
+-rw-r--r-- 1 root root 0  2月  8 18:07 tasks
 
 # ls -l /sys/fs/cgroup/cpu/docker/3fa0ed36aeae4a1e1b69785fdd39ae41cea91130c8d3c98e59d016844dac0954/
 total 0
--rw-r--r-- 1 root root 0 Dec 13 16:30 cgroup.clone_children
---w--w--w- 1 root root 0 Dec 13 16:30 cgroup.event_control
--rw-r--r-- 1 root root 0 Dec 13 16:30 cgroup.procs
--r--r--r-- 1 root root 0 Dec 13 16:30 cpuacct.stat
--rw-r--r-- 1 root root 0 Dec 13 16:30 cpuacct.usage
--r--r--r-- 1 root root 0 Dec 13 16:30 cpuacct.usage_percpu
--rw-r--r-- 1 root root 0 Dec 13 16:30 cpu.cfs_period_us
--rw-r--r-- 1 root root 0 Dec 13 16:30 cpu.cfs_quota_us
--rw-r--r-- 1 root root 0 Dec 13 16:30 cpu.rt_period_us
--rw-r--r-- 1 root root 0 Dec 13 16:30 cpu.rt_runtime_us
--rw-r--r-- 1 root root 0 Dec 13 16:30 cpu.shares
--r--r--r-- 1 root root 0 Dec 13 16:30 cpu.stat
--rw-r--r-- 1 root root 0 Dec 13 16:30 notify_on_release
--rw-r--r-- 1 root root 0 Dec 13 16:30 tasks
+-rw-r--r-- 1 root root 0  2月  8 18:09 cgroup.clone_children
+-rw-r--r-- 1 root root 0  2月  8 18:07 cgroup.procs
+-r--r--r-- 1 root root 0  2月  8 18:09 cpuacct.stat
+-rw-r--r-- 1 root root 0  2月  8 18:09 cpuacct.usage
+-r--r--r-- 1 root root 0  2月  8 18:09 cpuacct.usage_all
+-r--r--r-- 1 root root 0  2月  8 18:09 cpuacct.usage_percpu
+-r--r--r-- 1 root root 0  2月  8 18:09 cpuacct.usage_percpu_sys
+-r--r--r-- 1 root root 0  2月  8 18:09 cpuacct.usage_percpu_user
+-r--r--r-- 1 root root 0  2月  8 18:09 cpuacct.usage_sys
+-r--r--r-- 1 root root 0  2月  8 18:09 cpuacct.usage_user
+-rw-r--r-- 1 root root 0  2月  8 18:09 cpu.cfs_burst_us
+-rw-r--r-- 1 root root 0  2月  8 18:09 cpu.cfs_period_us
+-rw-r--r-- 1 root root 0  2月  8 18:09 cpu.cfs_quota_us
+-rw-r--r-- 1 root root 0  2月  8 18:09 cpu.idle
+-rw-r--r-- 1 root root 0  2月  8 18:07 cpu.shares
+-r--r--r-- 1 root root 0  2月  8 18:09 cpu.stat
+-rw-r--r-- 1 root root 0  2月  8 18:09 cpu.uclamp.max
+-rw-r--r-- 1 root root 0  2月  8 18:09 cpu.uclamp.min
+-rw-r--r-- 1 root root 0  2月  8 18:09 notify_on_release
+-rw-r--r-- 1 root root 0  2月  8 18:09 tasks
 
-# cat /sys/fs/cgroup/cpu/docker/3fa0ed36aeae4a1e1b69785fdd39ae41cea91130c8d3c98e59d016844dac0954/cpu.shares 
+# cat 3fa0ed36aeae4a1e1b69785fdd39ae41cea91130c8d3c98e59d016844dac0954/cpu.shares 
 1024
-# cat /sys/fs/cgroup/cpu/docker/3fa0ed36aeae4a1e1b69785fdd39ae41cea91130c8d3c98e59d016844dac0954/tasks
-3331
-3454
-3501
-3502
-3503
-3504
-3505
-3506
-3507
-3508
+root@ubuntu001-virtual-machine:/sys/fs/cgroup/cpu/docker# cat 3fa0ed36aeae4a1e1b69785fdd39ae41cea91130c8d3c98e59d016844dac0954/tasks
+9909
+9938
 
-# cat /proc/3508/cgroup
-11:cpuset:/docker/182b49af08e1d79008cc1b1aa6b4284e64b14d1445d261fcae190a72e423e98e
-10:memory:/docker/182b49af08e1d79008cc1b1aa6b4284e64b14d1445d261fcae190a72e423e98e
-9:cpuacct,cpu:/docker/182b49af08e1d79008cc1b1aa6b4284e64b14d1445d261fcae190a72e423e98e
-8:hugetlb:/docker/182b49af08e1d79008cc1b1aa6b4284e64b14d1445d261fcae190a72e423e98e
-7:blkio:/docker/182b49af08e1d79008cc1b1aa6b4284e64b14d1445d261fcae190a72e423e98e
-6:freezer:/docker/182b49af08e1d79008cc1b1aa6b4284e64b14d1445d261fcae190a72e423e98e
-5:pids:/docker/182b49af08e1d79008cc1b1aa6b4284e64b14d1445d261fcae190a72e423e98e
-4:net_prio,net_cls:/docker/182b49af08e1d79008cc1b1aa6b4284e64b14d1445d261fcae190a72e423e98e
-3:perf_event:/docker/182b49af08e1d79008cc1b1aa6b4284e64b14d1445d261fcae190a72e423e98e
-2:devices:/docker/182b49af08e1d79008cc1b1aa6b4284e64b14d1445d261fcae190a72e423e98e
-1:name=systemd:/docker/182b49af08e1d79008cc1b1aa6b4284e64b14d1445d261fcae190a72e423e98e
+# cat /proc/9909/cgroup 
+13:freezer:/docker/3fa0ed36aeae4a1e1b69785fdd39ae41cea91130c8d3c98e59d016844dac0954
+12:hugetlb:/docker/3fa0ed36aeae4a1e1b69785fdd39ae41cea91130c8d3c98e59d016844dac0954
+11:perf_event:/docker/3fa0ed36aeae4a1e1b69785fdd39ae41cea91130c8d3c98e59d016844dac0954
+10:misc:/
+9:pids:/docker/3fa0ed36aeae4a1e1b69785fdd39ae41cea91130c8d3c98e59d016844dac0954
+8:net_cls,net_prio:/docker/3fa0ed36aeae4a1e1b69785fdd39ae41cea91130c8d3c98e59d016844dac0954
+7:devices:/docker/3fa0ed36aeae4a1e1b69785fdd39ae41cea91130c8d3c98e59d016844dac0954
+6:blkio:/docker/3fa0ed36aeae4a1e1b69785fdd39ae41cea91130c8d3c98e59d016844dac0954
+5:cpuset:/docker/3fa0ed36aeae4a1e1b69785fdd39ae41cea91130c8d3c98e59d016844dac0954
+4:cpu,cpuacct:/docker/3fa0ed36aeae4a1e1b69785fdd39ae41cea91130c8d3c98e59d016844dac0954
+3:rdma:/docker/3fa0ed36aeae4a1e1b69785fdd39ae41cea91130c8d3c98e59d016844dac0954
+2:memory:/docker/3fa0ed36aeae4a1e1b69785fdd39ae41cea91130c8d3c98e59d016844dac0954
+1:name=systemd:/docker/3fa0ed36aeae4a1e1b69785fdd39ae41cea91130c8d3c98e59d016844dac0954
+0::/docker/3fa0ed36aeae4a1e1b69785fdd39ae41cea91130c8d3c98e59d016844dac0954
 
-# ll /proc/3508/ns
+# cat /proc/9938/cgroup 
+13:freezer:/docker/3fa0ed36aeae4a1e1b69785fdd39ae41cea91130c8d3c98e59d016844dac0954
+12:hugetlb:/docker/3fa0ed36aeae4a1e1b69785fdd39ae41cea91130c8d3c98e59d016844dac0954
+11:perf_event:/docker/3fa0ed36aeae4a1e1b69785fdd39ae41cea91130c8d3c98e59d016844dac0954
+10:misc:/
+9:pids:/docker/3fa0ed36aeae4a1e1b69785fdd39ae41cea91130c8d3c98e59d016844dac0954
+8:net_cls,net_prio:/docker/3fa0ed36aeae4a1e1b69785fdd39ae41cea91130c8d3c98e59d016844dac0954
+7:devices:/docker/3fa0ed36aeae4a1e1b69785fdd39ae41cea91130c8d3c98e59d016844dac0954
+6:blkio:/docker/3fa0ed36aeae4a1e1b69785fdd39ae41cea91130c8d3c98e59d016844dac0954
+5:cpuset:/docker/3fa0ed36aeae4a1e1b69785fdd39ae41cea91130c8d3c98e59d016844dac0954
+4:cpu,cpuacct:/docker/3fa0ed36aeae4a1e1b69785fdd39ae41cea91130c8d3c98e59d016844dac0954
+3:rdma:/docker/3fa0ed36aeae4a1e1b69785fdd39ae41cea91130c8d3c98e59d016844dac0954
+2:memory:/docker/3fa0ed36aeae4a1e1b69785fdd39ae41cea91130c8d3c98e59d016844dac0954
+1:name=systemd:/docker/3fa0ed36aeae4a1e1b69785fdd39ae41cea91130c8d3c98e59d016844dac0954
+0::/docker/3fa0ed36aeae4a1e1b69785fdd39ae41cea91130c8d3c98e59d016844dac0954
+
+# ps -ef|grep 9909|grep -v grep
+root        9909    9886  0 18:07 pts/0    00:00:00 /usr/bin/stress --verbose --cpu 1
+root        9938    9909 60 18:07 pts/0    00:01:41 /usr/bin/stress --verbose --cpu 1
+
+# ls -l /proc/9909/ns
 total 0
-lrwxrwxrwx 1 101 101 0 Jan  9 18:17 ipc -> ipc:[4026532892]
-lrwxrwxrwx 1 101 101 0 Jan  9 18:17 mnt -> mnt:[4026532886]
-lrwxrwxrwx 1 101 101 0 Dec 13 16:48 net -> net:[4026531956]
-lrwxrwxrwx 1 101 101 0 Jan  9 18:17 pid -> pid:[4026532893]
-lrwxrwxrwx 1 101 101 0 Jan  9 18:17 user -> user:[4026531837]
-lrwxrwxrwx 1 101 101 0 Jan  9 18:17 uts -> uts:[4026532891]
+lrwxrwxrwx 1 root root 0  2月  8 18:11 cgroup -> 'cgroup:[4026532785]'
+lrwxrwxrwx 1 root root 0  2月  8 18:11 ipc -> 'ipc:[4026532648]'
+lrwxrwxrwx 1 root root 0  2月  8 18:11 mnt -> 'mnt:[4026532646]'
+lrwxrwxrwx 1 root root 0  2月  8 18:07 net -> 'net:[4026532650]'
+lrwxrwxrwx 1 root root 0  2月  8 18:11 pid -> 'pid:[4026532649]'
+lrwxrwxrwx 1 root root 0  2月  8 18:11 pid_for_children -> 'pid:[4026532649]'
+lrwxrwxrwx 1 root root 0  2月  8 18:11 time -> 'time:[4026531834]'
+lrwxrwxrwx 1 root root 0  2月  8 18:11 time_for_children -> 'time:[4026531834]'
+lrwxrwxrwx 1 root root 0  2月  8 18:11 user -> 'user:[4026531837]'
+lrwxrwxrwx 1 root root 0  2月  8 18:11 uts -> 'uts:[4026532647]'
 
+# ls -l /proc/9938/ns
+total 0
+lrwxrwxrwx 1 root root 0  2月  8 18:11 cgroup -> 'cgroup:[4026532785]'
+lrwxrwxrwx 1 root root 0  2月  8 18:11 ipc -> 'ipc:[4026532648]'
+lrwxrwxrwx 1 root root 0  2月  8 18:11 mnt -> 'mnt:[4026532646]'
+lrwxrwxrwx 1 root root 0  2月  8 18:11 net -> 'net:[4026532650]'
+lrwxrwxrwx 1 root root 0  2月  8 18:11 pid -> 'pid:[4026532649]'
+lrwxrwxrwx 1 root root 0  2月  8 18:11 pid_for_children -> 'pid:[4026532649]'
+lrwxrwxrwx 1 root root 0  2月  8 18:11 time -> 'time:[4026531834]'
+lrwxrwxrwx 1 root root 0  2月  8 18:11 time_for_children -> 'time:[4026531834]'
+lrwxrwxrwx 1 root root 0  2月  8 18:11 user -> 'user:[4026531837]'
+lrwxrwxrwx 1 root root 0  2月  8 18:11 uts -> 'uts:[4026532647]'
+
+# cat 103c588f565583da77e44e7ac966ef95f1838015533a48b99768c122119558a3/cpu.shares 
+512
+# cat 103c588f565583da77e44e7ac966ef95f1838015533a48b99768c122119558a3/tasks
+9973
+10045
+
+# ps -ef|grep 9973|grep -v grep
+root       9973    9512  0 19:44 pts/0    00:00:00 /usr/bin/stress-ng --cpu 1
+root       10045   9973 30 19:44 pts/0    00:01:26 /usr/bin/stress-ng --cpu 1
+
+# cat /proc/9973/cgroup 
+13:freezer:/docker/103c588f565583da77e44e7ac966ef95f1838015533a48b99768c122119558a3
+12:hugetlb:/docker/103c588f565583da77e44e7ac966ef95f1838015533a48b99768c122119558a3
+11:perf_event:/docker/103c588f565583da77e44e7ac966ef95f1838015533a48b99768c122119558a3
+10:misc:/
+9:pids:/docker/103c588f565583da77e44e7ac966ef95f1838015533a48b99768c122119558a3
+8:net_cls,net_prio:/docker/103c588f565583da77e44e7ac966ef95f1838015533a48b99768c122119558a3
+7:devices:/docker/103c588f565583da77e44e7ac966ef95f1838015533a48b99768c122119558a3
+6:blkio:/docker/103c588f565583da77e44e7ac966ef95f1838015533a48b99768c122119558a3
+5:cpuset:/docker/103c588f565583da77e44e7ac966ef95f1838015533a48b99768c122119558a3
+4:cpu,cpuacct:/docker/103c588f565583da77e44e7ac966ef95f1838015533a48b99768c122119558a3
+3:rdma:/docker/103c588f565583da77e44e7ac966ef95f1838015533a48b99768c122119558a3
+2:memory:/docker/103c588f565583da77e44e7ac966ef95f1838015533a48b99768c122119558a3
+1:name=systemd:/docker/103c588f565583da77e44e7ac966ef95f1838015533a48b99768c122119558a3
+0::/docker/103c588f565583da77e44e7ac966ef95f1838015533a48b99768c122119558a3
+
+# cat /proc/10045/cgroup 
+13:freezer:/docker/103c588f565583da77e44e7ac966ef95f1838015533a48b99768c122119558a3
+12:hugetlb:/docker/103c588f565583da77e44e7ac966ef95f1838015533a48b99768c122119558a3
+11:perf_event:/docker/103c588f565583da77e44e7ac966ef95f1838015533a48b99768c122119558a3
+10:misc:/
+9:pids:/docker/103c588f565583da77e44e7ac966ef95f1838015533a48b99768c122119558a3
+8:net_cls,net_prio:/docker/103c588f565583da77e44e7ac966ef95f1838015533a48b99768c122119558a3
+7:devices:/docker/103c588f565583da77e44e7ac966ef95f1838015533a48b99768c122119558a3
+6:blkio:/docker/103c588f565583da77e44e7ac966ef95f1838015533a48b99768c122119558a3
+5:cpuset:/docker/103c588f565583da77e44e7ac966ef95f1838015533a48b99768c122119558a3
+4:cpu,cpuacct:/docker/103c588f565583da77e44e7ac966ef95f1838015533a48b99768c122119558a3
+3:rdma:/docker/103c588f565583da77e44e7ac966ef95f1838015533a48b99768c122119558a3
+2:memory:/docker/103c588f565583da77e44e7ac966ef95f1838015533a48b99768c122119558a3
+1:name=systemd:/docker/103c588f565583da77e44e7ac966ef95f1838015533a48b99768c122119558a3
+0::/docker/103c588f565583da77e44e7ac966ef95f1838015533a48b99768c122119558a3
+
+# ll /proc/9973/ns
+total 0
+dr-x--x--x 2 root root 0  2月  8 18:07 ./
+dr-xr-xr-x 9 root root 0  2月  8 18:07 ../
+lrwxrwxrwx 1 root root 0  2月  8 18:15 cgroup -> 'cgroup:[4026532848]'
+lrwxrwxrwx 1 root root 0  2月  8 18:15 ipc -> 'ipc:[4026532790]'
+lrwxrwxrwx 1 root root 0  2月  8 18:15 mnt -> 'mnt:[4026532788]'
+lrwxrwxrwx 1 root root 0  2月  8 18:07 net -> 'net:[4026532792]'
+lrwxrwxrwx 1 root root 0  2月  8 18:15 pid -> 'pid:[4026532791]'
+lrwxrwxrwx 1 root root 0  2月  8 18:15 pid_for_children -> 'pid:[4026532791]'
+lrwxrwxrwx 1 root root 0  2月  8 18:15 time -> 'time:[4026531834]'
+lrwxrwxrwx 1 root root 0  2月  8 18:15 time_for_children -> 'time:[4026531834]'
+lrwxrwxrwx 1 root root 0  2月  8 18:15 user -> 'user:[4026531837]'
+lrwxrwxrwx 1 root root 0  2月  8 18:15 uts -> 'uts:[4026532789]'
+
+# ll /proc/10045/ns
+total 0
+dr-x--x--x 2 root root 0  2月  8 18:15 ./
+dr-xr-xr-x 9 root root 0  2月  8 18:07 ../
+lrwxrwxrwx 1 root root 0  2月  8 18:15 cgroup -> 'cgroup:[4026532848]'
+lrwxrwxrwx 1 root root 0  2月  8 18:15 ipc -> 'ipc:[4026532790]'
+lrwxrwxrwx 1 root root 0  2月  8 18:15 mnt -> 'mnt:[4026532788]'
+lrwxrwxrwx 1 root root 0  2月  8 18:15 net -> 'net:[4026532792]'
+lrwxrwxrwx 1 root root 0  2月  8 18:15 pid -> 'pid:[4026532791]'
+lrwxrwxrwx 1 root root 0  2月  8 18:15 pid_for_children -> 'pid:[4026532791]'
+lrwxrwxrwx 1 root root 0  2月  8 18:15 time -> 'time:[4026531834]'
+lrwxrwxrwx 1 root root 0  2月  8 18:15 time_for_children -> 'time:[4026531834]'
+lrwxrwxrwx 1 root root 0  2月  8 18:15 user -> 'user:[4026531837]'
+lrwxrwxrwx 1 root root 0  2月  8 18:15 uts -> 'uts:[4026532789]'
 ```
 
 
 
-#### 4.2.2.mem资源限制
+##### 4.2.2.memory资源限制
+
+```bash
+默认情况下，宿主机不限制容器对内存资源的使用。可使用如下参数来控制容器对内存资源的使用：
+--memory: 设置内存资源的使用限额
+--memory-swap: 设置内存和swap资源的使用限额
+
+# man docker run
+/--memory
+--memory , -m		Memory limit
+--memory-reservation		Memory soft limit
+--memory-swap		Swap limit equal to memory plus swap: ‘-1’ to enable unlimited swap
+--memory-swappiness	-1	Tune container memory swappiness (0 to 100)
+
+对进程内存使用限制的详细配置参数在/sys/fs/cgroup/memory目录
+# cd /sys/fs/cgroup/memory/
+# ls
+cgroup.clone_children           memory.kmem.tcp.max_usage_in_bytes  memory.swappiness
+cgroup.event_control            memory.kmem.tcp.usage_in_bytes      memory.usage_in_bytes
+cgroup.procs                    memory.kmem.usage_in_bytes          memory.use_hierarchy
+cgroup.sane_behavior            memory.limit_in_bytes               notify_on_release
+dev-hugepages.mount             memory.max_usage_in_bytes           proc-sys-fs-binfmt_misc.mount
+dev-mqueue.mount                memory.memsw.failcnt                release_agent
+docker                          memory.memsw.limit_in_bytes         sys-fs-fuse-connections.mount
+memory.failcnt                  memory.memsw.max_usage_in_bytes     sys-kernel-config.mount
+memory.force_empty              memory.memsw.usage_in_bytes         sys-kernel-debug.mount
+memory.kmem.failcnt             memory.move_charge_at_immigrate     sys-kernel-tracing.mount
+memory.kmem.limit_in_bytes      memory.numa_stat                    system.slice
+memory.kmem.max_usage_in_bytes  memory.oom_control                  tasks
+memory.kmem.slabinfo            memory.pressure_level               user.slice
+memory.kmem.tcp.failcnt         memory.soft_limit_in_bytes
+memory.kmem.tcp.limit_in_bytes  memory.stat
+```
+
+
+
+```bash
+# free -m
+               total        used        free      shared  buff/cache   available
+Mem:            3924         523        1898          13        1502        3161
+Swap:           2039           0        2039
+# docker run -it -m 400M --memory-swap=500M progrium/stress --vm 1 --vm-bytes 450M 
+stress: info: [1] dispatching hogs: 0 cpu, 0 io, 1 vm, 0 hdd
+stress: dbug: [1] using backoff sleep of 3000us
+stress: dbug: [1] --> hogvm worker 1 [7] forked
+stress: dbug: [7] allocating 471859200 bytes ...
+stress: dbug: [7] touching bytes in strides of 4096 bytes ...
+
+stress: dbug: [7] freed 471859200 bytes
+stress: dbug: [7] allocating 471859200 bytes ...
+stress: dbug: [7] touching bytes in strides of 4096 bytes ...
+
+stress: dbug: [7] freed 471859200 bytes
+stress: dbug: [7] allocating 471859200 bytes ...
+stress: dbug: [7] touching bytes in strides of 4096 bytes ...
+
+...输出省略，循环：分配450M内存，释放450M内存...
+
+另起一个ssh界面，查看内存使用情况
+# free -m
+               total        used        free      shared  buff/cache   available
+Mem:            3924         925        1492          13        1506        2758
+Swap:           2039         385        1654
+
+结束容器后再次查看内存：
+# free -m
+               total        used        free      shared  buff/cache   available
+Mem:            3924         564        1850          13        1509        3120
+Swap:           2039           0        2039
+```
+
+
+
+##### 4.2.3.Block IO限制
+
+```bash
+Block IO指的是磁盘的读写，可通过如下3种方式限制容器读写磁盘的带宽：
+---设置相对权重
+   --blkio-weight
+---设置bps：每秒读写的数据量
+   --device-read-bps
+   --device-write-bps
+---设置iops：每秒IO次数
+   --device-read-iops
+   --device-write-iops
+
+# man docker run
+       --blkio-weight=0
+          Block IO weight (relative weight) accepts a weight value between 10 and 1000,or 0 to disable (default 0).
+          
+       --device-read-bps=[]
+          Limit read rate(bytes per second) from a device (e.g. --device-read-bps=/dev/sda:1mb)
+          
+       --device-write-bps=[]
+          Limit write rate(bytes per second) to a device (e.g. --device-write-bps=/dev/sda:1mb)
+
+       --device-read-iops=[]
+          Limit read rate(IO per second) from a device (e.g. --device-read-iops=/dev/sda:1000)
+
+       --device-write-iops=[]
+          Limit write rate to(IO per second) a device (e.g. --device-write-iops=/dev/sda:1000)
+```
+
+
+
+### 5.PaaS概述
+
+
+
+
+
+### 6.Kubernetes架构介绍
+
+
+
+### 7.Deployment管理和使用
+
+
+
+### 8.Pod管理和应用
+
+
+
+
+
+### 9.标签和标签选择器
+
+
+
+### 10.Service服务发现
+
+
+
+### 11.
 
 
 
@@ -3544,11 +3841,11 @@ lrwxrwxrwx 1 101 101 0 Jan  9 18:17 uts -> uts:[4026532891]
 
 
 
-===abc===
 
---cd--
 
----e---
+
+
+
 
 ---
 
