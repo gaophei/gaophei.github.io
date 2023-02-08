@@ -3251,13 +3251,292 @@ hehe
 
 ### 4.容器底层实现技术
 
+```
+容器技术发展历史：
+```
+
+![image-20230208131657168](cka培训截图/image-20230208131657168.png)
+
+```
+Docker容器实现原理：
+---通过namespace技术实现进程隔离
+---通过cgroup技术实现容器可用资源的限制(cpu/memory/blkio/network)
+
+docker启动一个容器时，实际是创建了带多个namespace参数的进程
+```
+
+
+
+![image-20230208132521809](cka培训截图/image-20230208132521809.png)
+
+
+
+
+
 ### 4.1.Namespace和Cgroup
 
+#### 4.1.1.Namespace
 
+```
+Namespace：命名空间
+---作用：资源隔离
+---原理：namespace将内核的全局资源进行封装，使得每一个namespace都有一份独立的资源。因此不同进程在各自namespace内对同一种资源         的使用不会相互干扰
+```
+
+![image-20230208133239340](cka培训截图/image-20230208133239340.png)
+
+##### 4.1.1.1.PID namespace
+
+```bash
+以交互模式启动一个centos容器，并在其中运行/bin/bash程序
+# docker run -itd centos /bin/bash
+d43a850eabed98480e3a3d248fccff32eee43875ae372057ade6af2f42c27d38
+# docker ps
+CONTAINER ID   IMAGE     COMMAND       CREATED         STATUS         PORTS     NAMES
+d43a850eabed   centos    "/bin/bash"   5 seconds ago   Up 4 seconds             admiring_gates
+
+在容器中执行ps命令，查看到"/bin/bash"是PID=1的进程，即docker将其隔离于宿主机中的其他进程
+ # docker exec -it admiring_gates ps axf
+    PID TTY      STAT   TIME COMMAND
+     15 pts/1    Rs+    0:00 ps axf
+      1 pts/0    Ss+    0:00 /bin/bash
+
+使用docker inspect查看容器进程在宿主机上的真实PID。实际上，该容器中运行的"/bin/bash"在宿主机上是PID=3600217的进程
+# docker inspect admiring_gates |grep Pid
+            "Pid": 3600217,
+            "PidMode": "",
+            "PidsLimit": null,
+
+# ps -ef|grep 3600217
+root     3600217 3600193  0 13:41 pts/0    00:00:00 /bin/bash
+root     3602520 3599059  0 13:43 pts/1    00:00:00 grep --color=auto 3600217
+
+在容器中查看该进程的相关namespace信息      
+# docker exec -it admiring_gates ls -l /proc/1/ns
+total 0
+lrwxrwxrwx 1 root root 0 Feb  8 05:42 cgroup -> 'cgroup:[4026532792]'
+lrwxrwxrwx 1 root root 0 Feb  8 05:42 ipc -> 'ipc:[4026532653]'
+lrwxrwxrwx 1 root root 0 Feb  8 05:42 mnt -> 'mnt:[4026532651]'
+lrwxrwxrwx 1 root root 0 Feb  8 05:42 net -> 'net:[4026532656]'
+lrwxrwxrwx 1 root root 0 Feb  8 05:42 pid -> 'pid:[4026532655]'
+lrwxrwxrwx 1 root root 0 Feb  8 05:42 pid_for_children -> 'pid:[4026532655]'
+lrwxrwxrwx 1 root root 0 Feb  8 05:42 time -> 'time:[4026531834]'
+lrwxrwxrwx 1 root root 0 Feb  8 05:42 time_for_children -> 'time:[4026531834]'
+lrwxrwxrwx 1 root root 0 Feb  8 05:42 user -> 'user:[4026531837]'
+lrwxrwxrwx 1 root root 0 Feb  8 05:42 uts -> 'uts:[4026532652]'
+
+在宿主机上查看该进程的相关namespace信息，发现两者一致
+# ls -l /proc/3600217/ns
+total 0
+lrwxrwxrwx 1 root root 0  2月  8 13:41 cgroup -> 'cgroup:[4026532792]'
+lrwxrwxrwx 1 root root 0  2月  8 13:41 ipc -> 'ipc:[4026532653]'
+lrwxrwxrwx 1 root root 0  2月  8 13:41 mnt -> 'mnt:[4026532651]'
+lrwxrwxrwx 1 root root 0  2月  8 13:41 net -> 'net:[4026532656]'
+lrwxrwxrwx 1 root root 0  2月  8 13:41 pid -> 'pid:[4026532655]'
+lrwxrwxrwx 1 root root 0  2月  8 13:43 pid_for_children -> 'pid:[4026532655]'
+lrwxrwxrwx 1 root root 0  2月  8 13:43 time -> 'time:[4026531834]'
+lrwxrwxrwx 1 root root 0  2月  8 13:43 time_for_children -> 'time:[4026531834]'
+lrwxrwxrwx 1 root root 0  2月  8 13:43 user -> 'user:[4026531837]'
+lrwxrwxrwx 1 root root 0  2月  8 13:41 uts -> 'uts:[4026532652]'
+```
+
+
+
+#### 4.1.2.Cgroup
+
+```bash
+Cgroup: Linux Control Group
+---作用：限制一个进程组对系统资源的使用上限，包含：cpu、内存、Block I/O等
+        Cgroups还能设置进程优先级，对进程进行挂起和恢复等操作
+---原理：将一组进程放在一个Cgroup中，通过给这个Cgroup分配指定的可用资源，达到控制这一组进程可用资源的目的
+---实现：在Linux中，Cgroups以文件和目录的方式组织在操作系统的/sys/fs/cgroup路径下
+        该路径中所有的资源种类均可被cgroup限制
+
+# mount -t cgroup
+cgroup on /sys/fs/cgroup/systemd type cgroup (rw,nosuid,nodev,noexec,relatime,xattr,release_agent=/usr/lib/systemd/systemd-cgroups-agent,name=systemd)
+cgroup on /sys/fs/cgroup/devices type cgroup (rw,nosuid,nodev,noexec,relatime,devices)
+cgroup on /sys/fs/cgroup/perf_event type cgroup (rw,nosuid,nodev,noexec,relatime,perf_event)
+cgroup on /sys/fs/cgroup/net_cls,net_prio type cgroup (rw,nosuid,nodev,noexec,relatime,net_prio,net_cls)
+cgroup on /sys/fs/cgroup/pids type cgroup (rw,nosuid,nodev,noexec,relatime,pids)
+cgroup on /sys/fs/cgroup/freezer type cgroup (rw,nosuid,nodev,noexec,relatime,freezer)
+cgroup on /sys/fs/cgroup/blkio type cgroup (rw,nosuid,nodev,noexec,relatime,blkio)
+cgroup on /sys/fs/cgroup/hugetlb type cgroup (rw,nosuid,nodev,noexec,relatime,hugetlb)
+cgroup on /sys/fs/cgroup/cpu,cpuacct type cgroup (rw,nosuid,nodev,noexec,relatime,cpuacct,cpu)
+cgroup on /sys/fs/cgroup/memory type cgroup (rw,nosuid,nodev,noexec,relatime,memory)
+cgroup on /sys/fs/cgroup/cpuset type cgroup (rw,nosuid,nodev,noexec,relatime,cpuset)
+```
 
 
 
 ### 4.2.cpu和mem资源限制
+
+#### 4.2.1.cpu资源限制
+
+```bash
+可通过如下参数，对容器的可用cpu资源进行限制：
+---权重值，表示该进程能使用的cpu资源的权重值
+   --cpu-shares
+   -c
+---cpu个数
+   --cpus=0.0
+# man docker run
+  /--cpu
+  --cpu-shares , -c		CPU shares (relative weight). 比如：容器1 -c=1024，容器2 -c=512，那么容器1分2/3,容器2分1/3
+           按权重分配CPU只会发生在CPU资源紧张的情况下，当容器1处于空闲状态，为了充分利用CPU资源，容器2会分配到全部可用的CPU
+           
+  --cpus=0.0		Number of CPUs. The default is 0.0 which means no limit.
+```
+
+
+
+```bash
+# docker run -it --name yl1 -c 1024 progrium/stress --cpu 1
+Unable to find image 'progrium/stress:latest' locally
+latest: Pulling from progrium/stress
+Image docker.io/progrium/stress:latest uses outdated schema1 manifest format. Please upgrade to a schema2 image for better future compatibility. More information at https://docs.docker.com/registry/spec/deprecated-schema-v1/
+a3ed95caeb02: Pull complete 
+871c32dbbb53: Pull complete 
+dbe7819a64dd: Pull complete 
+d14088925c6e: Pull complete 
+58026d51efe4: Pull complete 
+7d04a4fe1405: Pull complete 
+1775fca35fb6: Pull complete 
+5c319e267908: Pull complete 
+Digest: sha256:e34d56d60f5caae79333cee395aae93b74791d50e3841986420d23c2ee4697bf
+Status: Downloaded newer image for progrium/stress:latest
+stress: info: [1] dispatching hogs: 1 cpu, 0 io, 0 vm, 0 hdd
+stress: dbug: [1] using backoff sleep of 3000us
+stress: dbug: [1] --> hogcpu worker 1 [7] forked
+
+
+另起一个界面查询下当前宿主机的cpu使用情况
+# top
+asks: 299 total,   3 running, 296 sleeping,   0 stopped,   0 zombie
+%Cpu(s): 90.8 us,  9.2 sy,  0.0 ni,  0.0 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st
+MiB Mem :   3924.2 total,    111.0 free,    598.3 used,   3215.0 buff/cache
+MiB Swap:   2040.0 total,   1639.9 free,    400.1 used.   3043.1 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND                                            
+3880020 root      20   0    7320     96      0 R  90.0   0.0   0:28.91 stress          
+
+在启动一个容器-c 512
+# docker run -it --name yl2 -c 512 polinux/stress-ng --cpu 1
+Unable to find image 'polinux/stress-ng:latest' locally
+latest: Pulling from polinux/stress-ng
+45a2e645736c: Pull complete 
+34fe96c9bdec: Pull complete 
+Digest: sha256:aa26e8ffd2c0a1192de691a22401a5fd008a940bb8f30dc2a4ddfe72e0dfdc10
+Status: Downloaded newer image for polinux/stress-ng:latest
+stress-ng: info:  [1] defaulting to a 86400 second run per stressor
+stress-ng: info:  [1] dispatching hogs: 1 cpu
+stress-ng: info:  [1] cache allocate: default cache size: 30720K
+
+# 
+
+另起一个界面查询下当前宿主机的cpu使用情况
+# top
+top - 17:24:37 up 56 days,  7:24,  4 users,  load average: 2.21, 2.03, 1.46
+Tasks: 304 total,   4 running, 300 sleeping,   0 stopped,   0 zombie
+%Cpu(s): 96.4 us,  3.6 sy,  0.0 ni,  0.0 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st
+MiB Mem :   3924.2 total,    107.6 free,    662.4 used,   3154.3 buff/cache
+MiB Swap:   2040.0 total,   1638.1 free,    401.9 used.   2976.7 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND                                            
+3880020 root      20   0    7320     96      0 R  60.5   0.0  15:52.65 stress                                             
+3903259 root      20   0   66984   6352   3480 R  30.9   0.2   0:25.27 stress-ng-cpu 
+
+
+# docker ps -f name=yl*
+CONTAINER ID   IMAGE               COMMAND                  CREATED          STATUS          PORTS     NAMES
+103c588f5655   polinux/stress-ng   "/usr/bin/stress-ng …"   12 minutes ago   Up 12 minutes             yl2
+3fa0ed36aeae   progrium/stress     "/usr/bin/stress --v…"   31 minutes ago   Up 31 minutes             yl1
+
+# docker inspect yl1|grep -w Pid
+            "Pid": 3880020,
+# docker inspect yl2|grep -w Pid
+            "Pid": 3903259,
+
+# ls  /sys/fs/cgroup/cpu/docker
+
+
+
+# ls -l /sys/fs/cgroup/cpu/docker/
+total 0
+drwxr-xr-x 2 root root 0 Dec 13 16:30 103c588f565583da77e44e7ac966ef95f1838015533a48b99768c122119558a3
+drwxr-xr-x 2 root root 0 Jan 16 14:17 3fa0ed36aeae4a1e1b69785fdd39ae41cea91130c8d3c98e59d016844dac0954
+-rw-r--r-- 1 root root 0 Dec 13 16:30 cgroup.clone_children
+--w--w--w- 1 root root 0 Dec 13 16:30 cgroup.event_control
+-rw-r--r-- 1 root root 0 Dec 13 16:30 cgroup.procs
+-r--r--r-- 1 root root 0 Dec 13 16:30 cpuacct.stat
+-rw-r--r-- 1 root root 0 Dec 13 16:30 cpuacct.usage
+-r--r--r-- 1 root root 0 Dec 13 16:30 cpuacct.usage_percpu
+-rw-r--r-- 1 root root 0 Dec 13 16:30 cpu.cfs_period_us
+-rw-r--r-- 1 root root 0 Dec 13 16:30 cpu.cfs_quota_us
+-rw-r--r-- 1 root root 0 Dec 13 16:30 cpu.rt_period_us
+-rw-r--r-- 1 root root 0 Dec 13 16:30 cpu.rt_runtime_us
+-rw-r--r-- 1 root root 0 Dec 13 16:30 cpu.shares
+-r--r--r-- 1 root root 0 Dec 13 16:30 cpu.stat
+-rw-r--r-- 1 root root 0 Dec 13 16:30 notify_on_release
+-rw-r--r-- 1 root root 0 Dec 13 16:30 tasks
+
+# ls -l /sys/fs/cgroup/cpu/docker/3fa0ed36aeae4a1e1b69785fdd39ae41cea91130c8d3c98e59d016844dac0954/
+total 0
+-rw-r--r-- 1 root root 0 Dec 13 16:30 cgroup.clone_children
+--w--w--w- 1 root root 0 Dec 13 16:30 cgroup.event_control
+-rw-r--r-- 1 root root 0 Dec 13 16:30 cgroup.procs
+-r--r--r-- 1 root root 0 Dec 13 16:30 cpuacct.stat
+-rw-r--r-- 1 root root 0 Dec 13 16:30 cpuacct.usage
+-r--r--r-- 1 root root 0 Dec 13 16:30 cpuacct.usage_percpu
+-rw-r--r-- 1 root root 0 Dec 13 16:30 cpu.cfs_period_us
+-rw-r--r-- 1 root root 0 Dec 13 16:30 cpu.cfs_quota_us
+-rw-r--r-- 1 root root 0 Dec 13 16:30 cpu.rt_period_us
+-rw-r--r-- 1 root root 0 Dec 13 16:30 cpu.rt_runtime_us
+-rw-r--r-- 1 root root 0 Dec 13 16:30 cpu.shares
+-r--r--r-- 1 root root 0 Dec 13 16:30 cpu.stat
+-rw-r--r-- 1 root root 0 Dec 13 16:30 notify_on_release
+-rw-r--r-- 1 root root 0 Dec 13 16:30 tasks
+
+# cat /sys/fs/cgroup/cpu/docker/3fa0ed36aeae4a1e1b69785fdd39ae41cea91130c8d3c98e59d016844dac0954/cpu.shares 
+1024
+# cat /sys/fs/cgroup/cpu/docker/3fa0ed36aeae4a1e1b69785fdd39ae41cea91130c8d3c98e59d016844dac0954/tasks
+3331
+3454
+3501
+3502
+3503
+3504
+3505
+3506
+3507
+3508
+
+# cat /proc/3508/cgroup
+11:cpuset:/docker/182b49af08e1d79008cc1b1aa6b4284e64b14d1445d261fcae190a72e423e98e
+10:memory:/docker/182b49af08e1d79008cc1b1aa6b4284e64b14d1445d261fcae190a72e423e98e
+9:cpuacct,cpu:/docker/182b49af08e1d79008cc1b1aa6b4284e64b14d1445d261fcae190a72e423e98e
+8:hugetlb:/docker/182b49af08e1d79008cc1b1aa6b4284e64b14d1445d261fcae190a72e423e98e
+7:blkio:/docker/182b49af08e1d79008cc1b1aa6b4284e64b14d1445d261fcae190a72e423e98e
+6:freezer:/docker/182b49af08e1d79008cc1b1aa6b4284e64b14d1445d261fcae190a72e423e98e
+5:pids:/docker/182b49af08e1d79008cc1b1aa6b4284e64b14d1445d261fcae190a72e423e98e
+4:net_prio,net_cls:/docker/182b49af08e1d79008cc1b1aa6b4284e64b14d1445d261fcae190a72e423e98e
+3:perf_event:/docker/182b49af08e1d79008cc1b1aa6b4284e64b14d1445d261fcae190a72e423e98e
+2:devices:/docker/182b49af08e1d79008cc1b1aa6b4284e64b14d1445d261fcae190a72e423e98e
+1:name=systemd:/docker/182b49af08e1d79008cc1b1aa6b4284e64b14d1445d261fcae190a72e423e98e
+
+# ll /proc/3508/ns
+total 0
+lrwxrwxrwx 1 101 101 0 Jan  9 18:17 ipc -> ipc:[4026532892]
+lrwxrwxrwx 1 101 101 0 Jan  9 18:17 mnt -> mnt:[4026532886]
+lrwxrwxrwx 1 101 101 0 Dec 13 16:48 net -> net:[4026531956]
+lrwxrwxrwx 1 101 101 0 Jan  9 18:17 pid -> pid:[4026532893]
+lrwxrwxrwx 1 101 101 0 Jan  9 18:17 user -> user:[4026531837]
+lrwxrwxrwx 1 101 101 0 Jan  9 18:17 uts -> uts:[4026532891]
+
+```
+
+
+
+#### 4.2.2.mem资源限制
 
 
 
