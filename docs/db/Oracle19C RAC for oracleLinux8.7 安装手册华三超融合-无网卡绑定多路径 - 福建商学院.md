@@ -747,8 +747,38 @@ cat /sys/kernel/mm/transparent_hugepage/enabled
 ```
 --->always madvise [never]
 ```
+检查是否使用HugePages
+
+```bash
+# cat /proc/meminfo |grep -i hug
+AnonHugePages:         0 kB
+HugePages_Total:   128819
+HugePages_Free:     5980
+HugePages_Rsvd:       42
+HugePages_Surp:        0
+Hugepagesize:       2048 kB
+# cat /sys/kernel/mm/transparent_hugepage/enabled
+always madvise [never]
+# cat /etc/fstab 
+
+#
+# /etc/fstab
+# Created by anaconda on Fri Jan  8 23:19:04 2021
+#
+# Accessible filesystems, by reference, are maintained under '/dev/disk'
+# See man pages fstab(5), findfs(8), mount(8) and/or blkid(8) for more info
+#
+/dev/mapper/centos-root /                       xfs     defaults        0 0
+UUID=0483cd82-0c25-4c7f-b281-ab607253bfb4 /boot                   xfs     defaults        0 0
+UUID=7E75-FE2E          /boot/efi               vfat    umask=0077,shortname=winnt 0 0
+/dev/mapper/centos-swap swap                    swap    defaults        0 0
+```
+
+
+
 ##方法二
 #修改/etc/rc.local，并重启OS
+
 ```bash
 cat >> /etc/rc.local <<EOF
 if test -f /sys/kernel/mm/transparent_hugepage/enabled; then
