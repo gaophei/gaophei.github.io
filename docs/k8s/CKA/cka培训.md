@@ -3806,32 +3806,621 @@ Block IO指的是磁盘的读写，可通过如下3种方式限制容器读写�
 
 
 ### 5.PaaS概述
+#### 5.1.什么是PaaS
+
+![image-20230219110031988](cka培训截图\image-20230219110031988.png)
 
 
+
+| 缩写 |             IaaS             |           PaaS            |            SaaS            |      |
+| :--: | :--------------------------: | :-----------------------: | :------------------------: | ---- |
+| 全拼 | Infrastructurre-as-a-Service |   Platform-as-a-Service   |   Software-as-a-Service    |      |
+| 中文 |        基础设施即服务        |        平台即服务         |         软件即服务         |      |
+| 示例 |   亚马逊、阿里云、华为云等   | Google、Microsoft Azure等 | 阿里的钉钉、苹果的iCloud等 |      |
+| 软件 |          OpenStack           |      Openshift、K8S       |         office 365         |      |
+
+
+
+![image-20230220150516539](cka培训截图\image-20230220150516539.png)
+
+
+
+![image-20230220155051994](cka培训截图\image-20230220155051994.png)
+
+
+#### 5.2.Paas与编排工具概述
+```
+容器集群管理三巨头：
+---kubernetes
+https://github.com/kubernetes/kubernetes
+
+---docker swarm
+https://github.com/docker-archive/classicswarm
+
+---mesos
+https://github.com/apache/mesos
+```
+
+
+
+```
+---docker swarm
+docker swarm 项目开始于2014年，终止于2018年
+
+---docker swarmkit
+项目开始于2016年，与swarm不同，内嵌于docker engine
+swarmkit所有节点对等，每个节点可以选择转化为manager或者worker
+manager节点内嵌了raft协议，实现高可用，并存储集群状态
+
+---apache mesos
+2009年发起，Mesos可以将整个数据中心的资源(包括cpu、内存、存储、网络等)进行抽象和调度，使得多个应用同时运行在集群中分享资源，并无需关心资源的物理分布情况
+
+---kubernetes
+```
+
+
+
+##### 5.2.1.swarm mode
+
+![image-20230220162301351](cka培训截图\image-20230220162301351.png)
+
+
+
+![image-20230220162458672](cka培训截图\image-20230220162458672.png)
+
+```bash
+Raft共识算法
+Gossip network
+```
+
+##### 5.2.2.mesos
+
+
+
+![image-20230223142432988](cka培训截图\image-20230223142432988.png)
+
+
+
+![image-20230223143345177](cka培训截图\image-20230223143345177.png)
+
+
+
+##### 5.2.3.kubernetes
+
+```
+---kubernetes是google发起的开源的项目，它的目标是管理跨多个主机的容器，提供基本的部署、维护以及应用伸缩，主要实现语言为go语言
+---k8s的特点：
+   1)便携：支持公有云、私有云、混合云，以及多种云平台
+   2)可拓展：模块化，可拔插，可任意组合
+   3)自修复：自动重调度，自动重启，自动复制
+```
+
+```bash
+k8s架构：
+---CRI(Container Runtime Interface)：远程调用接口，这个接口定义了容器运行时的各项核心操作，比如：启动一个容器需要的所有参数
+
+---CNI(Container Network Interface)：该接口调用网络插件为容器配置网络
+
+---CSI(Container Storage Interface)：调用存储插件为容器配置持久化存储
+```
+
+![image-20230223151115495](cka培训截图\image-20230223151115495.png)
+
+
+
+![image-20230223154109733](cka培训截图\image-20230223154109733.png)
+
+![image-20230223154223792](cka培训截图\image-20230223154223792.png)
+
+
+
+```
+---grpc:  Remote Procedure Call
+   https://grpc.io/
+
+---protobuff
+   https://developers.google.com/protocol-buffers
+
+---cri
+   https://cri-o.io/
+```
+
+
+
+```
+k8s的"声明式API"
+---Deployment
+---Job
+---CronJob
+---DaemonSet
+```
 
 
 
 ### 6.Kubernetes架构介绍
 
+#### 6.1.k8s架构
+
+```
+---k8s：容器编排
+---openstack：虚拟机编排
+```
+
+```
+k8s架构：
+一个基础的k8s集群包含一个master节点和多个node节点。每个节点可以是一台物理机，也可以是一台虚拟机
+生产集群中：3个master和多个node
+
+---master：master节点提供集群的控制，对集群做出全局性决策，例如调度等。通常在master节点上不运行用户容器
+
+---node：节点组件运行在每一个node节点上，维护运行的pod并提供k8s运行时环境
+```
+
+```bash
+master节点：
+---kube-apiserver：对外暴露了k8s API。它是k8s的前端控制层。它被设计为水平扩展，即通过部署更多实例来缩放
+
+---etcd：用于k8s的后端存储。所有集群数据都存储在此处，应该始终为k8s的etcd提供备份计划
+
+---kube-controller-manager：运行控制器，是处理集群中常规任务的后台线程。逻辑上，每个控制器是一个单独的进程，但为了降低复杂性，他们都被编译成独立的可执行文件，并在单个进程中运行
+
+---kube-scheduler：监视没有分配节点的新创建的pod，选择一个节点供他们运行
+
+node节点：
+---kube-proxy：用于管理service的访问入口，包括集群内pod到service的访问和集群外访问service
+
+---kubelet：在集群内每个节点上运行的一个代理，用于保证pod的运行
+
+---container runtime：通常使用docker来运行容器，也可以使用rkt/podman等作为替代方案
+   rkt已经停止： https://github.com/rkt/rkt 
+   
+推荐Add-ons：
+---Core-dns：为整个集群提供DNS服务
+
+---Ingress Controller：为service提供外网访问入口
+
+---Dashboard：提供图形化管理界面
+
+---Heapster：提供集群资源监控
+
+---Flannel：为k8s提供方便的网络规划服务
+
+
+kubeadm：
+---社区主推的快速创建k8s集群工具
+---通过执行必要的操作来启动和运行一个最小可用的集群：
+   1)Master节点：kubeadm init，快速初始化安装主节点组件
+   2)Node节点：kubeadm join，将从节点加入集群
+ 
+查看组件运行状态：
+---systemctl status docker
+
+---systemctl status kubelet
+
+kubeadm容器化组件：
+kubectl get pods --field-selector spec.nodeName=k8s-master --namespace=kube-system
+
+# kubectl get pods --field-selector spec.nodeName=master01  --namespace=kube-system
+NAME                                       READY   STATUS    RESTARTS     AGE
+calico-kube-controllers-6b9fbfff44-8m4hf   1/1     Running   5 (8d ago)   438d
+calico-node-jprb9                          1/1     Running   5 (8d ago)   438d
+coredns-7d89d9b6b8-8rgqq                   1/1     Running   1 (8d ago)   72d
+coredns-7d89d9b6b8-l9sqq                   1/1     Running   3 (8d ago)   362d
+etcd-master01                              1/1     Running   4 (8d ago)   362d
+kube-apiserver-master01                    1/1     Running   4 (8d ago)   362d
+kube-controller-manager-master01           1/1     Running   4 (8d ago)   362d
+kube-proxy-h7br8                           1/1     Running   3 (8d ago)   362d
+kube-scheduler-master01                    1/1     Running   5 (8d ago)   362d
+
+# kubectl get pods --field-selector spec.nodeName=node01 --namespace=kube-system
+NAME                READY   STATUS    RESTARTS      AGE
+calico-node-vfp2b   1/1     Running   2 (71d ago)   363d
+kube-proxy-4w58n    1/1     Running   2 (71d ago)   362d
+
+
+```
+
+
+
+#### 6.2.kubeadm部署k8s集群
+
+```
+一个master节点：2核/4G/40G/192.168.1.234
+
+两个node节点：2核/4G/20G/192.168.1.235/192.168.1.236
+
+#以下脚本仅在k8s-master节点上执行
+vi  k8sinstaller.sh
+
+bash k8sinstaller.sh
+```
+
+
+
+```bash
+#!/bin/bash
+
+echo "######################################################################################################
+#    Author：xxx
+#    Version： 2022-03-01
+#
+#    please make sure you have three node and have been done as below:
+#
+#    1. complete /etc/hosts file
+#    
+#       192.168.1.234 k8s-master
+#       192.168.1.235 k8s-docker1
+#       192.168.1.236 k8s-docker2
+#      
+#    2. root password has been set to 1 on all of node
+#
+#       tips:
+#         sudo echo root:1 | chpasswd
+#		
+#    3. enable root ssh login on /etc/ssh/sshd_config
+#
+#       tips: 
+#         sudo sed -i 's/^#PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config
+#         sudo systemctl restart sshd
+#
+#    4. this tools will only install kubernetes v1.25.4 for CKA Exam upgrade, if you want other version, please modify kubeadm kubelet kubectl version in script
+#
+######################################################################################################"
+echo
+echo
+echo -n Have you done the above? yes or no: 
+read input
+case $input in
+yes)
+  echo
+	echo now starting deploy
+;;
+no)
+	echo please correct it && exit 1
+;;
+*)
+	echo please input yes or no
+  exit 1
+;;
+esac
+
+# if [ $input = "yes" ];then
+#	sleep 1;
+#else
+#	echo you enter a word without yes && exit 1;
+#fi
+
+cat > /etc/apt/sources.list <<EOF
+deb https://mirror.nju.edu.cn/ubuntu focal main restricted
+deb https://mirror.nju.edu.cn/ubuntu focal-updates main restricted
+deb https://mirror.nju.edu.cn/ubuntu focal universe
+deb https://mirror.nju.edu.cn/ubuntu focal-updates universe
+deb https://mirror.nju.edu.cn/ubuntu focal multiverse
+deb https://mirror.nju.edu.cn/ubuntu focal-updates multiverse
+deb https://mirror.nju.edu.cn/ubuntu focal-backports main restricted universe multiverse
+deb https://mirror.nju.edu.cn/ubuntu focal-security main restricted
+deb https://mirror.nju.edu.cn/ubuntu focal-security universe
+deb https://mirror.nju.edu.cn/ubuntu focal-security multiverse
+EOF
+
+apt update && apt install sshpass wget bash-completion ansible -y
+sed -i 's/^#host_key_checking = False/host_key_checking = False/' /etc/ansible/ansible.cfg
+
+ls /root/.ssh/*.pub
+case $? in
+0)
+	sleep 1
+;;
+*)
+	ssh-keygen -t rsa -f /root/.ssh/id_rsa -N ''
+;;
+esac
+
+sshpass -p 1 ssh-copy-id -o StrictHostKeyChecking=no root@k8s-master
+
+sshpass -p 1 ssh-copy-id -o StrictHostKeyChecking=no root@k8s-docker1
+
+sshpass -p 1 ssh-copy-id -o StrictHostKeyChecking=no root@k8s-docker2
+
+cat > /etc/ansible/hosts <<EOF
+[master]
+k8s-master ansible_user=root ansible_password=1
+[worker]
+k8s-docker1 ansible_user=root ansible_password=1
+k8s-docker2 ansible_user=root ansible_password=1
+
+EOF
+
+cat > create-k8s.yaml <<'EOF'
+---
+- name: Configure Kubernetes
+  hosts: all
+  remote_user: root
+  tasks:
+    - name: Modify Ubuntu Repository to Nanjing Edu
+      shell: |
+        cp /etc/apt/sources.list /etc/apt/sources.list.bak
+        sed -i 's/^deb.*archive.ubuntu.com/deb https:\/\/mirrors.nju.edu.cn/' /etc/apt/sources.list
+    - name: Deploy Nanjing Edu Docker Repository
+      shell: |
+        apt-get update
+        apt-get -y install apt-transport-https ca-certificates curl software-properties-common
+        curl -fsSL https://mirror.nju.edu.cn/docker-ce/linux/ubuntu/gpg | sudo apt-key add -
+        add-apt-repository "deb [arch=amd64] https://mirror.nju.edu.cn/docker-ce/linux/ubuntu $(lsb_release -cs) stable"
+        apt-get -y update
+    - name: clean apt lock
+      shell: |
+        sudo rm /var/lib/apt/lists/lock
+        sudo rm /var/cache/apt/archives/lock
+        sudo rm /var/lib/dpkg/lock*
+        sudo dpkg --configure -a
+        sudo apt update
+    - name: Deploy chrony for make sure time on all node is same
+      apt:
+        pkg:
+          - chrony
+    - name: restart chronyd service for timesync
+      systemd:
+        state: restarted
+        daemon_reload: yes
+        name: chronyd
+        enabled: yes
+    - name: Deploy Docker on all node
+      apt:
+        pkg:
+        - docker-ce
+        - docker-ce-cli
+        - containerd.io
+        - docker-compose-plugin
+    - name: ADD 163 docker mirror
+      shell: |
+        mkdir -p /etc/docker
+        tee /etc/docker/daemon.json <<-'EOF'
+        {
+          "registry-mirrors": ["http://hub-mirror.c.163.com"],
+          "exec-opts": ["native.cgroupdriver=systemd"]
+        }
+        EOF
+    - name: starting docker service
+      systemd:
+        state: restarted
+        daemon_reload: yes
+        name: docker
+        enabled: yes
+
+    - block:
+        - name: clean apt lock
+          shell: |
+            sudo rm /var/lib/apt/lists/lock
+            sudo rm /var/cache/apt/archives/lock
+            sudo rm /var/lib/dpkg/lock*
+            sudo dpkg --configure -a
+            sudo apt update  
+        - name: Deploy CRI-Docker
+          apt:
+            deb: https://ghproxy.com/https://github.com/Mirantis/cri-dockerd/releases/download/v0.2.6/cri-dockerd_0.2.6.3-0.ubuntu-focal_amd64.deb
+
+      rescue:
+        - name: clean apt lock
+          shell: |
+            sudo rm /var/lib/apt/lists/lock
+            sudo rm /var/cache/apt/archives/lock
+            sudo rm /var/lib/dpkg/lock*
+            sudo dpkg --configure -a
+            sudo apt update  
+        - name: Deploy CRI-Docker
+          apt:
+            deb: https://ghproxy.com/https://github.com/Mirantis/cri-dockerd/releases/download/v0.2.6/cri-dockerd_0.2.6.3-0.ubuntu-focal_amd64.deb
+
+    - name: modify sandbox image to aliyun
+      shell: |
+        sed -i 's/ExecStart=.*/ExecStart=\/usr\/bin\/cri-dockerd --container-runtime-endpoint fd:\/\/ --network-plugin=cni --pod-infra-container-image=registry.cn-hangzhou.aliyuncs.com\/google_containers\/pause:3.8/' /lib/systemd/system/cri-docker.service
+    - name: starting cri-docker service
+      systemd:
+        state: restarted
+        daemon_reload: yes
+        name: cri-docker
+        enabled: yes
+    - name: disable swap on /etc/fstab
+      lineinfile:
+        path: /etc/fstab
+        regexp: '.*swap.*'
+        state: absent
+    - name: disable swap runtime
+      shell: swapoff -a
+    - name: configure iptables module
+      lineinfile:
+        path: /etc/modules-load.d/k8s.conf
+        line: br_netfilter
+        state: present
+        create: true
+    - name: configure iptables bridge
+      lineinfile:
+        path: /etc/sysctl.d/k8s.conf
+        line: |
+          net.bridge.bridge-nf-call-ip6tables = 1
+          net.bridge.bridge-nf-call-iptables = 1
+          net.ipv4.ip_forward = 1
+        create: true
+    - name: apply sysctl
+      shell: |
+        modprobe br_netfilter
+        sysctl --system
+    - name: add Nanjing Edu kubernetes repo on ubuntu
+      shell: |
+        cat > /etc/apt/sources.list.d/k8s.list <<EOF
+        deb https://mirror.nju.edu.cn/kubernetes/apt/ kubernetes-xenial main
+        EOF
+        curl https://mirrors.aliyun.com/kubernetes/apt/doc/apt-key.gpg | apt-key add -
+        apt update
+      when: ansible_facts.distribution == 'Ubuntu'
+      #- name: add kubernetes repo
+      #  apt_repository:
+      #  repo: deb https://mirrors.tuna.tsinghua.edu.cn/kubernetes/apt/ kubernetes-xenial main
+      #  validate_certs: false
+      #  state: present
+      #  filename: k8s
+      #  update_cache: true
+    # - name: add kubernetes repo on RHEL
+    #   shell: |
+    #     cat > /etc/yum.repos.d/kubernetes.repo <<EOF
+    #     [kubernetes]
+    #     name=Kubernetes
+    #     baseurl=https://mirrors.tuna.tsinghua.edu.cn/kubernetes/yum/repos/kubernetes-el7-x86_64/
+    #     enabled=1
+    #     gpgcheck=0
+    #     EOF
+    #   when: ansible_facts.distribution == 'RedHat' or ansible_facts.distribution == 'CentOS'
+    - name: install kubeadm kubectl kubelet
+      package:
+        name:
+          - kubeadm=1.25.4-00
+          - kubelet=1.25.4-00
+          - kubectl=1.25.4-00
+          - sshpass
+        state: present
+    - name: clean apt lock
+      shell: |
+        sudo rm /var/lib/apt/lists/lock
+        sudo rm /var/cache/apt/archives/lock
+        sudo rm /var/lib/dpkg/lock*
+        sudo dpkg --configure -a
+        sudo apt update
+    - name: integrate with docker
+      shell: crictl config runtime-endpoint unix:///run/cri-dockerd.sock
+    - name: creating kubeadm.yaml
+      shell: kubeadm config print init-defaults > kubeadm.yaml
+      when: "'master' in group_names"
+    - name: modify api server address
+      lineinfile:
+        path: kubeadm.yaml
+        regexp: '.*advert.*'
+        line: '  advertiseAddress: 192.168.1.234'
+        state: present
+      when: "'master' in group_names"
+    - name: modify cluster name
+      lineinfile:
+        path: kubeadm.yaml
+        regexp: '.*name.*'
+        line: '  name: k8s-master'
+        state: present
+      when: "'master' in group_names"
+    - name: modify image repository
+      lineinfile:
+        path: kubeadm.yaml
+        regexp: 'imageRepo.*'
+        line: 'imageRepository: registry.cn-hangzhou.aliyuncs.com/google_containers'
+        state: present
+      when: "'master' in group_names"
+    - name: modify crisock to cri-docker
+      lineinfile:
+        path: kubeadm.yaml
+        regexp: '  criSocket.*'
+        line: '  criSocket: unix:///run/cri-dockerd.sock'
+        state: present
+      when: "'master' in group_names"      
+    - name: Deploy kubernetes on Master node
+      shell: kubeadm init --config kubeadm.yaml | tee /root/installdetails.log
+      when: "'master' in group_names"
+    - name: pause 30s after cluster init
+      shell: sleep 30s
+      when: "'master' in group_names"
+
+    - name: set up admin role
+      shell: |
+        mkdir -p $HOME/.kube
+        cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+        chown $(id -u):$(id -g) $HOME/.kube/config
+        sshpass -p 1 ssh -A -g -o StrictHostKeyChecking=no root@k8s-docker1 mkdir /root/.kube 
+        sshpass -p 1 ssh -A -g -o StrictHostKeyChecking=no root@k8s-docker2 mkdir /root/.kube
+        scp /etc/kubernetes/admin.conf root@k8s-docker1:/root/.kube/config
+        scp /etc/kubernetes/admin.conf root@k8s-docker2:/root/.kube/config
+        sleep 30s
+      when: "'master' in group_names"
+    - name: Deploy Calico
+      shell: |
+        kubectl create -f https://gitee.com/cnlxh/Kubernetes/raw/master/cka-yaml/calico.yaml
+        sleep 30s
+      when: "'master' in group_names"
+    - name: join workers
+      shell: |
+        sleep 30
+        join=`sshpass -p 1 ssh -A -g -o StrictHostKeyChecking=no root@k8s-master kubeadm token create --print-join-command`
+        echo $join --cri-socket=unix:///var/run/cri-dockerd.sock | bash
+      when: "'worker' in group_names"
+    - name: assign worker role label to workers
+      shell: |
+        sleep 30
+        kubectl label nodes k8s-docker2 k8s-docker1 node-role.kubernetes.io/worker=
+      when: "'master' in group_names"
+    - name: add TAB completion for kubernetes
+      shell: |
+        kubectl completion bash > /etc/bash_completion.d/kubectl
+        kubeadm completion bash > /etc/bash_completion.d/kubeadm
+        source /etc/bash_completion.d/kubectl
+        source /etc/bash_completion.d/kubeadm
+       # rm -rf /root/installdetails.log
+      when: "'master' in group_names"
+EOF
+
+ansible-playbook create-k8s.yaml
+
+#rm -rf create-k8s.yaml
+
+echo
+
+echo
+
+echo "Please wait one minute for nodes ready"
+
+echo
+
+echo
+
+sleep 1m
+
+kubectl get nodes
+
+echo
+
+echo
+
+echo 'if you want use TAB for completion your command, please type sudo -i here'
+
+echo
+
+echo
+```
+
+
+
 
 
 ### 7.Deployment管理和使用
 
+#### 7.1.
 
+#### 7.2.
 
 ### 8.Pod管理和应用
 
+#### 8.1.
 
+#### 8.2.
 
 
 
 ### 9.标签和标签选择器
+#### 9.1.
 
+#### 9.2.
 
 
 ### 10.Service服务发现
 
+#### 10.1.
 
+#### 10.2.
 
 ### 11.
 

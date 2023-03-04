@@ -1,0 +1,1899 @@
+#!/bin/bash
+
+echo "######################################################################################################
+#    Author：Xiaohui Li
+#    Contact me via WeChat: Lxh_Chat
+#    Contact me via QQ: 939958092
+#    Version： 2022-03-01
+#
+#    please make sure you have three node and have been done as below:
+#
+#    1. complete /etc/hosts file
+#       192.168.1.234 k8s-master
+#       192.168.1.235 k8s-docker1
+#       192.168.1.236 k8s-docker2
+#      
+#    
+#       192.168.1.234 k8s-master
+#       192.168.1.235 k8s-docker1
+#       192.168.1.236 k8s-docker2
+#      
+#    2. root password has been set to 1 on all of node
+#
+#       tips:
+#         sudo echo root:1 | chpasswd
+#		
+#    3. enable root ssh login on /etc/ssh/sshd_config
+#
+#       tips: 
+#         sudo sed -i 's/^#PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config
+#         sudo systemctl restart sshd
+#
+#    4. this tools will only install kubernetes v1.25.4 for CKA Exam upgrade, if you want other version, please modify kubeadm kubelet kubectl version in script
+#
+######################################################################################################"
+echo
+echo
+echo -n Have you done the above? yes or no: 
+read input
+case $input in
+yes)
+  echo
+	echo now starting deploy
+;;
+no)
+	echo please correct it && exit 1
+;;
+*)
+	echo please input yes or no
+  exit 1
+;;
+esac
+
+# if [ $input = "yes" ];then
+#	sleep 1;
+#else
+#	echo you enter a word without yes && exit 1;
+#fi
+
+cat > /etc/apt/sources.list <<EOF
+deb https://mirror.nju.edu.cn/ubuntu focal main restricted
+deb https://mirror.nju.edu.cn/ubuntu focal-updates main restricted
+deb https://mirror.nju.edu.cn/ubuntu focal universe
+deb https://mirror.nju.edu.cn/ubuntu focal-updates universe
+deb https://mirror.nju.edu.cn/ubuntu focal multiverse
+deb https://mirror.nju.edu.cn/ubuntu focal-updates multiverse
+deb https://mirror.nju.edu.cn/ubuntu focal-backports main restricted universe multiverse
+deb https://mirror.nju.edu.cn/ubuntu focal-security main restricted
+deb https://mirror.nju.edu.cn/ubuntu focal-security universe
+deb https://mirror.nju.edu.cn/ubuntu focal-security multiverse
+EOF
+
+apt update && apt install sshpass wget bash-completion ansible -y
+sed -i 's/^#host_key_checking = False/host_key_checking = False/' /etc/ansible/ansible.cfg
+
+ls /root/.ssh/*.pub
+case $? in
+0)
+	sleep 1
+;;
+*)
+	ssh-keygen -t rsa -f /root/.ssh/id_rsa -N ''
+;;
+esac
+
+sshpass -p 1 ssh-copy-id -o StrictHostKeyChecking=no root@k8s-master
+
+sshpass -p 1 ssh-copy-id -o StrictHostKeyChecking=no root@k8s-docker1
+
+sshpass -p 1 ssh-copy-id -o StrictHostKeyChecking=no root@k8s-docker2
+
+cat > /etc/ansible/hosts <<EOF
+[master]
+k8s-master ansible_user=root ansible_password=1
+[worker]
+k8s-docker1 ansible_user=root ansible_password=1
+k8s-docker2 ansible_user=root ansible_password=1
+
+EOF
+
+cat > create-k8s.yaml <<'EOF'
+---
+- name: Configure Kubernetes
+  hosts: all
+  remote_user: root
+  tasks:
+    - name: Modify Ubuntu Repository to Nanjing Edu
+      shell: |
+        cp /etc/apt/sources.list /etc/apt/sources.list.bak
+        sed -i 's/^deb.*archive.ubuntu.com/deb https:\/\/mirrors.nju.edu.cn/' /etc/apt/sources.list
+    - name: Deploy Nanjing Edu Docker Repository
+      shell: |
+        apt-get update
+        apt-get -y install apt-transport-https ca-certificates curl software-properties-common
+        curl -fsSL https://mirror.nju.edu.cn/docker-ce/linux/ubuntu/gpg | sudo apt-key add -
+        add-apt-repository "deb [arch=amd64] https://mirror.nju.edu.cn/docker-ce/linux/ubuntu $(lsb_release -cs) stable"
+        apt-get -y update
+    - name: clean apt lock
+      shell: |
+        sudo rm /var/lib/apt/lists/lock
+        sudo rm /var/cache/apt/archives/lock
+        sudo rm /var/lib/dpkg/lock*
+        sudo dpkg --configure -a
+        sudo apt update
+    - name: Deploy chrony for make sure time on all node is same
+      apt:
+        pkg:
+          - chrony
+    - name: restart chronyd service for timesync
+      systemd:
+        state: restarted
+        daemon_reload: yes
+        name: chronyd
+        enabled: yes
+    - name: Deploy Docker on all node
+	# apt install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
+      apt:
+        pkg:
+        - docker-ce
+        - docker-ce-cli
+        - containerd.io
+        - docker-compose-plugin
+    - name: ADD 163 docker mirror
+      shell: |
+        mkdir -p /etc/docker
+        tee /etc/docker/daemon.json <<-'EOF'
+        {
+          "registry-mirrors": ["http://hub-mirror.c.163.com"],
+          "exec-opts": ["native.cgroupdriver=systemd"]
+        }
+        EOF
+    - name: starting docker service
+      systemd:
+        state: restarted
+        daemon_reload: yes
+        name: docker
+        enabled: yes
+
+    - block:
+        - name: clean apt lock
+          shell: |
+            sudo rm /var/lib/apt/lists/lock
+            sudo rm /var/cache/apt/archives/lock
+            sudo rm /var/lib/dpkg/lock*
+            sudo dpkg --configure -a
+            sudo apt update  
+        - name: Deploy CRI-Docker
+		# curl -LO  https://ghproxy.com/https://github.com/Mirantis/cri-dockerd/releases/download/v0.2.6/cri-dockerd_0.2.6.3-0.ubuntu-focal_amd64.deb
+		# apt install -y ./cri-dockerd_0.2.6.3-0.ubuntu-focal_amd64.deb
+		# dpkg -i cri-dockerd_0.2.6.3-0.ubuntu-focal_amd64.deb
+          apt:
+            deb: https://ghproxy.com/https://github.com/Mirantis/cri-dockerd/releases/download/v0.2.6/cri-dockerd_0.2.6.3-0.ubuntu-focal_amd64.deb
+
+      rescue:
+        - name: clean apt lock
+          shell: |
+            sudo rm /var/lib/apt/lists/lock
+            sudo rm /var/cache/apt/archives/lock
+            sudo rm /var/lib/dpkg/lock*
+            sudo dpkg --configure -a
+            sudo apt update  
+        - name: Deploy CRI-Docker
+          apt:
+            deb: https://ghproxy.com/https://github.com/Mirantis/cri-dockerd/releases/download/v0.2.6/cri-dockerd_0.2.6.3-0.ubuntu-focal_amd64.deb
+
+    - name: modify sandbox image to aliyun
+	# ExecStart=/usr/bin/cri-dockerd --pod-infra-container-image=registry.aliyuncs.com/google_containers/pause:3.8 --container-runtime-endpoint fd:// --network-plugin=cni --cni-bin-dir=/opt/cni/bin --cni-cache-dir=/var/lib/cni/cache --cni-conf-dir=/etc/cni/net.d
+      shell: |
+        sed -i 's/ExecStart=.*/ExecStart=\/usr\/bin\/cri-dockerd --container-runtime-endpoint fd:\/\/ --network-plugin=cni --pod-infra-container-image=registry.cn-hangzhou.aliyuncs.com\/google_containers\/pause:3.8/' /lib/systemd/system/cri-docker.service
+    - name: starting cri-docker service
+      systemd:
+        state: restarted
+        daemon_reload: yes
+        name: cri-docker
+        enabled: yes
+    - name: disable swap on /etc/fstab
+	# cat /etc/fstab
+	# sed -i 's/^\/swap.img/#\/swap.img/' /etc/fstab
+	# cat /etc/fstab
+	# swapoff -a
+	# rm -rfv /swap.img
+      lineinfile:
+        path: /etc/fstab
+        regexp: '.*swap.*'
+        state: absent
+    - name: disable swap runtime
+      shell: swapoff -a
+    - name: configure iptables module
+	# cat <<EOF | sudo tee /etc/modules-load.d/k8s.conf
+    # br_netfilter
+    # EOF
+      lineinfile:
+        path: /etc/modules-load.d/k8s.conf
+        line: br_netfilter
+        state: present
+        create: true
+    - name: configure iptables bridge
+    # cat > /etc/sysctl.d/k8s.conf <<EOF
+    # net.bridge.bridge-nf-call-ip6tables = 1
+    # net.bridge.bridge-nf-call-iptables = 1
+    # net.ipv4.ip_forward = 1
+    # EOF
+      lineinfile:
+        path: /etc/sysctl.d/k8s.conf
+        line: |
+          net.bridge.bridge-nf-call-ip6tables = 1
+          net.bridge.bridge-nf-call-iptables = 1
+          net.ipv4.ip_forward = 1
+        create: true
+    - name: apply sysctl
+      shell: |
+        modprobe br_netfilter
+        sysctl --system
+    - name: add Nanjing Edu kubernetes repo on ubuntu
+      shell: |
+        cat > /etc/apt/sources.list.d/k8s.list <<EOF
+        deb https://mirror.nju.edu.cn/kubernetes/apt/ kubernetes-xenial main
+        EOF
+        curl https://mirrors.aliyun.com/kubernetes/apt/doc/apt-key.gpg | apt-key add -
+        apt update
+      when: ansible_facts.distribution == 'Ubuntu'
+      #- name: add kubernetes repo
+      #  apt_repository:
+      #  repo: deb https://mirrors.tuna.tsinghua.edu.cn/kubernetes/apt/ kubernetes-xenial main
+      #  validate_certs: false
+      #  state: present
+      #  filename: k8s
+      #  update_cache: true
+    # - name: add kubernetes repo on RHEL
+    #   shell: |
+    #     cat > /etc/yum.repos.d/kubernetes.repo <<EOF
+    #     [kubernetes]
+    #     name=Kubernetes
+    #     baseurl=https://mirrors.tuna.tsinghua.edu.cn/kubernetes/yum/repos/kubernetes-el7-x86_64/
+    #     enabled=1
+    #     gpgcheck=0
+    #     EOF
+    #   when: ansible_facts.distribution == 'RedHat' or ansible_facts.distribution == 'CentOS'
+    - name: install kubeadm kubectl kubelet
+	# apt install -y kubeadm=1.25.4-00 kubelet=1.25.4-00 kubectl=1.25.4-00 sshpass
+      package:
+        name:
+          - kubeadm=1.25.4-00
+          - kubelet=1.25.4-00
+          - kubectl=1.25.4-00
+          - sshpass
+        state: present
+    - name: clean apt lock
+      shell: |
+        sudo rm /var/lib/apt/lists/lock
+        sudo rm /var/cache/apt/archives/lock
+        sudo rm /var/lib/dpkg/lock*
+        sudo dpkg --configure -a
+        sudo apt update
+    - name: integrate with docker
+	  # ps -ef|grep sock
+	  # vim /etc/containerd/config.toml
+	  # #disabled_plugins = ["cri"]
+	  # systemctl restart containerd
+	  # ps -ef|grep sock
+	  shell crictl config runtime-endpoint unix:///var/run/containerd/containerd.sock
+	  # systemctl stop cri-docker && systemctl disable cri-docker
+      #shell: crictl config runtime-endpoint unix:///run/cri-dockerd.sock
+    - name: creating kubeadm.yaml
+      shell: kubeadm config print init-defaults > kubeadm.yaml
+      when: "'master' in group_names"
+    - name: modify api server address
+      lineinfile:
+        path: kubeadm.yaml
+        regexp: '.*advert.*'
+        line: '  advertiseAddress: 192.168.1.234'
+        state: present
+      when: "'master' in group_names"
+    - name: modify cluster name
+      lineinfile:
+        path: kubeadm.yaml
+        regexp: '.*name.*'
+        line: '  name: k8s-master'
+        state: present
+      when: "'master' in group_names"
+    - name: modify image repository
+      lineinfile:
+        path: kubeadm.yaml
+        regexp: 'imageRepo.*'
+        line: 'imageRepository: registry.cn-hangzhou.aliyuncs.com/google_containers'
+        state: present
+      when: "'master' in group_names"
+    - name: modify crisock to cri-docker
+      lineinfile:
+	  # criSocket: unix:///var/run/containerd/containerd.sock
+        path: kubeadm.yaml
+        regexp: '  criSocket.*'
+        #line: '  criSocket: unix:///run/cri-dockerd.sock'
+		line: '  criSocket: unix:///var/run/containerd/containerd.sock'
+        state: present
+      when: "'master' in group_names"      
+    - name: Deploy kubernetes on Master node
+	  # kubeadm config images list --config kubeadm.yaml
+	  # kubeadm config images pull --config kubeadm.yaml
+	  # ctr -n k8s.io image ls
+	  # ctr -n k8s.io image tag egistry.cn-hangzhou.aliyuncs.com/google_containers/pause:3.8 registry.k8s.io/pause:3.6
+      shell: kubeadm init --config kubeadm.yaml | tee -a /root/installdetails.log
+      when: "'master' in group_names"
+    - name: pause 30s after cluster init
+      shell: sleep 30s
+      when: "'master' in group_names"
+
+    - name: set up admin role
+      shell: |
+        mkdir -p $HOME/.kube
+        cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+        chown $(id -u):$(id -g) $HOME/.kube/config
+        sshpass -p 1 ssh -A -g -o StrictHostKeyChecking=no root@k8s-docker1 mkdir /root/.kube 
+        sshpass -p 1 ssh -A -g -o StrictHostKeyChecking=no root@k8s-docker2 mkdir /root/.kube
+        scp /etc/kubernetes/admin.conf root@k8s-docker1:/root/.kube/config
+        scp /etc/kubernetes/admin.conf root@k8s-docker2:/root/.kube/config
+        sleep 30s
+      when: "'master' in group_names"
+    - name: Deploy Calico
+      shell: |
+        kubectl create -f https://gitee.com/cnlxh/Kubernetes/raw/master/cka-yaml/calico.yaml
+        sleep 30s
+      when: "'master' in group_names"
+    - name: join workers
+      shell: |
+        sleep 30
+        join=`sshpass -p 1 ssh -A -g -o StrictHostKeyChecking=no root@k8s-master kubeadm token create --print-join-command`
+        # echo $join --cri-socket=unix:///var/run/cri-dockerd.sock | bash
+		echo $join --cri-socket=unix:///var/run/containerd/containerd.sock | bash
+      when: "'worker' in group_names"
+    - name: assign worker role label to workers
+      shell: |
+        sleep 30
+        kubectl label nodes k8s-docker2 k8s-docker1 node-role.kubernetes.io/worker=
+      when: "'master' in group_names"
+    - name: add TAB completion for kubernetes
+      shell: |
+        kubectl completion bash > /etc/bash_completion.d/kubectl
+        kubeadm completion bash > /etc/bash_completion.d/kubeadm
+        source /etc/bash_completion.d/kubectl
+        source /etc/bash_completion.d/kubeadm
+        #rm -rf /root/installdetails.log
+      when: "'master' in group_names"
+EOF
+
+ansible-playbook create-k8s.yaml
+
+rm -rf create-k8s.yaml
+
+echo
+
+echo
+
+echo "Please wait one minute for nodes ready"
+
+echo
+
+echo
+
+sleep 1m
+
+kubectl get nodes
+
+echo
+
+echo
+
+echo 'if you want use TAB for completion your command, please type sudo -i here'
+
+echo
+
+echo
+
+=================
+root@k8s-docker2:~# kubectl get nodes --show-labels
+NAME          STATUS     ROLES           AGE   VERSION   LABELS
+k8s-docker1   NotReady   <none>          99s   v1.25.4   beta.kubernetes.io/arch=amd64,beta.kubernetes.io/os=linux,kubernetes.io/arch=amd64,kubernetes.io/hostname=k8s-docker1,kubernetes.io/os=linux
+k8s-docker2   NotReady   <none>          20s   v1.25.4   beta.kubernetes.io/arch=amd64,beta.kubernetes.io/os=linux,kubernetes.io/arch=amd64,kubernetes.io/hostname=k8s-docker2,kubernetes.io/os=linux
+k8s-master    NotReady   control-plane   21m   v1.25.4   beta.kubernetes.io/arch=amd64,beta.kubernetes.io/os=linux,kubernetes.io/arch=amd64,kubernetes.io/hostname=k8s-master,kubernetes.io/os=linux,node-role.kubernetes.io/control-plane=,node.kubernetes.io/exclude-from-external-load-balancers=
+root@k8s-docker2:~# kubectl get nodes
+NAME          STATUS     ROLES           AGE     VERSION
+k8s-docker1   NotReady   <none>          2m12s   v1.25.4
+k8s-docker2   NotReady   <none>          53s     v1.25.4
+k8s-master    NotReady   control-plane   21m     v1.25.4
+root@k8s-docker2:~# 
+root@k8s-docker2:~#  kubectl label nodes k8s-docker2 k8s-docker1 node-role.kubernetes.io/worker=
+node/k8s-docker2 labeled
+node/k8s-docker1 labeled
+root@k8s-docker2:~# kubectl get nodes
+NAME          STATUS     ROLES           AGE     VERSION
+k8s-docker1   NotReady   worker          2m52s   v1.25.4
+k8s-docker2   NotReady   worker          93s     v1.25.4
+k8s-master    NotReady   control-plane   22m     v1.25.4
+root@k8s-docker2:~# 
+
+
+---------
+root@k8s-master:~# kubeadm init --config kubeadm.yaml --v=6| tee -a /root/installdetails.log
+I0303 16:35:13.644808   38175 initconfiguration.go:254] loading configuration from "kubeadm.yaml"
+I0303 16:35:13.646142   38175 kubelet.go:196] the value of KubeletConfiguration.cgroupDriver is empty; setting it to "systemd"
+[init] Using Kubernetes version: v1.25.0
+[preflight] Running pre-flight checks
+I0303 16:35:13.651145   38175 checks.go:568] validating Kubernetes and kubeadm version
+I0303 16:35:13.651204   38175 checks.go:168] validating if the firewall is enabled and active
+I0303 16:35:13.661001   38175 checks.go:203] validating availability of port 6443
+I0303 16:35:13.661235   38175 checks.go:203] validating availability of port 10259
+I0303 16:35:13.661288   38175 checks.go:203] validating availability of port 10257
+I0303 16:35:13.661335   38175 checks.go:280] validating the existence of file /etc/kubernetes/manifests/kube-apiserver.yaml
+I0303 16:35:13.661363   38175 checks.go:280] validating the existence of file /etc/kubernetes/manifests/kube-controller-manager.yaml
+I0303 16:35:13.661397   38175 checks.go:280] validating the existence of file /etc/kubernetes/manifests/kube-scheduler.yaml
+I0303 16:35:13.661429   38175 checks.go:280] validating the existence of file /etc/kubernetes/manifests/etcd.yaml
+I0303 16:35:13.661459   38175 checks.go:430] validating if the connectivity type is via proxy or direct
+I0303 16:35:13.661503   38175 checks.go:469] validating http connectivity to first IP address in the CIDR
+I0303 16:35:13.661536   38175 checks.go:469] validating http connectivity to first IP address in the CIDR
+I0303 16:35:13.661556   38175 checks.go:104] validating the container runtime
+I0303 16:35:13.694790   38175 checks.go:329] validating the contents of file /proc/sys/net/bridge/bridge-nf-call-iptables
+I0303 16:35:13.694874   38175 checks.go:329] validating the contents of file /proc/sys/net/ipv4/ip_forward
+I0303 16:35:13.694939   38175 checks.go:644] validating whether swap is enabled or not
+I0303 16:35:13.695004   38175 checks.go:370] validating the presence of executable crictl
+I0303 16:35:13.695038   38175 checks.go:370] validating the presence of executable conntrack
+I0303 16:35:13.695071   38175 checks.go:370] validating the presence of executable ip
+I0303 16:35:13.695093   38175 checks.go:370] validating the presence of executable iptables
+I0303 16:35:13.695114   38175 checks.go:370] validating the presence of executable mount
+I0303 16:35:13.695136   38175 checks.go:370] validating the presence of executable nsenter
+I0303 16:35:13.695163   38175 checks.go:370] validating the presence of executable ebtables
+I0303 16:35:13.695191   38175 checks.go:370] validating the presence of executable ethtool
+I0303 16:35:13.695211   38175 checks.go:370] validating the presence of executable socat
+I0303 16:35:13.695233   38175 checks.go:370] validating the presence of executable tc
+I0303 16:35:13.695254   38175 checks.go:370] validating the presence of executable touch
+I0303 16:35:13.695297   38175 checks.go:516] running all checks
+I0303 16:35:13.711263   38175 checks.go:401] checking whether the given node name is valid and reachable using net.LookupHost
+I0303 16:35:13.711472   38175 checks.go:610] validating kubelet version
+I0303 16:35:13.784388   38175 checks.go:130] validating if the "kubelet" service is enabled and active
+I0303 16:35:13.798578   38175 checks.go:203] validating availability of port 10250
+I0303 16:35:13.798648   38175 checks.go:203] validating availability of port 2379
+I0303 16:35:13.798695   38175 checks.go:203] validating availability of port 2380
+I0303 16:35:13.798738   38175 checks.go:243] validating the existence and emptiness of directory /var/lib/etcd
+I0303 16:35:13.798907   38175 checks.go:832] using image pull policy: IfNotPresent
+[preflight] Pulling images required for setting up a Kubernetes cluster
+[preflight] This might take a minute or two, depending on the speed of your internet connection
+[preflight] You can also perform this action in beforehand using 'kubeadm config images pull'
+I0303 16:35:13.829075   38175 checks.go:841] image exists: registry.cn-hangzhou.aliyuncs.com/google_containers/kube-apiserver:v1.25.0
+I0303 16:35:13.860830   38175 checks.go:841] image exists: registry.cn-hangzhou.aliyuncs.com/google_containers/kube-controller-manager:v1.25.0
+I0303 16:35:13.890319   38175 checks.go:841] image exists: registry.cn-hangzhou.aliyuncs.com/google_containers/kube-scheduler:v1.25.0
+I0303 16:35:13.919282   38175 checks.go:841] image exists: registry.cn-hangzhou.aliyuncs.com/google_containers/kube-proxy:v1.25.0
+I0303 16:35:13.964204   38175 checks.go:841] image exists: registry.cn-hangzhou.aliyuncs.com/google_containers/pause:3.8
+I0303 16:35:14.000392   38175 checks.go:841] image exists: registry.cn-hangzhou.aliyuncs.com/google_containers/etcd:3.5.5-0
+I0303 16:35:14.038827   38175 checks.go:841] image exists: registry.cn-hangzhou.aliyuncs.com/google_containers/coredns:v1.9.3
+I0303 16:35:14.038898   38175 certs.go:112] creating a new certificate authority for ca
+[certs] Using certificateDir folder "/etc/kubernetes/pki"
+[certs] Generating "ca" certificate and key
+I0303 16:35:14.151159   38175 certs.go:522] validating certificate period for ca certificate
+[certs] Generating "apiserver" certificate and key
+[certs] apiserver serving cert is signed for DNS names [k8s-master kubernetes kubernetes.default kubernetes.default.svc kubernetes.default.svc.cluster.local] and IPs [10.96.0.1 192.168.1.234]
+[certs] Generating "apiserver-kubelet-client" certificate and key
+I0303 16:35:14.781013   38175 certs.go:112] creating a new certificate authority for front-proxy-ca
+[certs] Generating "front-proxy-ca" certificate and key
+I0303 16:35:14.944349   38175 certs.go:522] validating certificate period for front-proxy-ca certificate
+[certs] Generating "front-proxy-client" certificate and key
+I0303 16:35:15.193212   38175 certs.go:112] creating a new certificate authority for etcd-ca
+[certs] Generating "etcd/ca" certificate and key
+I0303 16:35:15.555688   38175 certs.go:522] validating certificate period for etcd/ca certificate
+[certs] Generating "etcd/server" certificate and key
+[certs] etcd/server serving cert is signed for DNS names [k8s-master localhost] and IPs [192.168.1.234 127.0.0.1 ::1]
+[certs] Generating "etcd/peer" certificate and key
+[certs] etcd/peer serving cert is signed for DNS names [k8s-master localhost] and IPs [192.168.1.234 127.0.0.1 ::1]
+[certs] Generating "etcd/healthcheck-client" certificate and key
+[certs] Generating "apiserver-etcd-client" certificate and key
+I0303 16:35:16.912198   38175 certs.go:78] creating new public/private key files for signing service account users
+[certs] Generating "sa" key and public key
+[kubeconfig] Using kubeconfig folder "/etc/kubernetes"
+I0303 16:35:17.852660   38175 kubeconfig.go:103] creating kubeconfig file for admin.conf
+[kubeconfig] Writing "admin.conf" kubeconfig file
+I0303 16:35:18.187607   38175 kubeconfig.go:103] creating kubeconfig file for kubelet.conf
+[kubeconfig] Writing "kubelet.conf" kubeconfig file
+I0303 16:35:18.734802   38175 kubeconfig.go:103] creating kubeconfig file for controller-manager.conf
+[kubeconfig] Writing "controller-manager.conf" kubeconfig file
+I0303 16:35:18.953431   38175 kubeconfig.go:103] creating kubeconfig file for scheduler.conf
+[kubeconfig] Writing "scheduler.conf" kubeconfig file
+I0303 16:35:19.133846   38175 kubelet.go:66] Stopping the kubelet
+[kubelet-start] Writing kubelet environment file with flags to file "/var/lib/kubelet/kubeadm-flags.env"
+[kubelet-start] Writing kubelet configuration to file "/var/lib/kubelet/config.yaml"
+[kubelet-start] Starting the kubelet
+I0303 16:35:19.693076   38175 manifests.go:99] [control-plane] getting StaticPodSpecs
+I0303 16:35:19.693315   38175 certs.go:522] validating certificate period for CA certificate
+I0303 16:35:19.693398   38175 manifests.go:125] [control-plane] adding volume "ca-certs" for component "kube-apiserver"
+I0303 16:35:19.693414   38175 manifests.go:125] [control-plane] adding volume "etc-ca-certificates" for component "kube-apiserver"
+I0303 16:35:19.693426   38175 manifests.go:125] [control-plane] adding volume "etc-pki" for component "kube-apiserver"
+I0303 16:35:19.693435   38175 manifests.go:125] [control-plane] adding volume "k8s-certs" for component "kube-apiserver"
+I0303 16:35:19.693444   38175 manifests.go:125] [control-plane] adding volume "usr-local-share-ca-certificates" for component "kube-apiserver"
+I0303 16:35:19.693456   38175 manifests.go:125] [control-plane] adding volume "usr-share-ca-certificates" for component "kube-apiserver"
+I0303 16:35:19.695832   38175 manifests.go:154] [control-plane] wrote static Pod manifest for component "kube-apiserver" to "/etc/kubernetes/manifests/kube-apiserver.yaml"
+I0303 16:35:19.695859   38175 manifests.go:99] [control-plane] getting StaticPodSpecs
+[control-plane] Using manifest folder "/etc/kubernetes/manifests"
+[control-plane] Creating static Pod manifest for "kube-apiserver"
+[control-plane] Creating static Pod manifest for "kube-controller-manager"
+I0303 16:35:19.696139   38175 manifests.go:125] [control-plane] adding volume "ca-certs" for component "kube-controller-manager"
+I0303 16:35:19.696165   38175 manifests.go:125] [control-plane] adding volume "etc-ca-certificates" for component "kube-controller-manager"
+I0303 16:35:19.696176   38175 manifests.go:125] [control-plane] adding volume "etc-pki" for component "kube-controller-manager"
+I0303 16:35:19.696189   38175 manifests.go:125] [control-plane] adding volume "flexvolume-dir" for component "kube-controller-manager"
+I0303 16:35:19.696199   38175 manifests.go:125] [control-plane] adding volume "k8s-certs" for component "kube-controller-manager"
+I0303 16:35:19.696208   38175 manifests.go:125] [control-plane] adding volume "kubeconfig" for component "kube-controller-manager"
+I0303 16:35:19.696220   38175 manifests.go:125] [control-plane] adding volume "usr-local-share-ca-certificates" for component "kube-controller-manager"
+I0303 16:35:19.696230   38175 manifests.go:125] [control-plane] adding volume "usr-share-ca-certificates" for component "kube-controller-manager"
+I0303 16:35:19.697008   38175 manifests.go:154] [control-plane] wrote static Pod manifest for component "kube-controller-manager" to "/etc/kubernetes/manifests/kube-controller-manager.yaml"
+I0303 16:35:19.697033   38175 manifests.go:99] [control-plane] getting StaticPodSpecs
+[control-plane] Creating static Pod manifest for "kube-scheduler"
+I0303 16:35:19.697235   38175 manifests.go:125] [control-plane] adding volume "kubeconfig" for component "kube-scheduler"
+I0303 16:35:19.697688   38175 manifests.go:154] [control-plane] wrote static Pod manifest for component "kube-scheduler" to "/etc/kubernetes/manifests/kube-scheduler.yaml"
+[etcd] Creating static Pod manifest for local etcd in "/etc/kubernetes/manifests"
+I0303 16:35:19.698327   38175 local.go:65] [etcd] wrote Static Pod manifest for a local etcd member to "/etc/kubernetes/manifests/etcd.yaml"
+I0303 16:35:19.698345   38175 waitcontrolplane.go:83] [wait-control-plane] Waiting for the API server to be healthy
+I0303 16:35:19.698887   38175 loader.go:374] Config loaded from file:  /etc/kubernetes/admin.conf
+[wait-control-plane] Waiting for the kubelet to boot up the control plane as static Pods from directory "/etc/kubernetes/manifests". This can take up to 4m0s
+I0303 16:35:19.699667   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:35:20.200662   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:35:20.700148   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:35:21.200009   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:35:21.701043   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:35:22.200837   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:35:22.700957   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:35:23.200788   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:35:23.700680   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:35:24.200143   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:35:24.701190   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:35:25.200988   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:35:25.701048   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:35:26.200993   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:35:26.700966   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:35:27.200989   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:35:27.700946   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:35:28.200979   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:35:28.700978   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:35:29.200961   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:35:29.700953   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:35:30.200960   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:35:30.700937   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:35:31.200982   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:35:31.700989   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:35:32.200961   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:35:32.700906   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:35:33.200863   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:35:33.700751   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:35:34.200443   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:35:34.700135   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:35:35.201026   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:35:35.700989   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:35:36.200946   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:35:36.700893   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:35:37.200834   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:35:37.700802   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:35:38.200742   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:35:38.700695   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:35:39.200619   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:35:39.700538   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:35:40.200412   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:35:40.700283   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:35:41.200165   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:35:41.700148   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:35:42.200062   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:35:42.700181   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:35:43.201048   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:35:43.701025   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:35:44.200893   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:35:44.700958   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:35:45.205159   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 4 milliseconds
+I0303 16:35:45.700143   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:35:46.200983   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:35:46.701011   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:35:47.200866   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:35:47.700901   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:35:48.200732   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:35:48.700701   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:35:49.200654   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:35:49.700629   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:35:50.200401   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:35:50.700224   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:35:51.201110   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:35:51.700929   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:35:52.201029   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:35:52.700426   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:35:53.200251   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:35:53.700114   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:35:54.201036   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:35:54.700952   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:35:55.200833   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:35:55.700828   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:35:56.200713   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:35:56.700529   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:35:57.200394   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:35:57.700197   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:35:58.201246   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:35:58.700065   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:35:59.200997   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+[kubelet-check] Initial timeout of 40s passed.
+I0303 16:35:59.699972   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:36:00.201023   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:36:00.701011   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:36:01.200851   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:36:01.700790   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:36:02.200755   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:36:02.700867   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:36:03.200740   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:36:03.700760   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:36:04.200744   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:36:04.700729   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:36:05.200716   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:36:05.700814   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:36:06.200715   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:36:06.700754   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:36:07.200147   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:36:07.700175   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:36:08.201160   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:36:08.700985   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:36:09.201147   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:36:09.701041   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:36:10.200937   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:36:10.700783   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:36:11.200657   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:36:11.700211   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:36:12.201122   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:36:12.699997   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:36:13.201051   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:36:13.701017   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:36:14.200918   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:36:14.700811   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:36:15.200962   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:36:15.700889   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:36:16.200845   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:36:16.700753   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:36:17.200561   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:36:17.700374   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:36:18.200286   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:36:18.700088   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:36:19.201142   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:36:19.700970   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:36:20.201126   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:36:20.701151   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:36:21.200052   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:36:21.702614   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:36:22.200416   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:36:22.700370   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:36:23.200145   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:36:23.701089   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:36:24.201085   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:36:24.701058   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:36:25.201023   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:36:25.701028   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:36:26.200968   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:36:26.700870   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:36:27.200747   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:36:27.700876   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:36:28.200933   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:36:28.700767   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:36:29.200787   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:36:29.700678   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:36:30.200532   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:36:30.700335   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:36:31.200245   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:36:31.700154   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:36:32.200110   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:36:32.701059   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:36:33.201015   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:36:33.701021   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:36:34.201057   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:36:34.701062   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:36:35.200927   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:36:35.700849   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:36:36.200784   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:36:36.700647   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:36:37.200538   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:36:37.700235   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:36:38.201098   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:36:38.700985   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:36:39.200865   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:36:39.700804   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:36:40.200687   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:36:40.700458   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:36:41.200231   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:36:41.700139   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:36:42.200047   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:36:42.701095   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:36:43.200025   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:36:43.701171   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:36:44.201028   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:36:44.700972   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:36:45.200863   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:36:45.700761   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:36:46.200596   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:36:46.700420   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:36:47.200304   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:36:47.700171   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:36:48.200984   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:36:48.700837   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:36:49.200879   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:36:49.700899   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:36:50.200864   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:36:50.700378   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:36:51.200187   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:36:51.701073   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:36:52.200959   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:36:52.700820   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:36:53.200682   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:36:53.700615   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:36:54.200247   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:36:54.700227   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:36:55.200164   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:36:55.701053   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:36:56.200042   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:36:56.700988   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:36:57.201012   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:36:57.700953   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:36:58.200914   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:36:58.700991   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:36:59.200981   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:36:59.700959   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:37:00.200916   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:37:00.700891   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:37:01.200864   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:37:01.700821   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:37:02.200813   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:37:02.700907   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:37:03.200794   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:37:03.700897   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:37:04.200766   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:37:04.700735   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:37:05.200711   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:37:05.700313   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:37:06.200253   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:37:06.700155   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:37:07.200066   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:37:07.701139   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:37:08.201047   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:37:08.700209   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:37:09.200070   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:37:09.700125   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:37:10.201042   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:37:10.701146   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:37:11.200045   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:37:11.700030   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:37:12.201017   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:37:12.701032   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:37:13.200994   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:37:13.700820   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:37:14.200939   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:37:14.700700   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:37:15.200813   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:37:15.700764   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:37:16.200251   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:37:16.700103   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:37:17.201045   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:37:17.700892   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:37:18.200987   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:37:18.700856   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:37:19.200766   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:37:19.700155   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:37:20.201013   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:37:20.701060   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:37:21.200164   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:37:21.700042   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:37:22.201351   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:37:22.700237   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:37:23.200163   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:37:23.701053   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:37:24.200918   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:37:24.700829   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:37:25.200660   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:37:25.700242   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:37:26.200117   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:37:26.701091   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:37:27.201041   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:37:27.701002   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:37:28.200749   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:37:28.700436   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:37:29.200255   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:37:29.701211   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:37:30.201151   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:37:30.701088   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:37:31.200972   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:37:31.700830   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:37:32.200811   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:37:32.700917   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:37:33.200965   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:37:33.700894   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:37:34.200876   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:37:34.700835   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:37:35.200858   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:37:35.700894   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:37:36.200941   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:37:36.700872   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:37:37.200923   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:37:37.700776   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:37:38.200883   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:37:38.700811   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:37:39.200885   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:37:39.701008   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:37:40.200983   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:37:40.700943   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:37:41.200906   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:37:41.700880   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:37:42.200845   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:37:42.700812   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:37:43.200915   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:37:43.700742   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:37:44.200733   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:37:44.700849   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:37:45.200820   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:37:45.700500   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:37:46.200257   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:37:46.700289   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:37:47.200130   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:37:47.700008   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:37:48.201027   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:37:48.701067   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:37:49.201118   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:37:49.700113   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:37:50.201050   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:37:50.701030   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:37:51.200973   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:37:51.700965   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:37:52.200919   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:37:52.700882   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:37:53.200873   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:37:53.700983   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:37:54.201061   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:37:54.701031   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:37:55.200970   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:37:55.701017   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:37:56.201002   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:37:56.700973   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:37:57.200945   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:37:57.700967   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:37:58.200957   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:37:58.700951   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:37:59.200914   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:37:59.700857   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:38:00.200804   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:38:00.700724   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:38:01.200681   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:38:01.700599   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:38:02.200486   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:38:02.700426   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:38:03.200525   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:38:03.700482   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:38:04.200479   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:38:04.700315   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:38:05.200246   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:38:05.700234   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:38:06.200164   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:38:06.700043   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:38:07.201028   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:38:07.701015   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:38:08.200904   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:38:08.701044   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:38:09.200890   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:38:09.700803   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:38:10.200758   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:38:10.700127   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:38:11.201018   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:38:11.700968   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:38:12.201195   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:38:12.700168   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:38:13.201001   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:38:13.700975   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:38:14.200888   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:38:14.700827   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:38:15.200753   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:38:15.700835   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:38:16.200801   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:38:16.700823   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:38:17.200776   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:38:17.700502   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:38:18.200149   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:38:18.701050   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:38:19.201130   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:38:19.701135   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:38:20.200186   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:38:20.701166   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:38:21.201141   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:38:21.701012   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:38:22.200923   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:38:22.700835   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:38:23.200734   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:38:23.700433   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:38:24.200268   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:38:24.700173   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:38:25.201070   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:38:25.700924   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:38:26.200996   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:38:26.700954   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:38:27.200931   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:38:27.700918   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:38:28.200761   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:38:28.700457   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:38:29.200239   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:38:29.700999   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:38:30.200938   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:38:30.700916   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:38:31.200875   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:38:31.700790   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:38:32.200782   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:38:32.700806   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:38:33.200764   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:38:33.700753   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:38:34.200707   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:38:34.700715   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:38:35.200525   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:38:35.700348   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:38:36.200208   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:38:36.700160   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:38:37.201018   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:38:37.700994   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:38:38.200862   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:38:38.700737   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:38:39.200750   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:38:39.700408   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:38:40.200107   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:38:40.701130   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:38:41.200051   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:38:41.701079   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:38:42.201021   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:38:42.700991   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:38:43.200957   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:38:43.700930   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:38:44.200857   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:38:44.700853   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:38:45.200766   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:38:45.700836   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:38:46.200858   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:38:46.700914   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:38:47.200945   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:38:47.701020   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:38:48.200956   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:38:48.700960   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:38:49.200938   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:38:49.700956   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:38:50.200904   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:38:50.700886   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:38:51.200859   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:38:51.700840   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:38:52.200812   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:38:52.700649   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:38:53.200506   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:38:53.700273   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:38:54.200224   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:38:54.701092   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:38:55.200970   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:38:55.700783   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:38:56.200757   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:38:56.700723   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:38:57.200708   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:38:57.700649   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:38:58.200592   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:38:58.700222   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:38:59.200148   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:38:59.701026   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:39:00.201081   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:39:00.701093   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:39:01.201115   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:39:01.700922   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:39:02.200919   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:39:02.700907   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:39:03.200860   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:39:03.700746   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:39:04.200716   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:39:04.700748   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:39:05.200441   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:39:05.700212   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:39:06.201074   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:39:06.701099   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:39:07.201010   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:39:07.701065   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:39:08.200883   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:39:08.701010   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:39:09.200897   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:39:09.700845   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:39:10.200835   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:39:10.700780   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:39:11.200885   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:39:11.700807   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:39:12.200741   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:39:12.700665   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:39:13.200602   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:39:13.700572   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:39:14.200476   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:39:14.700138   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:39:15.201079   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:39:15.701024   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:39:16.200987   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:39:16.700931   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:39:17.200929   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:39:17.700920   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:39:18.200794   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:39:18.700757   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:39:19.200127   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:39:19.700130   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:39:19.700411   38175 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+
+Unfortunately, an error has occurred:
+	timed out waiting for the condition
+
+This error is likely caused by:
+	- The kubelet is not running
+	- The kubelet is unhealthy due to a misconfiguration of the node in some way (required cgroups disabled)
+
+If you are on a systemd-powered system, you can try to troubleshoot the error with the following commands:
+	- 'systemctl status kubelet'
+	- 'journalctl -xeu kubelet'
+
+Additionally, a control plane component may have crashed or exited when started by the container runtime.
+To troubleshoot, list all containers using your preferred container runtimes CLI.
+Here is one example how you may list all running Kubernetes containers by using crictl:
+	- 'crictl --runtime-endpoint unix:///var/run/containerd/containerd.sock ps -a | grep kube | grep -v pause'
+	Once you have found the failing container, you can inspect its logs with:
+	- 'crictl --runtime-endpoint unix:///var/run/containerd/containerd.sock logs CONTAINERID'
+couldn't initialize a Kubernetes cluster
+k8s.io/kubernetes/cmd/kubeadm/app/cmd/phases/init.runWaitControlPlanePhase
+	cmd/kubeadm/app/cmd/phases/init/waitcontrolplane.go:108
+k8s.io/kubernetes/cmd/kubeadm/app/cmd/phases/workflow.(*Runner).Run.func1
+	cmd/kubeadm/app/cmd/phases/workflow/runner.go:234
+k8s.io/kubernetes/cmd/kubeadm/app/cmd/phases/workflow.(*Runner).visitAll
+	cmd/kubeadm/app/cmd/phases/workflow/runner.go:421
+k8s.io/kubernetes/cmd/kubeadm/app/cmd/phases/workflow.(*Runner).Run
+	cmd/kubeadm/app/cmd/phases/workflow/runner.go:207
+k8s.io/kubernetes/cmd/kubeadm/app/cmd.newCmdInit.func1
+	cmd/kubeadm/app/cmd/init.go:154
+github.com/spf13/cobra.(*Command).execute
+	vendor/github.com/spf13/cobra/command.go:856
+github.com/spf13/cobra.(*Command).ExecuteC
+	vendor/github.com/spf13/cobra/command.go:974
+github.com/spf13/cobra.(*Command).Execute
+	vendor/github.com/spf13/cobra/command.go:902
+k8s.io/kubernetes/cmd/kubeadm/app.Run
+	cmd/kubeadm/app/kubeadm.go:50
+main.main
+	cmd/kubeadm/kubeadm.go:25
+runtime.main
+	/usr/local/go/src/runtime/proc.go:250
+runtime.goexit
+	/usr/local/go/src/runtime/asm_amd64.s:1594
+error execution phase wait-control-plane
+k8s.io/kubernetes/cmd/kubeadm/app/cmd/phases/workflow.(*Runner).Run.func1
+	cmd/kubeadm/app/cmd/phases/workflow/runner.go:235
+k8s.io/kubernetes/cmd/kubeadm/app/cmd/phases/workflow.(*Runner).visitAll
+	cmd/kubeadm/app/cmd/phases/workflow/runner.go:421
+k8s.io/kubernetes/cmd/kubeadm/app/cmd/phases/workflow.(*Runner).Run
+	cmd/kubeadm/app/cmd/phases/workflow/runner.go:207
+k8s.io/kubernetes/cmd/kubeadm/app/cmd.newCmdInit.func1
+	cmd/kubeadm/app/cmd/init.go:154
+github.com/spf13/cobra.(*Command).execute
+	vendor/github.com/spf13/cobra/command.go:856
+github.com/spf13/cobra.(*Command).ExecuteC
+	vendor/github.com/spf13/cobra/command.go:974
+github.com/spf13/cobra.(*Command).Execute
+	vendor/github.com/spf13/cobra/command.go:902
+k8s.io/kubernetes/cmd/kubeadm/app.Run
+	cmd/kubeadm/app/kubeadm.go:50
+main.main
+	cmd/kubeadm/kubeadm.go:25
+runtime.main
+	/usr/local/go/src/runtime/proc.go:250
+runtime.goexit
+	/usr/local/go/src/runtime/asm_amd64.s:1594
+root@k8s-master:~# vi /var/log/syslog
+root@k8s-master:~# vi /var/log/syslog.err 
+root@k8s-master:~# kubeadm reset -f
+[reset] Reading configuration from the cluster...
+[reset] FYI: You can look at this config file with 'kubectl -n kube-system get cm kubeadm-config -o yaml'
+W0303 16:52:07.345011   39539 reset.go:103] [reset] Unable to fetch the kubeadm-config ConfigMap from cluster: failed to get config map: configmaps "kubeadm-config" not found
+[preflight] Running pre-flight checks
+W0303 16:52:07.345231   39539 removeetcdmember.go:85] [reset] No kubeadm config, using etcd pod spec to get data directory
+[reset] Stopping the kubelet service
+[reset] Unmounting mounted directories in "/var/lib/kubelet"
+[reset] Deleting contents of directories: [/etc/kubernetes/manifests /etc/kubernetes/pki]
+[reset] Deleting files: [/etc/kubernetes/admin.conf /etc/kubernetes/kubelet.conf /etc/kubernetes/bootstrap-kubelet.conf /etc/kubernetes/controller-manager.conf /etc/kubernetes/scheduler.conf]
+[reset] Deleting contents of stateful directories: [/var/lib/etcd /var/lib/kubelet]
+
+The reset process does not clean CNI configuration. To do so, you must remove /etc/cni/net.d
+
+The reset process does not reset or clean up iptables rules or IPVS tables.
+If you wish to reset iptables, you must do so manually by using the "iptables" command.
+
+If your cluster was setup to utilize IPVS, run ipvsadm --clear (or similar)
+to reset your system's IPVS tables.
+
+The reset process does not clean your kubeconfig files and you must remove them manually.
+Please, check the contents of the $HOME/.kube/config file.
+root@k8s-master:~# kubeadm reset -f
+[preflight] Running pre-flight checks
+W0303 16:52:10.258031   39873 removeetcdmember.go:85] [reset] No kubeadm config, using etcd pod spec to get data directory
+[reset] No etcd config found. Assuming external etcd
+[reset] Please, manually reset etcd to prevent further issues
+[reset] Stopping the kubelet service
+[reset] Unmounting mounted directories in "/var/lib/kubelet"
+[reset] Deleting contents of directories: [/etc/kubernetes/manifests /etc/kubernetes/pki]
+[reset] Deleting files: [/etc/kubernetes/admin.conf /etc/kubernetes/kubelet.conf /etc/kubernetes/bootstrap-kubelet.conf /etc/kubernetes/controller-manager.conf /etc/kubernetes/scheduler.conf]
+[reset] Deleting contents of stateful directories: [/var/lib/kubelet]
+
+The reset process does not clean CNI configuration. To do so, you must remove /etc/cni/net.d
+
+The reset process does not reset or clean up iptables rules or IPVS tables.
+If you wish to reset iptables, you must do so manually by using the "iptables" command.
+
+If your cluster was setup to utilize IPVS, run ipvsadm --clear (or similar)
+to reset your system's IPVS tables.
+
+The reset process does not clean your kubeconfig files and you must remove them manually.
+Please, check the contents of the $HOME/.kube/config file.
+root@k8s-master:~# kubeadm init --config kubeadm.yaml --v=6| tee -a /root/installdetails.log
+I0303 16:52:28.369180   39896 initconfiguration.go:254] loading configuration from "kubeadm.yaml"
+I0303 16:52:28.371196   39896 kubelet.go:196] the value of KubeletConfiguration.cgroupDriver is empty; setting it to "systemd"
+[init] Using Kubernetes version: v1.25.0
+[preflight] Running pre-flight checks
+I0303 16:52:28.376266   39896 checks.go:568] validating Kubernetes and kubeadm version
+I0303 16:52:28.376380   39896 checks.go:168] validating if the firewall is enabled and active
+I0303 16:52:28.384786   39896 checks.go:203] validating availability of port 6443
+I0303 16:52:28.385015   39896 checks.go:203] validating availability of port 10259
+I0303 16:52:28.385157   39896 checks.go:203] validating availability of port 10257
+I0303 16:52:28.385308   39896 checks.go:280] validating the existence of file /etc/kubernetes/manifests/kube-apiserver.yaml
+I0303 16:52:28.385413   39896 checks.go:280] validating the existence of file /etc/kubernetes/manifests/kube-controller-manager.yaml
+I0303 16:52:28.385516   39896 checks.go:280] validating the existence of file /etc/kubernetes/manifests/kube-scheduler.yaml
+I0303 16:52:28.385616   39896 checks.go:280] validating the existence of file /etc/kubernetes/manifests/etcd.yaml
+I0303 16:52:28.385645   39896 checks.go:430] validating if the connectivity type is via proxy or direct
+I0303 16:52:28.385737   39896 checks.go:469] validating http connectivity to first IP address in the CIDR
+I0303 16:52:28.385821   39896 checks.go:469] validating http connectivity to first IP address in the CIDR
+I0303 16:52:28.385918   39896 checks.go:104] validating the container runtime
+I0303 16:52:28.417485   39896 checks.go:329] validating the contents of file /proc/sys/net/bridge/bridge-nf-call-iptables
+I0303 16:52:28.417708   39896 checks.go:329] validating the contents of file /proc/sys/net/ipv4/ip_forward
+I0303 16:52:28.417875   39896 checks.go:644] validating whether swap is enabled or not
+I0303 16:52:28.418013   39896 checks.go:370] validating the presence of executable crictl
+I0303 16:52:28.418125   39896 checks.go:370] validating the presence of executable conntrack
+I0303 16:52:28.418253   39896 checks.go:370] validating the presence of executable ip
+I0303 16:52:28.418346   39896 checks.go:370] validating the presence of executable iptables
+I0303 16:52:28.418390   39896 checks.go:370] validating the presence of executable mount
+I0303 16:52:28.418483   39896 checks.go:370] validating the presence of executable nsenter
+I0303 16:52:28.418613   39896 checks.go:370] validating the presence of executable ebtables
+I0303 16:52:28.418705   39896 checks.go:370] validating the presence of executable ethtool
+I0303 16:52:28.418747   39896 checks.go:370] validating the presence of executable socat
+I0303 16:52:28.418851   39896 checks.go:370] validating the presence of executable tc
+I0303 16:52:28.418977   39896 checks.go:370] validating the presence of executable touch
+I0303 16:52:28.419073   39896 checks.go:516] running all checks
+I0303 16:52:28.432132   39896 checks.go:401] checking whether the given node name is valid and reachable using net.LookupHost
+I0303 16:52:28.432329   39896 checks.go:610] validating kubelet version
+I0303 16:52:28.500237   39896 checks.go:130] validating if the "kubelet" service is enabled and active
+I0303 16:52:28.514103   39896 checks.go:203] validating availability of port 10250
+I0303 16:52:28.514269   39896 checks.go:203] validating availability of port 2379
+I0303 16:52:28.514397   39896 checks.go:203] validating availability of port 2380
+I0303 16:52:28.514493   39896 checks.go:243] validating the existence and emptiness of directory /var/lib/etcd
+[preflight] Pulling images required for setting up a Kubernetes cluster
+[preflight] This might take a minute or two, depending on the speed of your internet connection
+[preflight] You can also perform this action in beforehand using 'kubeadm config images pull'
+I0303 16:52:28.514760   39896 checks.go:832] using image pull policy: IfNotPresent
+I0303 16:52:28.546556   39896 checks.go:841] image exists: registry.cn-hangzhou.aliyuncs.com/google_containers/kube-apiserver:v1.25.0
+I0303 16:52:28.577503   39896 checks.go:841] image exists: registry.cn-hangzhou.aliyuncs.com/google_containers/kube-controller-manager:v1.25.0
+I0303 16:52:28.606855   39896 checks.go:841] image exists: registry.cn-hangzhou.aliyuncs.com/google_containers/kube-scheduler:v1.25.0
+I0303 16:52:28.636956   39896 checks.go:841] image exists: registry.cn-hangzhou.aliyuncs.com/google_containers/kube-proxy:v1.25.0
+I0303 16:52:28.674549   39896 checks.go:841] image exists: registry.cn-hangzhou.aliyuncs.com/google_containers/pause:3.8
+I0303 16:52:28.705888   39896 checks.go:841] image exists: registry.cn-hangzhou.aliyuncs.com/google_containers/etcd:3.5.5-0
+I0303 16:52:28.735485   39896 checks.go:841] image exists: registry.cn-hangzhou.aliyuncs.com/google_containers/coredns:v1.9.3
+[certs] Using certificateDir folder "/etc/kubernetes/pki"
+I0303 16:52:28.735557   39896 certs.go:112] creating a new certificate authority for ca
+[certs] Generating "ca" certificate and key
+I0303 16:52:28.958166   39896 certs.go:522] validating certificate period for ca certificate
+[certs] Generating "apiserver" certificate and key
+[certs] apiserver serving cert is signed for DNS names [k8s-master kubernetes kubernetes.default kubernetes.default.svc kubernetes.default.svc.cluster.local] and IPs [10.96.0.1 192.168.1.234]
+[certs] Generating "apiserver-kubelet-client" certificate and key
+I0303 16:52:29.143933   39896 certs.go:112] creating a new certificate authority for front-proxy-ca
+[certs] Generating "front-proxy-ca" certificate and key
+I0303 16:52:29.236335   39896 certs.go:522] validating certificate period for front-proxy-ca certificate
+[certs] Generating "front-proxy-client" certificate and key
+I0303 16:52:29.355479   39896 certs.go:112] creating a new certificate authority for etcd-ca
+[certs] Generating "etcd/ca" certificate and key
+I0303 16:52:29.475346   39896 certs.go:522] validating certificate period for etcd/ca certificate
+[certs] Generating "etcd/server" certificate and key
+[certs] etcd/server serving cert is signed for DNS names [k8s-master localhost] and IPs [192.168.1.234 127.0.0.1 ::1]
+[certs] Generating "etcd/peer" certificate and key
+[certs] etcd/peer serving cert is signed for DNS names [k8s-master localhost] and IPs [192.168.1.234 127.0.0.1 ::1]
+[certs] Generating "etcd/healthcheck-client" certificate and key
+[certs] Generating "apiserver-etcd-client" certificate and key
+I0303 16:52:30.451972   39896 certs.go:78] creating new public/private key files for signing service account users
+[certs] Generating "sa" key and public key
+[kubeconfig] Using kubeconfig folder "/etc/kubernetes"
+I0303 16:52:30.688926   39896 kubeconfig.go:103] creating kubeconfig file for admin.conf
+[kubeconfig] Writing "admin.conf" kubeconfig file
+I0303 16:52:30.878523   39896 kubeconfig.go:103] creating kubeconfig file for kubelet.conf
+[kubeconfig] Writing "kubelet.conf" kubeconfig file
+I0303 16:52:31.081649   39896 kubeconfig.go:103] creating kubeconfig file for controller-manager.conf
+[kubeconfig] Writing "controller-manager.conf" kubeconfig file
+I0303 16:52:31.148527   39896 kubeconfig.go:103] creating kubeconfig file for scheduler.conf
+[kubeconfig] Writing "scheduler.conf" kubeconfig file
+I0303 16:52:31.323601   39896 kubelet.go:66] Stopping the kubelet
+[kubelet-start] Writing kubelet environment file with flags to file "/var/lib/kubelet/kubeadm-flags.env"
+[kubelet-start] Writing kubelet configuration to file "/var/lib/kubelet/config.yaml"
+[kubelet-start] Starting the kubelet
+[control-plane] Using manifest folder "/etc/kubernetes/manifests"
+[control-plane] Creating static Pod manifest for "kube-apiserver"
+I0303 16:52:31.884972   39896 manifests.go:99] [control-plane] getting StaticPodSpecs
+I0303 16:52:31.885210   39896 certs.go:522] validating certificate period for CA certificate
+I0303 16:52:31.885292   39896 manifests.go:125] [control-plane] adding volume "ca-certs" for component "kube-apiserver"
+I0303 16:52:31.885304   39896 manifests.go:125] [control-plane] adding volume "etc-ca-certificates" for component "kube-apiserver"
+I0303 16:52:31.885314   39896 manifests.go:125] [control-plane] adding volume "etc-pki" for component "kube-apiserver"
+I0303 16:52:31.885323   39896 manifests.go:125] [control-plane] adding volume "k8s-certs" for component "kube-apiserver"
+I0303 16:52:31.885332   39896 manifests.go:125] [control-plane] adding volume "usr-local-share-ca-certificates" for component "kube-apiserver"
+I0303 16:52:31.885342   39896 manifests.go:125] [control-plane] adding volume "usr-share-ca-certificates" for component "kube-apiserver"
+I0303 16:52:31.887682   39896 manifests.go:154] [control-plane] wrote static Pod manifest for component "kube-apiserver" to "/etc/kubernetes/manifests/kube-apiserver.yaml"
+I0303 16:52:31.887705   39896 manifests.go:99] [control-plane] getting StaticPodSpecs
+[control-plane] Creating static Pod manifest for "kube-controller-manager"
+I0303 16:52:31.887933   39896 manifests.go:125] [control-plane] adding volume "ca-certs" for component "kube-controller-manager"
+I0303 16:52:31.887947   39896 manifests.go:125] [control-plane] adding volume "etc-ca-certificates" for component "kube-controller-manager"
+I0303 16:52:31.887965   39896 manifests.go:125] [control-plane] adding volume "etc-pki" for component "kube-controller-manager"
+I0303 16:52:31.887975   39896 manifests.go:125] [control-plane] adding volume "flexvolume-dir" for component "kube-controller-manager"
+I0303 16:52:31.887985   39896 manifests.go:125] [control-plane] adding volume "k8s-certs" for component "kube-controller-manager"
+I0303 16:52:31.887994   39896 manifests.go:125] [control-plane] adding volume "kubeconfig" for component "kube-controller-manager"
+I0303 16:52:31.888004   39896 manifests.go:125] [control-plane] adding volume "usr-local-share-ca-certificates" for component "kube-controller-manager"
+I0303 16:52:31.888015   39896 manifests.go:125] [control-plane] adding volume "usr-share-ca-certificates" for component "kube-controller-manager"
+I0303 16:52:31.889019   39896 manifests.go:154] [control-plane] wrote static Pod manifest for component "kube-controller-manager" to "/etc/kubernetes/manifests/kube-controller-manager.yaml"
+I0303 16:52:31.889070   39896 manifests.go:99] [control-plane] getting StaticPodSpecs
+[control-plane] Creating static Pod manifest for "kube-scheduler"
+I0303 16:52:31.889353   39896 manifests.go:125] [control-plane] adding volume "kubeconfig" for component "kube-scheduler"
+I0303 16:52:31.890049   39896 manifests.go:154] [control-plane] wrote static Pod manifest for component "kube-scheduler" to "/etc/kubernetes/manifests/kube-scheduler.yaml"
+I0303 16:52:31.891370   39896 local.go:65] [etcd] wrote Static Pod manifest for a local etcd member to "/etc/kubernetes/manifests/etcd.yaml"
+I0303 16:52:31.891387   39896 waitcontrolplane.go:83] [wait-control-plane] Waiting for the API server to be healthy
+[etcd] Creating static Pod manifest for local etcd in "/etc/kubernetes/manifests"
+I0303 16:52:31.893009   39896 loader.go:374] Config loaded from file:  /etc/kubernetes/admin.conf
+[wait-control-plane] Waiting for the kubelet to boot up the control plane as static Pods from directory "/etc/kubernetes/manifests". This can take up to 4m0s
+I0303 16:52:31.894571   39896 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:52:32.395109   39896 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:52:32.895936   39896 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:52:33.395411   39896 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:52:33.895736   39896 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s  in 0 milliseconds
+I0303 16:52:37.944825   39896 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s 500 Internal Server Error in 3549 milliseconds
+I0303 16:52:38.397390   39896 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s 500 Internal Server Error in 1 milliseconds
+I0303 16:52:38.898464   39896 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s 500 Internal Server Error in 2 milliseconds
+I0303 16:52:39.398367   39896 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s 500 Internal Server Error in 2 milliseconds
+I0303 16:52:39.897585   39896 round_trippers.go:553] GET https://192.168.1.234:6443/healthz?timeout=10s 200 OK in 1 milliseconds
+[apiclient] All control plane components are healthy after 8.003732 seconds
+I0303 16:52:39.898067   39896 uploadconfig.go:110] [upload-config] Uploading the kubeadm ClusterConfiguration to a ConfigMap
+[upload-config] Storing the configuration used in ConfigMap "kubeadm-config" in the "kube-system" Namespace
+I0303 16:52:39.903287   39896 round_trippers.go:553] POST https://192.168.1.234:6443/api/v1/namespaces/kube-system/configmaps?timeout=10s 201 Created in 4 milliseconds
+I0303 16:52:39.906443   39896 round_trippers.go:553] POST https://192.168.1.234:6443/apis/rbac.authorization.k8s.io/v1/namespaces/kube-system/roles?timeout=10s 201 Created in 2 milliseconds
+I0303 16:52:39.909242   39896 round_trippers.go:553] POST https://192.168.1.234:6443/apis/rbac.authorization.k8s.io/v1/namespaces/kube-system/rolebindings?timeout=10s 201 Created in 2 milliseconds
+I0303 16:52:39.909417   39896 uploadconfig.go:124] [upload-config] Uploading the kubelet component config to a ConfigMap
+[kubelet] Creating a ConfigMap "kubelet-config" in namespace kube-system with the configuration for the kubelets in the cluster
+I0303 16:52:39.912865   39896 round_trippers.go:553] POST https://192.168.1.234:6443/api/v1/namespaces/kube-system/configmaps?timeout=10s 201 Created in 2 milliseconds
+I0303 16:52:39.915594   39896 round_trippers.go:553] POST https://192.168.1.234:6443/apis/rbac.authorization.k8s.io/v1/namespaces/kube-system/roles?timeout=10s 201 Created in 2 milliseconds
+I0303 16:52:39.920384   39896 round_trippers.go:553] POST https://192.168.1.234:6443/apis/rbac.authorization.k8s.io/v1/namespaces/kube-system/rolebindings?timeout=10s 201 Created in 4 milliseconds
+I0303 16:52:39.920923   39896 uploadconfig.go:129] [upload-config] Preserving the CRISocket information for the control-plane node
+I0303 16:52:39.920953   39896 patchnode.go:31] [patchnode] Uploading the CRI Socket information "unix:///var/run/containerd/containerd.sock" to the Node API object "k8s-master" as an annotation
+I0303 16:52:40.424126   39896 round_trippers.go:553] GET https://192.168.1.234:6443/api/v1/nodes/k8s-master?timeout=10s 200 OK in 2 milliseconds
+I0303 16:52:40.431370   39896 round_trippers.go:553] PATCH https://192.168.1.234:6443/api/v1/nodes/k8s-master?timeout=10s 200 OK in 5 milliseconds
+[upload-certs] Skipping phase. Please see --upload-certs
+[mark-control-plane] Marking the node k8s-master as control-plane by adding the labels: [node-role.kubernetes.io/control-plane node.kubernetes.io/exclude-from-external-load-balancers]
+[mark-control-plane] Marking the node k8s-master as control-plane by adding the taints [node-role.kubernetes.io/control-plane:NoSchedule]
+I0303 16:52:40.934782   39896 round_trippers.go:553] GET https://192.168.1.234:6443/api/v1/nodes/k8s-master?timeout=10s 200 OK in 1 milliseconds
+I0303 16:52:40.941483   39896 round_trippers.go:553] PATCH https://192.168.1.234:6443/api/v1/nodes/k8s-master?timeout=10s 200 OK in 5 milliseconds
+[bootstrap-token] Using token: abcdef.0123456789abcdef
+[bootstrap-token] Configuring bootstrap tokens, cluster-info ConfigMap, RBAC Roles
+I0303 16:52:40.944407   39896 round_trippers.go:553] GET https://192.168.1.234:6443/api/v1/namespaces/kube-system/secrets/bootstrap-token-abcdef?timeout=10s 404 Not Found in 1 milliseconds
+I0303 16:52:40.947645   39896 round_trippers.go:553] POST https://192.168.1.234:6443/api/v1/namespaces/kube-system/secrets?timeout=10s 201 Created in 2 milliseconds
+[bootstrap-token] Configured RBAC rules to allow Node Bootstrap tokens to get nodes
+I0303 16:52:40.951343   39896 round_trippers.go:553] POST https://192.168.1.234:6443/apis/rbac.authorization.k8s.io/v1/clusterroles?timeout=10s 201 Created in 3 milliseconds
+I0303 16:52:40.954127   39896 round_trippers.go:553] POST https://192.168.1.234:6443/apis/rbac.authorization.k8s.io/v1/clusterrolebindings?timeout=10s 201 Created in 2 milliseconds
+[bootstrap-token] Configured RBAC rules to allow Node Bootstrap tokens to post CSRs in order for nodes to get long term certificate credentials
+I0303 16:52:40.956294   39896 round_trippers.go:553] POST https://192.168.1.234:6443/apis/rbac.authorization.k8s.io/v1/clusterrolebindings?timeout=10s 201 Created in 1 milliseconds
+[bootstrap-token] Configured RBAC rules to allow the csrapprover controller automatically approve CSRs from a Node Bootstrap Token
+I0303 16:52:40.959412   39896 round_trippers.go:553] POST https://192.168.1.234:6443/apis/rbac.authorization.k8s.io/v1/clusterrolebindings?timeout=10s 201 Created in 2 milliseconds
+[bootstrap-token] Configured RBAC rules to allow certificate rotation for all node client certificates in the cluster
+I0303 16:52:40.969388   39896 round_trippers.go:553] POST https://192.168.1.234:6443/apis/rbac.authorization.k8s.io/v1/clusterrolebindings?timeout=10s 201 Created in 9 milliseconds
+I0303 16:52:40.969573   39896 clusterinfo.go:47] [bootstrap-token] loading admin kubeconfig
+[bootstrap-token] Creating the "cluster-info" ConfigMap in the "kube-public" namespace
+I0303 16:52:40.970075   39896 loader.go:374] Config loaded from file:  /etc/kubernetes/admin.conf
+I0303 16:52:40.970095   39896 clusterinfo.go:58] [bootstrap-token] copying the cluster from admin.conf to the bootstrap kubeconfig
+I0303 16:52:40.970338   39896 clusterinfo.go:70] [bootstrap-token] creating/updating ConfigMap in kube-public namespace
+I0303 16:52:40.974841   39896 round_trippers.go:553] POST https://192.168.1.234:6443/api/v1/namespaces/kube-public/configmaps?timeout=10s 201 Created in 4 milliseconds
+I0303 16:52:40.975245   39896 clusterinfo.go:84] creating the RBAC rules for exposing the cluster-info ConfigMap in the kube-public namespace
+I0303 16:52:40.978050   39896 round_trippers.go:553] POST https://192.168.1.234:6443/apis/rbac.authorization.k8s.io/v1/namespaces/kube-public/roles?timeout=10s 201 Created in 2 milliseconds
+I0303 16:52:40.980306   39896 round_trippers.go:553] POST https://192.168.1.234:6443/apis/rbac.authorization.k8s.io/v1/namespaces/kube-public/rolebindings?timeout=10s 201 Created in 2 milliseconds
+I0303 16:52:40.980629   39896 kubeletfinalize.go:90] [kubelet-finalize] Assuming that kubelet client certificate rotation is enabled: found "/var/lib/kubelet/pki/kubelet-client-current.pem"
+[kubelet-finalize] Updating "/etc/kubernetes/kubelet.conf" to point to a rotatable kubelet client certificate and key
+I0303 16:52:40.981164   39896 loader.go:374] Config loaded from file:  /etc/kubernetes/kubelet.conf
+I0303 16:52:40.981592   39896 kubeletfinalize.go:134] [kubelet-finalize] Restarting the kubelet to enable client certificate rotation
+I0303 16:52:41.599732   39896 round_trippers.go:553] GET https://192.168.1.234:6443/apis/apps/v1/namespaces/kube-system/deployments?labelSelector=k8s-app%3Dkube-dns 200 OK in 13 milliseconds
+I0303 16:52:41.608890   39896 round_trippers.go:553] GET https://192.168.1.234:6443/api/v1/namespaces/kube-system/configmaps/coredns?timeout=10s 404 Not Found in 4 milliseconds
+I0303 16:52:41.612398   39896 round_trippers.go:553] POST https://192.168.1.234:6443/api/v1/namespaces/kube-system/configmaps?timeout=10s 201 Created in 3 milliseconds
+I0303 16:52:41.617913   39896 round_trippers.go:553] POST https://192.168.1.234:6443/apis/rbac.authorization.k8s.io/v1/clusterroles?timeout=10s 201 Created in 4 milliseconds
+I0303 16:52:41.623537   39896 round_trippers.go:553] POST https://192.168.1.234:6443/apis/rbac.authorization.k8s.io/v1/clusterrolebindings?timeout=10s 201 Created in 4 milliseconds
+I0303 16:52:41.629552   39896 round_trippers.go:553] POST https://192.168.1.234:6443/api/v1/namespaces/kube-system/serviceaccounts?timeout=10s 201 Created in 5 milliseconds
+I0303 16:52:41.668001   39896 round_trippers.go:553] POST https://192.168.1.234:6443/apis/apps/v1/namespaces/kube-system/deployments?timeout=10s 201 Created in 36 milliseconds
+I0303 16:52:41.692836   39896 round_trippers.go:553] POST https://192.168.1.234:6443/api/v1/namespaces/kube-system/services?timeout=10s 201 Created in 15 milliseconds
+[addons] Applied essential addon: CoreDNS
+I0303 16:52:41.699775   39896 round_trippers.go:553] POST https://192.168.1.234:6443/api/v1/namespaces/kube-system/configmaps?timeout=10s 201 Created in 5 milliseconds
+I0303 16:52:41.708988   39896 round_trippers.go:553] POST https://192.168.1.234:6443/apis/apps/v1/namespaces/kube-system/daemonsets?timeout=10s 201 Created in 7 milliseconds
+I0303 16:52:41.713796   39896 round_trippers.go:553] POST https://192.168.1.234:6443/api/v1/namespaces/kube-system/serviceaccounts?timeout=10s 201 Created in 4 milliseconds
+I0303 16:52:41.718675   39896 round_trippers.go:553] POST https://192.168.1.234:6443/apis/rbac.authorization.k8s.io/v1/clusterrolebindings?timeout=10s 201 Created in 4 milliseconds
+I0303 16:52:41.723294   39896 round_trippers.go:553] POST https://192.168.1.234:6443/apis/rbac.authorization.k8s.io/v1/namespaces/kube-system/roles?timeout=10s 201 Created in 3 milliseconds
+I0303 16:52:41.726745   39896 round_trippers.go:553] POST https://192.168.1.234:6443/apis/rbac.authorization.k8s.io/v1/namespaces/kube-system/rolebindings?timeout=10s 201 Created in 3 milliseconds
+[addons] Applied essential addon: kube-proxy
+I0303 16:52:41.728001   39896 loader.go:374] Config loaded from file:  /etc/kubernetes/admin.conf
+I0303 16:52:41.728865   39896 loader.go:374] Config loaded from file:  /etc/kubernetes/admin.conf
+
+Your Kubernetes control-plane has initialized successfully!
+
+To start using your cluster, you need to run the following as a regular user:
+
+  mkdir -p $HOME/.kube
+  sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+  sudo chown $(id -u):$(id -g) $HOME/.kube/config
+
+Alternatively, if you are the root user, you can run:
+
+  export KUBECONFIG=/etc/kubernetes/admin.conf
+
+You should now deploy a pod network to the cluster.
+Run "kubectl apply -f [podnetwork].yaml" with one of the options listed at:
+  https://kubernetes.io/docs/concepts/cluster-administration/addons/
+
+Then you can join any number of worker nodes by running the following on each as root:
+
+kubeadm join 192.168.1.234:6443 --token abcdef.0123456789abcdef \
+	--discovery-token-ca-cert-hash sha256:f4a59848d7cfbef419901e02dde34bb5918ae2871b782b12959532a33edfc039 
+root@k8s-master:~#  mkdir -p $HOME/.kube
+root@k8s-master:~# 
+root@k8s-master:~# sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+root@k8s-master:~# kubectl get nodes
+NAME         STATUS     ROLES           AGE     VERSION
+k8s-master   NotReady   control-plane   2m12s   v1.25.4
+root@k8s-master:~# kubectl create -f https://gitee.com/cnlxh/Kubernetes/raw/master/cka-yaml/calico.yaml
+poddisruptionbudget.policy/calico-kube-controllers created
+serviceaccount/calico-kube-controllers created
+serviceaccount/calico-node created
+configmap/calico-config created
+customresourcedefinition.apiextensions.k8s.io/bgpconfigurations.crd.projectcalico.org created
+customresourcedefinition.apiextensions.k8s.io/bgppeers.crd.projectcalico.org created
+customresourcedefinition.apiextensions.k8s.io/blockaffinities.crd.projectcalico.org created
+customresourcedefinition.apiextensions.k8s.io/caliconodestatuses.crd.projectcalico.org created
+customresourcedefinition.apiextensions.k8s.io/clusterinformations.crd.projectcalico.org created
+customresourcedefinition.apiextensions.k8s.io/felixconfigurations.crd.projectcalico.org created
+customresourcedefinition.apiextensions.k8s.io/globalnetworkpolicies.crd.projectcalico.org created
+customresourcedefinition.apiextensions.k8s.io/globalnetworksets.crd.projectcalico.org created
+customresourcedefinition.apiextensions.k8s.io/hostendpoints.crd.projectcalico.org created
+customresourcedefinition.apiextensions.k8s.io/ipamblocks.crd.projectcalico.org created
+customresourcedefinition.apiextensions.k8s.io/ipamconfigs.crd.projectcalico.org created
+customresourcedefinition.apiextensions.k8s.io/ipamhandles.crd.projectcalico.org created
+customresourcedefinition.apiextensions.k8s.io/ippools.crd.projectcalico.org created
+customresourcedefinition.apiextensions.k8s.io/ipreservations.crd.projectcalico.org created
+customresourcedefinition.apiextensions.k8s.io/kubecontrollersconfigurations.crd.projectcalico.org created
+customresourcedefinition.apiextensions.k8s.io/networkpolicies.crd.projectcalico.org created
+customresourcedefinition.apiextensions.k8s.io/networksets.crd.projectcalico.org created
+clusterrole.rbac.authorization.k8s.io/calico-kube-controllers created
+clusterrole.rbac.authorization.k8s.io/calico-node created
+clusterrolebinding.rbac.authorization.k8s.io/calico-kube-controllers created
+clusterrolebinding.rbac.authorization.k8s.io/calico-node created
+daemonset.apps/calico-node created
+deployment.apps/calico-kube-controllers created
+root@k8s-master:~# 
+
+
+
+
+=================
+errror:
+ar  3 16:08:04 k8s-master kubelet[36241]: E0303 16:08:04.726970   36241 kubelet.go:2448] "Error getting node" err="node \"k8s-master\" not found"
+Mar  3 16:08:04 k8s-master kubelet[36241]: E0303 16:08:04.827784   36241 kubelet.go:2448] "Error getting node" err="node \"k8s-master\" not found"
+Mar  3 16:08:04 k8s-master containerd[28021]: time="2023-03-03T16:08:04.890359781Z" level=info msg="trying next host" error="failed to do request: Head \"https://asia-east1-docker.pkg.dev/v2/k8s-artifacts-prod/images/pause/manifests/3.6\": dial tcp 108.177.97.82:443: i/o timeout" host=registry.k8s.io
+Mar  3 16:08:04 k8s-master containerd[28021]: time="2023-03-03T16:08:04.914807233Z" level=info msg="trying next host" error="failed to do request: Head \"https://asia-east1-docker.pkg.dev/v2/k8s-artifacts-prod/images/pause/manifests/3.6\": dial tcp 108.177.97.82:443: i/o timeout" host=registry.k8s.io
+Mar  3 16:08:04 k8s-master containerd[28021]: time="2023-03-03T16:08:04.924133475Z" level=info msg="trying next host" error="failed to do request: Head \"https://asia-east1-docker.pkg.dev/v2/k8s-artifacts-prod/images/pause/manifests/3.6\": dial tcp 108.177.97.82:443: i/o timeout" host=registry.k8s.io
+Mar  3 16:08:04 k8s-master kubelet[36241]: E0303 16:08:04.928564   36241 kubelet.go:2448] "Error getting node" err="node \"k8s-master\" not found"
+Mar  3 16:08:04 k8s-master containerd[28021]: time="2023-03-03T16:08:04.932607702Z" level=error msg="RunPodSandbox for &PodSandboxMetadata{Name:kube-apiserver-k8s-master,Uid:b5a55b301706e967531e0bca2ea6e3d3,Namespace:kube-system,Attempt:0,} failed, error" error="rpc error: code = DeadlineExceeded desc = failed to get sandbox image \"registry.k8s.io/pause:3.6\": failed to pull image \"registry.k8s.io/pause:3.6\": failed to pull and unpack image \"registry.k8s.io/pause:3.6\": failed to resolve reference \"registry.k8s.io/pause:3.6\": failed to do request: Head \"https://asia-east1-docker.pkg.dev/v2/k8s-artifacts-prod/images/pause/manifests/3.6\": dial tcp 108.177.97.82:443: i/o timeout"
+
+
+
+===========================================
+root@k8s-docker2:~# ctr i list
+REF TYPE DIGEST SIZE PLATFORMS LABELS 
+root@k8s-docker2:~# ctr -n k8s.io i list
+REF TYPE DIGEST SIZE PLATFORMS LABELS 
+root@k8s-docker2:~# ctr -n k8s.io image list
+REF TYPE DIGEST SIZE PLATFORMS LABELS 
+root@k8s-docker2:~# docker ps
+CONTAINER ID   IMAGE     COMMAND   CREATED   STATUS    PORTS     NAMES
+root@k8s-docker2:~# kubectl get pod -A
+NAMESPACE     NAME                                       READY   STATUS              RESTARTS      AGE
+kube-system   calico-kube-controllers-655f995d4d-6mpwj   0/1     Pending             0             21m
+kube-system   calico-node-6kx4j                          0/1     Init:0/3            0             14m
+kube-system   calico-node-d5btw                          0/1     Init:0/3            0             16m
+kube-system   calico-node-zb68b                          0/1     Running             9 (32s ago)   21m
+kube-system   coredns-7f8cbcb969-hvp9n                   0/1     Pending             0             35m
+kube-system   coredns-7f8cbcb969-x9766                   0/1     Pending             0             35m
+kube-system   etcd-k8s-master                            1/1     Running             1             35m
+kube-system   kube-apiserver-k8s-master                  1/1     Running             1             35m
+kube-system   kube-controller-manager-k8s-master         1/1     Running             1             35m
+kube-system   kube-proxy-7bbfm                           0/1     ContainerCreating   0             16m
+kube-system   kube-proxy-m2mg2                           1/1     Running             0             35m
+kube-system   kube-proxy-mz4jj                           0/1     ContainerCreating   0             14m
+kube-system   kube-scheduler-k8s-master                  1/1     Running             1             35m
+root@k8s-docker2:~# kubectl get pod -A -owide
+NAMESPACE     NAME                                       READY   STATUS              RESTARTS      AGE   IP              NODE          NOMINATED NODE   READINESS GATES
+kube-system   calico-kube-controllers-655f995d4d-6mpwj   0/1     Pending             0             21m   <none>          <none>        <none>           <none>
+kube-system   calico-node-6kx4j                          0/1     Init:0/3            0             14m   192.168.1.236   k8s-docker2   <none>           <none>
+kube-system   calico-node-d5btw                          0/1     Init:0/3            0             16m   192.168.1.235   k8s-docker1   <none>           <none>
+kube-system   calico-node-zb68b                          0/1     Running             9 (39s ago)   21m   192.168.1.234   k8s-master    <none>           <none>
+kube-system   coredns-7f8cbcb969-hvp9n                   0/1     Pending             0             35m   <none>          <none>        <none>           <none>
+kube-system   coredns-7f8cbcb969-x9766                   0/1     Pending             0             35m   <none>          <none>        <none>           <none>
+kube-system   etcd-k8s-master                            1/1     Running             1             35m   192.168.1.234   k8s-master    <none>           <none>
+kube-system   kube-apiserver-k8s-master                  1/1     Running             1             35m   192.168.1.234   k8s-master    <none>           <none>
+kube-system   kube-controller-manager-k8s-master         1/1     Running             1             35m   192.168.1.234   k8s-master    <none>           <none>
+kube-system   kube-proxy-7bbfm                           0/1     ContainerCreating   0             16m   192.168.1.235   k8s-docker1   <none>           <none>
+kube-system   kube-proxy-m2mg2                           1/1     Running             0             35m   192.168.1.234   k8s-master    <none>           <none>
+kube-system   kube-proxy-mz4jj                           0/1     ContainerCreating   0             14m   192.168.1.236   k8s-docker2   <none>           <none>
+kube-system   kube-scheduler-k8s-master                  1/1     Running             1             35m   192.168.1.234   k8s-master    <none>           <none>
+root@k8s-docker2:~# systemctl status kubelet
+● kubelet.service - kubelet: The Kubernetes Node Agent
+     Loaded: loaded (/lib/systemd/system/kubelet.service; enabled; vendor preset: enabled)
+    Drop-In: /etc/systemd/system/kubelet.service.d
+             └─10-kubeadm.conf
+     Active: active (running) since Fri 2023-03-03 17:13:24 UTC; 15min ago
+       Docs: https://kubernetes.io/docs/home/
+   Main PID: 60319 (kubelet)
+      Tasks: 15 (limit: 4609)
+     Memory: 36.9M
+     CGroup: /system.slice/kubelet.service
+             └─60319 /usr/bin/kubelet --bootstrap-kubeconfig=/etc/kubernetes/bootstrap-kubelet.conf --kubeconfig=/etc/kubernetes/kubelet.conf --config=/var/>
+
+Mar 03 17:28:35 k8s-docker2 kubelet[60319]: E0303 17:28:35.160824   60319 remote_runtime.go:222] "RunPodSandbox from runtime service failed" err="rpc error:>
+Mar 03 17:28:35 k8s-docker2 kubelet[60319]: E0303 17:28:35.161027   60319 kuberuntime_sandbox.go:71] "Failed to create sandbox for pod" err="rpc error: code>
+Mar 03 17:28:35 k8s-docker2 kubelet[60319]: E0303 17:28:35.161186   60319 kuberuntime_manager.go:772] "CreatePodSandbox for pod failed" err="rpc error: code>
+Mar 03 17:28:35 k8s-docker2 kubelet[60319]: E0303 17:28:35.161351   60319 pod_workers.go:965] "Error syncing pod, skipping" err="failed to \"CreatePodSandbo>
+Mar 03 17:28:40 k8s-docker2 kubelet[60319]: E0303 17:28:40.100231   60319 kubelet.go:2373] "Container runtime network not ready" networkReady="NetworkReady=>
+Mar 03 17:28:45 k8s-docker2 kubelet[60319]: E0303 17:28:45.102106   60319 kubelet.go:2373] "Container runtime network not ready" networkReady="NetworkReady=>
+Mar 03 17:28:49 k8s-docker2 kubelet[60319]: E0303 17:28:49.051082   60319 remote_runtime.go:222] "RunPodSandbox from runtime service failed" err="rpc error:>
+Mar 03 17:28:49 k8s-docker2 kubelet[60319]: E0303 17:28:49.051170   60319 kuberuntime_sandbox.go:71] "Failed to create sandbox for pod" err="rpc error: code>
+Mar 03 17:28:49 k8s-docker2 kubelet[60319]: E0303 17:28:49.051222   60319 kuberuntime_manager.go:772] "CreatePodSandbox for pod failed" err="rpc error: code>
+Mar 03 17:28:49 k8s-docker2 kubelet[60319]: E0303 17:28:49.051315   60319 pod_workers.go:965] "Error syncing pod, skipping" err="failed to \"CreatePodSandbo>
+...skipping...
+● kubelet.service - kubelet: The Kubernetes Node Agent
+     Loaded: loaded (/lib/systemd/system/kubelet.service; enabled; vendor preset: enabled)
+    Drop-In: /etc/systemd/system/kubelet.service.d
+             └─10-kubeadm.conf
+     Active: active (running) since Fri 2023-03-03 17:13:24 UTC; 15min ago
+       Docs: https://kubernetes.io/docs/home/
+   Main PID: 60319 (kubelet)
+      Tasks: 15 (limit: 4609)
+     Memory: 36.9M
+     CGroup: /system.slice/kubelet.service
+             └─60319 /usr/bin/kubelet --bootstrap-kubeconfig=/etc/kubernetes/bootstrap-kubelet.conf --kubeconfig=/etc/kubernetes/kubelet.conf --config=/var/>
+
+Mar 03 17:28:35 k8s-docker2 kubelet[60319]: E0303 17:28:35.160824   60319 remote_runtime.go:222] "RunPodSandbox from runtime service failed" err="rpc error:>
+Mar 03 17:28:35 k8s-docker2 kubelet[60319]: E0303 17:28:35.161027   60319 kuberuntime_sandbox.go:71] "Failed to create sandbox for pod" err="rpc error: code>
+Mar 03 17:28:35 k8s-docker2 kubelet[60319]: E0303 17:28:35.161186   60319 kuberuntime_manager.go:772] "CreatePodSandbox for pod failed" err="rpc error: code>
+Mar 03 17:28:35 k8s-docker2 kubelet[60319]: E0303 17:28:35.161351   60319 pod_workers.go:965] "Error syncing pod, skipping" err="failed to \"CreatePodSandbo>
+Mar 03 17:28:40 k8s-docker2 kubelet[60319]: E0303 17:28:40.100231   60319 kubelet.go:2373] "Container runtime network not ready" networkReady="NetworkReady=>
+Mar 03 17:28:45 k8s-docker2 kubelet[60319]: E0303 17:28:45.102106   60319 kubelet.go:2373] "Container runtime network not ready" networkReady="NetworkReady=>
+Mar 03 17:28:49 k8s-docker2 kubelet[60319]: E0303 17:28:49.051082   60319 remote_runtime.go:222] "RunPodSandbox from runtime service failed" err="rpc error:>
+Mar 03 17:28:49 k8s-docker2 kubelet[60319]: E0303 17:28:49.051170   60319 kuberuntime_sandbox.go:71] "Failed to create sandbox for pod" err="rpc error: code>
+Mar 03 17:28:49 k8s-docker2 kubelet[60319]: E0303 17:28:49.051222   60319 kuberuntime_manager.go:772] "CreatePodSandbox for pod failed" err="rpc error: code>
+Mar 03 17:28:49 k8s-docker2 kubelet[60319]: E0303 17:28:49.051315   60319 pod_workers.go:965] "Error syncing pod, skipping" err="failed to \"CreatePodSandbo>
+~
+~
+~
+~
+~
+~
+~
+~
+~
+~
+root@k8s-docker2:~# journalctl -xe
+Mar 03 17:28:35 k8s-docker2 containerd[60064]: time="2023-03-03T17:28:35.125364637Z" level=info msg="trying next host" error="failed to do request: Head \"h>
+Mar 03 17:28:35 k8s-docker2 containerd[60064]: time="2023-03-03T17:28:35.160314031Z" level=error msg="RunPodSandbox for &PodSandboxMetadata{Name:kube-proxy->
+Mar 03 17:28:35 k8s-docker2 kubelet[60319]: E0303 17:28:35.160824   60319 remote_runtime.go:222] "RunPodSandbox from runtime service failed" err="rpc error:>
+Mar 03 17:28:35 k8s-docker2 kubelet[60319]: E0303 17:28:35.161027   60319 kuberuntime_sandbox.go:71] "Failed to create sandbox for pod" err="rpc error: code>
+Mar 03 17:28:35 k8s-docker2 kubelet[60319]: E0303 17:28:35.161186   60319 kuberuntime_manager.go:772] "CreatePodSandbox for pod failed" err="rpc error: code>
+Mar 03 17:28:35 k8s-docker2 kubelet[60319]: E0303 17:28:35.161351   60319 pod_workers.go:965] "Error syncing pod, skipping" err="failed to \"CreatePodSandbo>
+Mar 03 17:28:38 k8s-docker2 multipathd[699]: sda: add missing path
+Mar 03 17:28:38 k8s-docker2 multipathd[699]: sda: failed to get udev uid: Invalid argument
+Mar 03 17:28:38 k8s-docker2 multipathd[699]: sda: failed to get sysfs uid: Invalid argument
+Mar 03 17:28:38 k8s-docker2 multipathd[699]: sda: failed to get sgio uid: No such file or directory
+Mar 03 17:28:40 k8s-docker2 kubelet[60319]: E0303 17:28:40.100231   60319 kubelet.go:2373] "Container runtime network not ready" networkReady="NetworkReady=>
+Mar 03 17:28:43 k8s-docker2 multipathd[699]: sda: add missing path
+Mar 03 17:28:43 k8s-docker2 multipathd[699]: sda: failed to get udev uid: Invalid argument
+Mar 03 17:28:43 k8s-docker2 multipathd[699]: sda: failed to get sysfs uid: Invalid argument
+Mar 03 17:28:43 k8s-docker2 multipathd[699]: sda: failed to get sgio uid: No such file or directory
+Mar 03 17:28:45 k8s-docker2 kubelet[60319]: E0303 17:28:45.102106   60319 kubelet.go:2373] "Container runtime network not ready" networkReady="NetworkReady=>
+Mar 03 17:28:48 k8s-docker2 multipathd[699]: sda: add missing path
+Mar 03 17:28:48 k8s-docker2 multipathd[699]: sda: failed to get udev uid: Invalid argument
+Mar 03 17:28:48 k8s-docker2 multipathd[699]: sda: failed to get sysfs uid: Invalid argument
+Mar 03 17:28:48 k8s-docker2 multipathd[699]: sda: failed to get sgio uid: No such file or directory
+Mar 03 17:28:49 k8s-docker2 containerd[60064]: time="2023-03-03T17:28:49.049424345Z" level=info msg="trying next host" error="failed to do request: Head \"h>
+Mar 03 17:28:49 k8s-docker2 containerd[60064]: time="2023-03-03T17:28:49.050817772Z" level=error msg="RunPodSandbox for &PodSandboxMetadata{Name:calico-node>
+Mar 03 17:28:49 k8s-docker2 kubelet[60319]: E0303 17:28:49.051082   60319 remote_runtime.go:222] "RunPodSandbox from runtime service failed" err="rpc error:>
+Mar 03 17:28:49 k8s-docker2 kubelet[60319]: E0303 17:28:49.051170   60319 kuberuntime_sandbox.go:71] "Failed to create sandbox for pod" err="rpc error: code>
+Mar 03 17:28:49 k8s-docker2 kubelet[60319]: E0303 17:28:49.051222   60319 kuberuntime_manager.go:772] "CreatePodSandbox for pod failed" err="rpc error: code>
+Mar 03 17:28:49 k8s-docker2 kubelet[60319]: E0303 17:28:49.051315   60319 pod_workers.go:965] "Error syncing pod, skipping" err="failed to \"CreatePodSandbo>
+Mar 03 17:28:49 k8s-docker2 containerd[60064]: time="2023-03-03T17:28:49.917007434Z" level=info msg="RunPodSandbox for &PodSandboxMetadata{Name:kube-proxy-m>
+Mar 03 17:28:50 k8s-docker2 kubelet[60319]: E0303 17:28:50.104331   60319 kubelet.go:2373] "Container runtime network not ready" networkReady="NetworkReady=>
+Mar 03 17:28:53 k8s-docker2 multipathd[699]: sda: add missing path
+Mar 03 17:28:53 k8s-docker2 multipathd[699]: sda: failed to get udev uid: Invalid argument
+Mar 03 17:28:53 k8s-docker2 multipathd[699]: sda: failed to get sysfs uid: Invalid argument
+Mar 03 17:28:53 k8s-docker2 multipathd[699]: sda: failed to get sgio uid: No such file or directory
+root@k8s-docker2:~# journalctl -xeue
+~
+~
+~
+~
+~
+~
+~
+~
+~
+~
+~
+~
+~
+~
+~
+~
+~
+~
+~
+~
+~
+~
+~
+~
+~
+~
+~
+~
+~
+~
+-- Logs begin at Fri 2023-02-24 10:32:44 UTC, end at Fri 2023-03-03 17:28:58 UTC. --
+-- No entries --
+root@k8s-docker2:~# journalctl -xeu^C
+root@k8s-docker2:~# journalctl -xeu
+journalctl: option requires an argument -- 'u'
+root@k8s-docker2:~# journalctl -xue
+-- Logs begin at Fri 2023-02-24 10:32:44 UTC, end at Fri 2023-03-03 17:29:05 UTC. --
+-- No entries --
+root@k8s-docker2:~# journalctl -xue kubelet
+Failed to add match 'kubelet': Invalid argument
+root@k8s-docker2:~# journalctl -xue 
+-- Logs begin at Fri 2023-02-24 10:32:44 UTC, end at Fri 2023-03-03 17:29:15 UTC. --
+-- No entries --
+root@k8s-docker2:~# journalctl -xu
+journalctl: option requires an argument -- 'u'
+root@k8s-docker2:~# journalctl -xeu
+journalctl: option requires an argument -- 'u'
+root@k8s-docker2:~# journalctl -xeue
+~
+~
+~
+~
+~
+~
+~
+~
+~
+~
+~
+~
+~
+~
+~
+~
+~
+~
+~
+~
+~
+~
+~
+~
+~
+~
+~
+~
+~
+~
+-- Logs begin at Fri 2023-02-24 10:32:44 UTC, end at Fri 2023-03-03 17:29:20 UTC. --
+-- No entries --
+root@k8s-docker2:~# journalctl -xue kubelet
+Failed to add match 'kubelet': Invalid argument
+root@k8s-docker2:~# journalctl -xe kubelet
+Failed to add match 'kubelet': Invalid argument
+root@k8s-docker2:~# journalctl -xeu kubelet
+Mar 03 17:28:35 k8s-docker2 kubelet[60319]: E0303 17:28:35.098274   60319 kubelet.go:2373] "Container runtime network not ready" networkReady="NetworkReady=>
+Mar 03 17:28:35 k8s-docker2 kubelet[60319]: E0303 17:28:35.160824   60319 remote_runtime.go:222] "RunPodSandbox from runtime service failed" err="rpc error:>
+Mar 03 17:28:35 k8s-docker2 kubelet[60319]: E0303 17:28:35.161027   60319 kuberuntime_sandbox.go:71] "Failed to create sandbox for pod" err="rpc error: code>
+Mar 03 17:28:35 k8s-docker2 kubelet[60319]: E0303 17:28:35.161186   60319 kuberuntime_manager.go:772] "CreatePodSandbox for pod failed" err="rpc error: code>
+Mar 03 17:28:35 k8s-docker2 kubelet[60319]: E0303 17:28:35.161351   60319 pod_workers.go:965] "Error syncing pod, skipping" err="failed to \"CreatePodSandbo>
+Mar 03 17:28:40 k8s-docker2 kubelet[60319]: E0303 17:28:40.100231   60319 kubelet.go:2373] "Container runtime network not ready" networkReady="NetworkReady=>
+Mar 03 17:28:45 k8s-docker2 kubelet[60319]: E0303 17:28:45.102106   60319 kubelet.go:2373] "Container runtime network not ready" networkReady="NetworkReady=>
+Mar 03 17:28:49 k8s-docker2 kubelet[60319]: E0303 17:28:49.051082   60319 remote_runtime.go:222] "RunPodSandbox from runtime service failed" err="rpc error:>
+Mar 03 17:28:49 k8s-docker2 kubelet[60319]: E0303 17:28:49.051170   60319 kuberuntime_sandbox.go:71] "Failed to create sandbox for pod" err="rpc error: code>
+Mar 03 17:28:49 k8s-docker2 kubelet[60319]: E0303 17:28:49.051222   60319 kuberuntime_manager.go:772] "CreatePodSandbox for pod failed" err="rpc error: code>
+Mar 03 17:28:49 k8s-docker2 kubelet[60319]: E0303 17:28:49.051315   60319 pod_workers.go:965] "Error syncing pod, skipping" err="failed to \"CreatePodSandbo>
+Mar 03 17:28:50 k8s-docker2 kubelet[60319]: E0303 17:28:50.104331   60319 kubelet.go:2373] "Container runtime network not ready" networkReady="NetworkReady=>
+Mar 03 17:28:55 k8s-docker2 kubelet[60319]: E0303 17:28:55.105311   60319 kubelet.go:2373] "Container runtime network not ready" networkReady="NetworkReady=>
+Mar 03 17:29:00 k8s-docker2 kubelet[60319]: E0303 17:29:00.107617   60319 kubelet.go:2373] "Container runtime network not ready" networkReady="NetworkReady=>
+Mar 03 17:29:05 k8s-docker2 kubelet[60319]: E0303 17:29:05.108705   60319 kubelet.go:2373] "Container runtime network not ready" networkReady="NetworkReady=>
+Mar 03 17:29:10 k8s-docker2 kubelet[60319]: E0303 17:29:10.110299   60319 kubelet.go:2373] "Container runtime network not ready" networkReady="NetworkReady=>
+Mar 03 17:29:15 k8s-docker2 kubelet[60319]: E0303 17:29:15.110984   60319 kubelet.go:2373] "Container runtime network not ready" networkReady="NetworkReady=>
+Mar 03 17:29:20 k8s-docker2 kubelet[60319]: E0303 17:29:20.111533   60319 kubelet.go:2373] "Container runtime network not ready" networkReady="NetworkReady=>
+Mar 03 17:29:20 k8s-docker2 kubelet[60319]: E0303 17:29:20.451462   60319 remote_runtime.go:222] "RunPodSandbox from runtime service failed" err="rpc error:>
+Mar 03 17:29:20 k8s-docker2 kubelet[60319]: E0303 17:29:20.451518   60319 kuberuntime_sandbox.go:71] "Failed to create sandbox for pod" err="rpc error: code>
+Mar 03 17:29:20 k8s-docker2 kubelet[60319]: E0303 17:29:20.451545   60319 kuberuntime_manager.go:772] "CreatePodSandbox for pod failed" err="rpc error: code>
+Mar 03 17:29:20 k8s-docker2 kubelet[60319]: E0303 17:29:20.451629   60319 pod_workers.go:965] "Error syncing pod, skipping" err="failed to \"CreatePodSandbo>
+Mar 03 17:29:25 k8s-docker2 kubelet[60319]: E0303 17:29:25.112292   60319 kubelet.go:2373] "Container runtime network not ready" networkReady="NetworkReady=>
+Mar 03 17:29:30 k8s-docker2 kubelet[60319]: E0303 17:29:30.112940   60319 kubelet.go:2373] "Container runtime network not ready" networkReady="NetworkReady=>
+Mar 03 17:29:35 k8s-docker2 kubelet[60319]: E0303 17:29:35.052764   60319 remote_runtime.go:222] "RunPodSandbox from runtime service failed" err="rpc error:>
+Mar 03 17:29:35 k8s-docker2 kubelet[60319]: E0303 17:29:35.053351   60319 kuberuntime_sandbox.go:71] "Failed to create sandbox for pod" err="rpc error: code>
+Mar 03 17:29:35 k8s-docker2 kubelet[60319]: E0303 17:29:35.053395   60319 kuberuntime_manager.go:772] "CreatePodSandbox for pod failed" err="rpc error: code>
+Mar 03 17:29:35 k8s-docker2 kubelet[60319]: E0303 17:29:35.053470   60319 pod_workers.go:965] "Error syncing pod, skipping" err="failed to \"CreatePodSandbo>
+Mar 03 17:29:35 k8s-docker2 kubelet[60319]: E0303 17:29:35.113899   60319 kubelet.go:2373] "Container runtime network not ready" networkReady="NetworkReady=>
+Mar 03 17:29:40 k8s-docker2 kubelet[60319]: E0303 17:29:40.114649   60319 kubelet.go:2373] "Container runtime network not ready" networkReady="NetworkReady=>
+Mar 03 17:29:45 k8s-docker2 kubelet[60319]: E0303 17:29:45.115836   60319 kubelet.go:2373] "Container runtime network not ready" networkReady="NetworkReady=>
+Mar 03 17:29:50 k8s-docker2 kubelet[60319]: E0303 17:29:50.117145   60319 kubelet.go:2373] "Container runtime network not ready" networkReady="NetworkReady=>
+root@k8s-docker2:~# journalctl -xeu kubelet
+Mar 03 17:28:35 k8s-docker2 kubelet[60319]: E0303 17:28:35.160824   60319 remote_runtime.go:222] "RunPodSandbox from runtime service failed" err="rpc error:>
+Mar 03 17:28:35 k8s-docker2 kubelet[60319]: E0303 17:28:35.161027   60319 kuberuntime_sandbox.go:71] "Failed to create sandbox for pod" err="rpc error: code>
+Mar 03 17:28:35 k8s-docker2 kubelet[60319]: E0303 17:28:35.161186   60319 kuberuntime_manager.go:772] "CreatePodSandbox for pod failed" err="rpc error: code>
+Mar 03 17:28:35 k8s-docker2 kubelet[60319]: E0303 17:28:35.161351   60319 pod_workers.go:965] "Error syncing pod, skipping" err="failed to \"CreatePodSandbo>
+Mar 03 17:28:40 k8s-docker2 kubelet[60319]: E0303 17:28:40.100231   60319 kubelet.go:2373] "Container runtime network not ready" networkReady="NetworkReady=>
+Mar 03 17:28:45 k8s-docker2 kubelet[60319]: E0303 17:28:45.102106   60319 kubelet.go:2373] "Container runtime network not ready" networkReady="NetworkReady=>
+Mar 03 17:28:49 k8s-docker2 kubelet[60319]: E0303 17:28:49.051082   60319 remote_runtime.go:222] "RunPodSandbox from runtime service failed" err="rpc error:>
+Mar 03 17:28:49 k8s-docker2 kubelet[60319]: E0303 17:28:49.051170   60319 kuberuntime_sandbox.go:71] "Failed to create sandbox for pod" err="rpc error: code>
+Mar 03 17:28:49 k8s-docker2 kubelet[60319]: E0303 17:28:49.051222   60319 kuberuntime_manager.go:772] "CreatePodSandbox for pod failed" err="rpc error: code>
+Mar 03 17:28:49 k8s-docker2 kubelet[60319]: E0303 17:28:49.051315   60319 pod_workers.go:965] "Error syncing pod, skipping" err="failed to \"CreatePodSandbo>
+Mar 03 17:28:50 k8s-docker2 kubelet[60319]: E0303 17:28:50.104331   60319 kubelet.go:2373] "Container runtime network not ready" networkReady="NetworkReady=>
+Mar 03 17:28:55 k8s-docker2 kubelet[60319]: E0303 17:28:55.105311   60319 kubelet.go:2373] "Container runtime network not ready" networkReady="NetworkReady=>
+Mar 03 17:29:00 k8s-docker2 kubelet[60319]: E0303 17:29:00.107617   60319 kubelet.go:2373] "Container runtime network not ready" networkReady="NetworkReady=>
+Mar 03 17:29:05 k8s-docker2 kubelet[60319]: E0303 17:29:05.108705   60319 kubelet.go:2373] "Container runtime network not ready" networkReady="NetworkReady=>
+Mar 03 17:29:10 k8s-docker2 kubelet[60319]: E0303 17:29:10.110299   60319 kubelet.go:2373] "Container runtime network not ready" networkReady="NetworkReady=>
+Mar 03 17:29:15 k8s-docker2 kubelet[60319]: E0303 17:29:15.110984   60319 kubelet.go:2373] "Container runtime network not ready" networkReady="NetworkReady=>
+Mar 03 17:29:20 k8s-docker2 kubelet[60319]: E0303 17:29:20.111533   60319 kubelet.go:2373] "Container runtime network not ready" networkReady="NetworkReady=>
+Mar 03 17:29:20 k8s-docker2 kubelet[60319]: E0303 17:29:20.451462   60319 remote_runtime.go:222] "RunPodSandbox from runtime service failed" err="rpc error:>
+Mar 03 17:29:20 k8s-docker2 kubelet[60319]: E0303 17:29:20.451518   60319 kuberuntime_sandbox.go:71] "Failed to create sandbox for pod" err="rpc error: code>
+Mar 03 17:29:20 k8s-docker2 kubelet[60319]: E0303 17:29:20.451545   60319 kuberuntime_manager.go:772] "CreatePodSandbox for pod failed" err="rpc error: code>
+Mar 03 17:29:20 k8s-docker2 kubelet[60319]: E0303 17:29:20.451629   60319 pod_workers.go:965] "Error syncing pod, skipping" err="failed to \"CreatePodSandbo>
+Mar 03 17:29:25 k8s-docker2 kubelet[60319]: E0303 17:29:25.112292   60319 kubelet.go:2373] "Container runtime network not ready" networkReady="NetworkReady=>
+Mar 03 17:29:30 k8s-docker2 kubelet[60319]: E0303 17:29:30.112940   60319 kubelet.go:2373] "Container runtime network not ready" networkReady="NetworkReady=>
+Mar 03 17:29:35 k8s-docker2 kubelet[60319]: E0303 17:29:35.052764   60319 remote_runtime.go:222] "RunPodSandbox from runtime service failed" err="rpc error:>
+Mar 03 17:29:35 k8s-docker2 kubelet[60319]: E0303 17:29:35.053351   60319 kuberuntime_sandbox.go:71] "Failed to create sandbox for pod" err="rpc error: code>
+Mar 03 17:29:35 k8s-docker2 kubelet[60319]: E0303 17:29:35.053395   60319 kuberuntime_manager.go:772] "CreatePodSandbox for pod failed" err="rpc error: code>
+Mar 03 17:29:35 k8s-docker2 kubelet[60319]: E0303 17:29:35.053470   60319 pod_workers.go:965] "Error syncing pod, skipping" err="failed to \"CreatePodSandbo>
+Mar 03 17:29:35 k8s-docker2 kubelet[60319]: E0303 17:29:35.113899   60319 kubelet.go:2373] "Container runtime network not ready" networkReady="NetworkReady=>
+Mar 03 17:29:40 k8s-docker2 kubelet[60319]: E0303 17:29:40.114649   60319 kubelet.go:2373] "Container runtime network not ready" networkReady="NetworkReady=>
+Mar 03 17:29:45 k8s-docker2 kubelet[60319]: E0303 17:29:45.115836   60319 kubelet.go:2373] "Container runtime network not ready" networkReady="NetworkReady=>
+Mar 03 17:29:50 k8s-docker2 kubelet[60319]: E0303 17:29:50.117145   60319 kubelet.go:2373] "Container runtime network not ready" networkReady="NetworkReady=>
+Mar 03 17:29:55 k8s-docker2 kubelet[60319]: E0303 17:29:55.118443   60319 kubelet.go:2373] "Container runtime network not ready" networkReady="NetworkReady=>
+ ESCOC
+te_runtime.go:222] "RunPodSandbox from runtime service failed" err="rpc error: code = Unknown desc = failed to get sandbox image \"registry.k8s.io/pause:3.6>
+runtime_sandbox.go:71] "Failed to create sandbox for pod" err="rpc error: code = Unknown desc = failed to get sandbox image \"registry.k8s.io/pause:3.6\": f>
+runtime_manager.go:772] "CreatePodSandbox for pod failed" err="rpc error: code = Unknown desc = failed to get sandbox image \"registry.k8s.io/pause:3.6\": f>
+workers.go:965] "Error syncing pod, skipping" err="failed to \"CreatePodSandbox\" for \"kube-proxy-mz4jj_kube-system(aaedda46-a785-4beb-8e7e-958c81aebba4)\">
+let.go:2373] "Container runtime network not ready" networkReady="NetworkReady=false reason:NetworkPluginNotReady message:Network plugin returns error: cni p>
+let.go:2373] "Container runtime network not ready" networkReady="NetworkReady=false reason:NetworkPluginNotReady message:Network plugin returns error: cni p>
+te_runtime.go:222] "RunPodSandbox from runtime service failed" err="rpc error: code = DeadlineExceeded desc = failed to get sandbox image \"registry.k8s.io/>
+runtime_sandbox.go:71] "Failed to create sandbox for pod" err="rpc error: code = DeadlineExceeded desc = failed to get sandbox image \"registry.k8s.io/pause>
+runtime_manager.go:772] "CreatePodSandbox for pod failed" err="rpc error: code = DeadlineExceeded desc = failed to get sandbox image \"registry.k8s.io/pause>
+workers.go:965] "Error syncing pod, skipping" err="failed to \"CreatePodSandbox\" for \"calico-node-6kx4j_kube-system(970a2c3d-759c-4769-a8e0-db4181b12bb5)\>
+let.go:2373] "Container runtime network not ready" networkReady="NetworkReady=false reason:NetworkPluginNotReady message:Network plugin returns error: cni p>
+let.go:2373] "Container runtime network not ready" networkReady="NetworkReady=false reason:NetworkPluginNotReady message:Network plugin returns error: cni p>
+let.go:2373] "Container runtime network not ready" networkReady="NetworkReady=false reason:NetworkPluginNotReady message:Network plugin returns error: cni p>
+let.go:2373] "Container runtime network not ready" networkReady="NetworkReady=false reason:NetworkPluginNotReady message:Network plugin returns error: cni p>
+let.go:2373] "Container runtime network not ready" networkReady="NetworkReady=false reason:NetworkPluginNotReady message:Network plugin returns error: cni p>
+let.go:2373] "Container runtime network not ready" networkReady="NetworkReady=false reason:NetworkPluginNotReady message:Network plugin returns error: cni p>
+let.go:2373] "Container runtime network not ready" networkReady="NetworkReady=false reason:NetworkPluginNotReady message:Network plugin returns error: cni p>
+te_runtime.go:222] "RunPodSandbox from runtime service failed" err="rpc error: code = DeadlineExceeded desc = failed to get sandbox image \"registry.k8s.io/>
+runtime_sandbox.go:71] "Failed to create sandbox for pod" err="rpc error: code = DeadlineExceeded desc = failed to get sandbox image \"registry.k8s.io/pause>
+runtime_manager.go:772] "CreatePodSandbox for pod failed" err="rpc error: code = DeadlineExceeded desc = failed to get sandbox image \"registry.k8s.io/pause>
+workers.go:965] "Error syncing pod, skipping" err="failed to \"CreatePodSandbox\" for \"kube-proxy-mz4jj_kube-system(aaedda46-a785-4beb-8e7e-958c81aebba4)\">
+let.go:2373] "Container runtime network not ready" networkReady="NetworkReady=false reason:NetworkPluginNotReady message:Network plugin returns error: cni p>
+let.go:2373] "Container runtime network not ready" networkReady="NetworkReady=false reason:NetworkPluginNotReady message:Network plugin returns error: cni p>
+te_runtime.go:222] "RunPodSandbox from runtime service failed" err="rpc error: code = Unknown desc = failed to get sandbox image \"registry.k8s.io/pause:3.6>
+runtime_sandbox.go:71] "Failed to create sandbox for pod" err="rpc error: code = Unknown desc = failed to get sandbox image \"registry.k8s.io/pause:3.6\": f>
+runtime_manager.go:772] "CreatePodSandbox for pod failed" err="rpc error: code = Unknown desc = failed to get sandbox image \"registry.k8s.io/pause:3.6\": f>
+workers.go:965] "Error syncing pod, skipping" err="failed to \"CreatePodSandbox\" for \"calico-node-6kx4j_kube-system(970a2c3d-759c-4769-a8e0-db4181b12bb5)\>
+let.go:2373] "Container runtime network not ready" networkReady="NetworkReady=false reason:NetworkPluginNotReady message:Network plugin returns error: cni p>
+let.go:2373] "Container runtime network not ready" networkReady="NetworkReady=false reason:NetworkPluginNotReady message:Network plugin returns error: cni p>
+let.go:2373] "Container runtime network not ready" networkReady="NetworkReady=false reason:NetworkPluginNotReady message:Network plugin returns error: cni p>
+let.go:2373] "Container runtime network not ready" networkReady="NetworkReady=false reason:NetworkPluginNotReady message:Network plugin returns error: cni p>
+let.go:2373] "Container runtime network not ready" networkReady="NetworkReady=false reason:NetworkPluginNotReady message:Network plugin returns error: cni p>
+ ESCOC
+ code = Unknown desc = failed to get sandbox image \"registry.k8s.io/pause:3.6\": failed to pull image \"registry.k8s.io/pause:3.6\": failed to pull and unp>
+ = Unknown desc = failed to get sandbox image \"registry.k8s.io/pause:3.6\": failed to pull image \"registry.k8s.io/pause:3.6\": failed to pull and unpack i>
+ = Unknown desc = failed to get sandbox image \"registry.k8s.io/pause:3.6\": failed to pull image \"registry.k8s.io/pause:3.6\": failed to pull and unpack i>
+x\" for \"kube-proxy-mz4jj_kube-system(aaedda46-a785-4beb-8e7e-958c81aebba4)\" with CreatePodSandboxError: \"Failed to create sandbox for pod \\\"kube-proxy>
+false reason:NetworkPluginNotReady message:Network plugin returns error: cni plugin not initialized"
+false reason:NetworkPluginNotReady message:Network plugin returns error: cni plugin not initialized"
+ code = DeadlineExceeded desc = failed to get sandbox image \"registry.k8s.io/pause:3.6\": failed to pull image \"registry.k8s.io/pause:3.6\": failed to pul>
+ = DeadlineExceeded desc = failed to get sandbox image \"registry.k8s.io/pause:3.6\": failed to pull image \"registry.k8s.io/pause:3.6\": failed to pull and>
+ = DeadlineExceeded desc = failed to get sandbox image \"registry.k8s.io/pause:3.6\": failed to pull image \"registry.k8s.io/pause:3.6\": failed to pull and>
+x\" for \"calico-node-6kx4j_kube-system(970a2c3d-759c-4769-a8e0-db4181b12bb5)\" with CreatePodSandboxError: \"Failed to create sandbox for pod \\\"calico-no>
+false reason:NetworkPluginNotReady message:Network plugin returns error: cni plugin not initialized"
+false reason:NetworkPluginNotReady message:Network plugin returns error: cni plugin not initialized"
+false reason:NetworkPluginNotReady message:Network plugin returns error: cni plugin not initialized"
+false reason:NetworkPluginNotReady message:Network plugin returns error: cni plugin not initialized"
+false reason:NetworkPluginNotReady message:Network plugin returns error: cni plugin not initialized"
+false reason:NetworkPluginNotReady message:Network plugin returns error: cni plugin not initialized"
+false reason:NetworkPluginNotReady message:Network plugin returns error: cni plugin not initialized"
+ code = DeadlineExceeded desc = failed to get sandbox image \"registry.k8s.io/pause:3.6\": failed to pull image \"registry.k8s.io/pause:3.6\": failed to pul>
+ = DeadlineExceeded desc = failed to get sandbox image \"registry.k8s.io/pause:3.6\": failed to pull image \"registry.k8s.io/pause:3.6\": failed to pull and>
+ = DeadlineExceeded desc = failed to get sandbox image \"registry.k8s.io/pause:3.6\": failed to pull image \"registry.k8s.io/pause:3.6\": failed to pull and>
+x\" for \"kube-proxy-mz4jj_kube-system(aaedda46-a785-4beb-8e7e-958c81aebba4)\" with CreatePodSandboxError: \"Failed to create sandbox for pod \\\"kube-proxy>
+false reason:NetworkPluginNotReady message:Network plugin returns error: cni plugin not initialized"
+false reason:NetworkPluginNotReady message:Network plugin returns error: cni plugin not initialized"
+ code = Unknown desc = failed to get sandbox image \"registry.k8s.io/pause:3.6\": failed to pull image \"registry.k8s.io/pause:3.6\": failed to pull and unp>
+ = Unknown desc = failed to get sandbox image \"registry.k8s.io/pause:3.6\": failed to pull image \"registry.k8s.io/pause:3.6\": failed to pull and unpack i>
+ = Unknown desc = failed to get sandbox image \"registry.k8s.io/pause:3.6\": failed to pull image \"registry.k8s.io/pause:3.6\": failed to pull and unpack i>
+x\" for \"calico-node-6kx4j_kube-system(970a2c3d-759c-4769-a8e0-db4181b12bb5)\" with CreatePodSandboxError: \"Failed to create sandbox for pod \\\"calico-no>
+false reason:NetworkPluginNotReady message:Network plugin returns error: cni plugin not initialized"
+false reason:NetworkPluginNotReady message:Network plugin returns error: cni plugin not initialized"
+false reason:NetworkPluginNotReady message:Network plugin returns error: cni plugin not initialized"
+false reason:NetworkPluginNotReady message:Network plugin returns error: cni plugin not initialized"
+false reason:NetworkPluginNotReady message:Network plugin returns error: cni plugin not initialized"
+root@k8s-docker2:~# ls
+cri-dockerd_0.2.6.3-0.ubuntu-focal_amd64.deb  snap
+root@k8s-docker2:~# 
+
+
+
+root@k8s-master:~# ctr -n k8s.io i ls -q
+registry.cn-hangzhou.aliyuncs.com/google_containers/coredns:v1.9.3
+registry.cn-hangzhou.aliyuncs.com/google_containers/coredns@sha256:8e352a029d304ca7431c6507b56800636c321cb52289686a581ab70aaa8a2e2a
+registry.cn-hangzhou.aliyuncs.com/google_containers/etcd:3.5.5-0
+registry.cn-hangzhou.aliyuncs.com/google_containers/etcd@sha256:b83c1d70989e1fe87583607bf5aee1ee34e52773d4755b95f5cf5a451962f3a4
+registry.cn-hangzhou.aliyuncs.com/google_containers/kube-apiserver:v1.25.0
+registry.cn-hangzhou.aliyuncs.com/google_containers/kube-apiserver@sha256:f6902791fb9aa6e283ed7d1d743417b3c425eec73151517813bef1539a66aefa
+registry.cn-hangzhou.aliyuncs.com/google_containers/kube-controller-manager:v1.25.0
+registry.cn-hangzhou.aliyuncs.com/google_containers/kube-controller-manager@sha256:66ce7d460e53f942bb4729f656d66fe475ec3d41728de986b6d790eee6d8205d
+registry.cn-hangzhou.aliyuncs.com/google_containers/kube-proxy:v1.25.0
+registry.cn-hangzhou.aliyuncs.com/google_containers/kube-proxy@sha256:1b1f3456bb19866aa1655c607514b85cd2b6efdfea4d93ea55e79475ff2765f9
+registry.cn-hangzhou.aliyuncs.com/google_containers/kube-scheduler:v1.25.0
+registry.cn-hangzhou.aliyuncs.com/google_containers/kube-scheduler@sha256:9330c53feca7b51b25e427fa96afd5d1460b3233e9fa92e20c895c067da56ac1
+registry.cn-hangzhou.aliyuncs.com/google_containers/pause:3.6
+registry.cn-hangzhou.aliyuncs.com/google_containers/pause:3.8
+registry.cn-hangzhou.aliyuncs.com/google_containers/pause@sha256:9001185023633d17a2f98ff69b6ff2615b8ea02a825adffa40422f51dfdcde9d
+registry.cn-shanghai.aliyuncs.com/cnlxh/cni:v3.24.5
+registry.cn-shanghai.aliyuncs.com/cnlxh/cni@sha256:6d29e8402585431e5044ebddc70f19fe9c8a12d1f3651b12b7cd55407cbdebca
+registry.cn-shanghai.aliyuncs.com/cnlxh/node:v3.24.5
+registry.cn-shanghai.aliyuncs.com/cnlxh/node@sha256:5c614b62b13d6a45826ea3ff72022be6aef7637198f8c1c83c2d2d547206a4a0
+registry.k8s.io/pause:3.6
+sha256:1a54c86c03a673d4e046b9f64854c713512d39a0136aef76a4a450d5ad51273e
+sha256:4694d02f8e611efdffe9fb83a86d9d2969ef57b4b56622388eca6627287d6fd6
+sha256:4873874c08efc72e9729683a83ffbb7502ee729e9a5ac097723806ea7fa13517
+sha256:4d2edfd10d3e3f4395b70652848e2a1efd5bd0bc38e9bc360d4ee5c51afacfe5
+sha256:5185b96f0becf59032b8e3646e99f84d9655dff3ac9e2605e0dc77f9c441ae4a
+sha256:54637cb36d4a1c029fb994c6fc88af04791c1f2dcbd12a24aa995c0bffaacdb1
+sha256:58a9a0c6d96f2b956afdc831504e6796c23f5f90a7b5341393b762d9ba96f2f6
+sha256:628dd70880410bff76850fef4aa9a7e1531046f95ca6a8195d4e110e188eaa86
+sha256:bef2cf3115095379b5af3e6c0fb4b0e6a8ef7a144aa2907bd0a3125e9d2e203e
+root@k8s-master:~# 
+
+root@k8s-docker2:~# ctr -n k8s.io image list
+REF TYPE DIGEST SIZE PLATFORMS LABELS 
+root@k8s-docker2:~# ctr -n k8s.io image list
+REF TYPE DIGEST SIZE PLATFORMS LABELS 
+root@k8s-docker2:~#  kubeadm config images pull --config kubeadm.yaml 
+[config/images] Pulled registry.cn-hangzhou.aliyuncs.com/google_containers/kube-apiserver:v1.25.0
+[config/images] Pulled registry.cn-hangzhou.aliyuncs.com/google_containers/kube-controller-manager:v1.25.0
+[config/images] Pulled registry.cn-hangzhou.aliyuncs.com/google_containers/kube-scheduler:v1.25.0
+[config/images] Pulled registry.cn-hangzhou.aliyuncs.com/google_containers/kube-proxy:v1.25.0
+[config/images] Pulled registry.cn-hangzhou.aliyuncs.com/google_containers/pause:3.8
+[config/images] Pulled registry.cn-hangzhou.aliyuncs.com/google_containers/etcd:3.5.5-0
+[config/images] Pulled registry.cn-hangzhou.aliyuncs.com/google_containers/coredns:v1.9.3
+root@k8s-docker2:~# ctr -n k8s.io i ls -q
+registry.cn-hangzhou.aliyuncs.com/google_containers/coredns:v1.9.3
+registry.cn-hangzhou.aliyuncs.com/google_containers/coredns@sha256:8e352a029d304ca7431c6507b56800636c321cb52289686a581ab70aaa8a2e2a
+registry.cn-hangzhou.aliyuncs.com/google_containers/etcd:3.5.5-0
+registry.cn-hangzhou.aliyuncs.com/google_containers/etcd@sha256:b83c1d70989e1fe87583607bf5aee1ee34e52773d4755b95f5cf5a451962f3a4
+registry.cn-hangzhou.aliyuncs.com/google_containers/kube-apiserver:v1.25.0
+registry.cn-hangzhou.aliyuncs.com/google_containers/kube-apiserver@sha256:f6902791fb9aa6e283ed7d1d743417b3c425eec73151517813bef1539a66aefa
+registry.cn-hangzhou.aliyuncs.com/google_containers/kube-controller-manager:v1.25.0
+registry.cn-hangzhou.aliyuncs.com/google_containers/kube-controller-manager@sha256:66ce7d460e53f942bb4729f656d66fe475ec3d41728de986b6d790eee6d8205d
+registry.cn-hangzhou.aliyuncs.com/google_containers/kube-proxy:v1.25.0
+registry.cn-hangzhou.aliyuncs.com/google_containers/kube-proxy@sha256:1b1f3456bb19866aa1655c607514b85cd2b6efdfea4d93ea55e79475ff2765f9
+registry.cn-hangzhou.aliyuncs.com/google_containers/kube-scheduler:v1.25.0
+registry.cn-hangzhou.aliyuncs.com/google_containers/kube-scheduler@sha256:9330c53feca7b51b25e427fa96afd5d1460b3233e9fa92e20c895c067da56ac1
+registry.cn-hangzhou.aliyuncs.com/google_containers/pause:3.8
+registry.cn-hangzhou.aliyuncs.com/google_containers/pause@sha256:9001185023633d17a2f98ff69b6ff2615b8ea02a825adffa40422f51dfdcde9d
+sha256:1a54c86c03a673d4e046b9f64854c713512d39a0136aef76a4a450d5ad51273e
+sha256:4694d02f8e611efdffe9fb83a86d9d2969ef57b4b56622388eca6627287d6fd6
+sha256:4873874c08efc72e9729683a83ffbb7502ee729e9a5ac097723806ea7fa13517
+sha256:4d2edfd10d3e3f4395b70652848e2a1efd5bd0bc38e9bc360d4ee5c51afacfe5
+sha256:5185b96f0becf59032b8e3646e99f84d9655dff3ac9e2605e0dc77f9c441ae4a
+sha256:58a9a0c6d96f2b956afdc831504e6796c23f5f90a7b5341393b762d9ba96f2f6
+sha256:bef2cf3115095379b5af3e6c0fb4b0e6a8ef7a144aa2907bd0a3125e9d2e203e
+root@k8s-docker2:~# ctr -n k8s.io i tag registry.cn-hangzhou.aliyuncs.com/google_containers/pause:3.8  registry.k8s.io/pause:3.6
+registry.k8s.io/pause:3.6
+root@k8s-docker2:~# ctr -n k8s.io i ls -q
+registry.cn-hangzhou.aliyuncs.com/google_containers/coredns:v1.9.3
+registry.cn-hangzhou.aliyuncs.com/google_containers/coredns@sha256:8e352a029d304ca7431c6507b56800636c321cb52289686a581ab70aaa8a2e2a
+registry.cn-hangzhou.aliyuncs.com/google_containers/etcd:3.5.5-0
+registry.cn-hangzhou.aliyuncs.com/google_containers/etcd@sha256:b83c1d70989e1fe87583607bf5aee1ee34e52773d4755b95f5cf5a451962f3a4
+registry.cn-hangzhou.aliyuncs.com/google_containers/kube-apiserver:v1.25.0
+registry.cn-hangzhou.aliyuncs.com/google_containers/kube-apiserver@sha256:f6902791fb9aa6e283ed7d1d743417b3c425eec73151517813bef1539a66aefa
+registry.cn-hangzhou.aliyuncs.com/google_containers/kube-controller-manager:v1.25.0
+registry.cn-hangzhou.aliyuncs.com/google_containers/kube-controller-manager@sha256:66ce7d460e53f942bb4729f656d66fe475ec3d41728de986b6d790eee6d8205d
+registry.cn-hangzhou.aliyuncs.com/google_containers/kube-proxy:v1.25.0
+registry.cn-hangzhou.aliyuncs.com/google_containers/kube-proxy@sha256:1b1f3456bb19866aa1655c607514b85cd2b6efdfea4d93ea55e79475ff2765f9
+registry.cn-hangzhou.aliyuncs.com/google_containers/kube-scheduler:v1.25.0
+registry.cn-hangzhou.aliyuncs.com/google_containers/kube-scheduler@sha256:9330c53feca7b51b25e427fa96afd5d1460b3233e9fa92e20c895c067da56ac1
+registry.cn-hangzhou.aliyuncs.com/google_containers/pause:3.8
+registry.cn-hangzhou.aliyuncs.com/google_containers/pause@sha256:9001185023633d17a2f98ff69b6ff2615b8ea02a825adffa40422f51dfdcde9d
+registry.k8s.io/pause:3.6
+sha256:1a54c86c03a673d4e046b9f64854c713512d39a0136aef76a4a450d5ad51273e
+sha256:4694d02f8e611efdffe9fb83a86d9d2969ef57b4b56622388eca6627287d6fd6
+sha256:4873874c08efc72e9729683a83ffbb7502ee729e9a5ac097723806ea7fa13517
+sha256:4d2edfd10d3e3f4395b70652848e2a1efd5bd0bc38e9bc360d4ee5c51afacfe5
+sha256:5185b96f0becf59032b8e3646e99f84d9655dff3ac9e2605e0dc77f9c441ae4a
+sha256:58a9a0c6d96f2b956afdc831504e6796c23f5f90a7b5341393b762d9ba96f2f6
+sha256:bef2cf3115095379b5af3e6c0fb4b0e6a8ef7a144aa2907bd0a3125e9d2e203e
+root@k8s-docker2:~# 
+
+root@k8s-master:~# kubectl get nodes
+NAME          STATUS     ROLES           AGE   VERSION
+k8s-docker1   Ready      worker          33m   v1.25.4
+k8s-docker2   Ready      worker          31m   v1.25.4
+k8s-master    NotReady   control-plane   52m   v1.25.4
+root@k8s-master:~# kubectl get pod -A
+NAMESPACE     NAME                                       READY   STATUS             RESTARTS       AGE
+kube-system   calico-kube-controllers-655f995d4d-6mpwj   1/1     Running            0              38m
+kube-system   calico-node-6kx4j                          1/1     Running            0              31m
+kube-system   calico-node-d5btw                          1/1     Running            0              33m
+kube-system   calico-node-zb68b                          0/1     CrashLoopBackOff   13 (78s ago)   38m
+kube-system   coredns-7f8cbcb969-hvp9n                   1/1     Running            0              52m
+kube-system   coredns-7f8cbcb969-x9766                   1/1     Running            0              52m
+kube-system   etcd-k8s-master                            1/1     Running            1              52m
+kube-system   kube-apiserver-k8s-master                  1/1     Running            1              52m
+kube-system   kube-controller-manager-k8s-master         1/1     Running            1              52m
+kube-system   kube-proxy-7bbfm                           1/1     Running            0              33m
+kube-system   kube-proxy-m2mg2                           1/1     Running            0              52m
+kube-system   kube-proxy-mz4jj                           1/1     Running            0              31m
+kube-system   kube-scheduler-k8s-master                  1/1     Running            1              52m
+root@k8s-master:~# netstat -tnulp
+Active Internet connections (only servers)
+Proto Recv-Q Send-Q Local Address           Foreign Address         State       PID/Program name    
+tcp        0      0 127.0.0.1:10248         0.0.0.0:*               LISTEN      40429/kubelet       
+tcp        0      0 127.0.0.1:10249         0.0.0.0:*               LISTEN      40589/kube-proxy    
+tcp        0      0 192.168.1.234:2379      0.0.0.0:*               LISTEN      40303/etcd          
+tcp        0      0 127.0.0.1:2379          0.0.0.0:*               LISTEN      40303/etcd          
+tcp        0      0 192.168.1.234:2380      0.0.0.0:*               LISTEN      40303/etcd          
+tcp        0      0 127.0.0.1:2381          0.0.0.0:*               LISTEN      40303/etcd          
+tcp        0      0 127.0.0.1:10257         0.0.0.0:*               LISTEN      40259/kube-controll 
+tcp        0      0 127.0.0.1:33553         0.0.0.0:*               LISTEN      36863/containerd    
+tcp        0      0 127.0.0.1:10259         0.0.0.0:*               LISTEN      40301/kube-schedule 
+tcp        0      0 127.0.0.53:53           0.0.0.0:*               LISTEN      4211/systemd-resolv 
+tcp        0      0 0.0.0.0:22              0.0.0.0:*               LISTEN      1095/sshd: /usr/sbi 
+tcp6       0      0 :::10250                :::*                    LISTEN      40429/kubelet       
+tcp6       0      0 :::6443                 :::*                    LISTEN      40326/kube-apiserve 
+tcp6       0      0 :::10256                :::*                    LISTEN      40589/kube-proxy    
+tcp6       0      0 :::22                   :::*                    LISTEN      1095/sshd: /usr/sbi 
+udp        0      0 127.0.0.53:53           0.0.0.0:*                           4211/systemd-resolv 
+udp        0      0 127.0.0.1:323           0.0.0.0:*                           4129/chronyd        
+udp6       0      0 ::1:323                 :::*                                4129/chronyd        
+root@k8s-master:~# 
+
+
+root@k8s-docker2:~# netstat -tnulp
+Active Internet connections (only servers)
+Proto Recv-Q Send-Q Local Address           Foreign Address         State       PID/Program name    
+tcp        0      0 0.0.0.0:179             0.0.0.0:*               LISTEN      62341/bird          
+tcp        0      0 127.0.0.53:53           0.0.0.0:*               LISTEN      5601/systemd-resolv 
+tcp        0      0 0.0.0.0:22              0.0.0.0:*               LISTEN      1127/sshd: /usr/sbi 
+tcp        0      0 127.0.0.1:10248         0.0.0.0:*               LISTEN      60319/kubelet       
+tcp        0      0 127.0.0.1:10249         0.0.0.0:*               LISTEN      61445/kube-proxy    
+tcp        0      0 127.0.0.1:9099          0.0.0.0:*               LISTEN      62212/calico-node   
+tcp        0      0 127.0.0.1:37869         0.0.0.0:*               LISTEN      60064/containerd    
+tcp6       0      0 :::22                   :::*                    LISTEN      1127/sshd: /usr/sbi 
+tcp6       0      0 :::10250                :::*                    LISTEN      60319/kubelet       
+tcp6       0      0 :::10256                :::*                    LISTEN      61445/kube-proxy    
+udp        0      0 127.0.0.53:53           0.0.0.0:*                           5601/systemd-resolv 
+udp        0      0 127.0.0.1:323           0.0.0.0:*                           5517/chronyd        
+udp6       0      0 ::1:323                 :::*                                5517/chronyd        
+
+
+
+
+---------------------
