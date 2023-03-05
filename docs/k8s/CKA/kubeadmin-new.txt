@@ -9,11 +9,13 @@ echo "##########################################################################
 #    please make sure you have three node and have been done as below:
 #
 #    1. complete /etc/hosts file
+#       127.0.0.1 localhost
 #       192.168.1.234 k8s-master
 #       192.168.1.235 k8s-docker1
 #       192.168.1.236 k8s-docker2
 #      
 #    
+#       127.0.0.1 localhost
 #       192.168.1.234 k8s-master
 #       192.168.1.235 k8s-docker1
 #       192.168.1.236 k8s-docker2
