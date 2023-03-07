@@ -4041,13 +4041,22 @@ bash k8sinstaller.sh
 #!/bin/bash
 
 echo "######################################################################################################
-#    Author：xxx
-#    Version： 2022-03-01
+#    Author：sw
+#    Version： 2023-03-06
 #
 #    please make sure you have three node and have been done as below:
 #
 #    1. complete /etc/hosts file
-#    
+#       vi /etc/hosts
+#       :%s/^/#/g
+#       127.0.0.1 localhost
+#       192.168.1.234 k8s-master
+#       192.168.1.235 k8s-docker1
+#       192.168.1.236 k8s-docker2
+#      
+#       记得将127.0.0.1 localhost保留,将127.0.0.1 k8s-master等注释掉
+#        
+#       127.0.0.1 localhost
 #       192.168.1.234 k8s-master
 #       192.168.1.235 k8s-docker1
 #       192.168.1.236 k8s-docker2
@@ -4062,8 +4071,10 @@ echo "##########################################################################
 #       tips: 
 #         sudo sed -i 's/^#PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config
 #         sudo systemctl restart sshd
+#    4. test repo
+#       ping mirror.nju.edu.cn
 #
-#    4. this tools will only install kubernetes v1.25.4 for CKA Exam upgrade, if you want other version, please modify kubeadm kubelet kubectl version in script
+#    5. this tools will only install kubernetes v1.25.4 for CKA Exam upgrade, if you want other version, please modify kubeadm kubelet kubectl version in script
 #
 ######################################################################################################"
 echo
@@ -4143,6 +4154,7 @@ cat > create-k8s.yaml <<'EOF'
         sed -i 's/^deb.*archive.ubuntu.com/deb https:\/\/mirrors.nju.edu.cn/' /etc/apt/sources.list
     - name: Deploy Nanjing Edu Docker Repository
       shell: |
+        cp /usr/share/zoneinfo/Asia/Shanghai /etc/localtime
         apt-get update
         apt-get -y install apt-transport-https ca-certificates curl software-properties-common
         curl -fsSL https://mirror.nju.edu.cn/docker-ce/linux/ubuntu/gpg | sudo apt-key add -
@@ -4156,6 +4168,8 @@ cat > create-k8s.yaml <<'EOF'
         sudo dpkg --configure -a
         sudo apt update
     - name: Deploy chrony for make sure time on all node is same
+      # apt install -y chrony
+      # systemctl enable chrony --now
       apt:
         pkg:
           - chrony
@@ -4166,6 +4180,7 @@ cat > create-k8s.yaml <<'EOF'
         name: chronyd
         enabled: yes
     - name: Deploy Docker on all node
+      # apt install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
       apt:
         pkg:
         - docker-ce
@@ -4182,46 +4197,57 @@ cat > create-k8s.yaml <<'EOF'
         }
         EOF
     - name: starting docker service
+      # systemctl daemon-reload&&systemctl restart docker
       systemd:
         state: restarted
         daemon_reload: yes
         name: docker
         enabled: yes
 
-    - block:
-        - name: clean apt lock
-          shell: |
-            sudo rm /var/lib/apt/lists/lock
-            sudo rm /var/cache/apt/archives/lock
-            sudo rm /var/lib/dpkg/lock*
-            sudo dpkg --configure -a
-            sudo apt update  
-        - name: Deploy CRI-Docker
-          apt:
-            deb: https://ghproxy.com/https://github.com/Mirantis/cri-dockerd/releases/download/v0.2.6/cri-dockerd_0.2.6.3-0.ubuntu-focal_amd64.deb
+    # 取消cri-docker的安装,使用containerd作为sock
+    #- block:
+    #    - name: clean apt lock
+    #      shell: |
+    #        sudo rm /var/lib/apt/lists/lock
+    #        sudo rm /var/cache/apt/archives/lock
+    #        sudo rm /var/lib/dpkg/lock*
+    #        sudo dpkg --configure -a
+    #        sudo apt update  
+    #    - name: Deploy CRI-Docker
+           # curl -LO  https://ghproxy.com/https://github.com/Mirantis/cri-dockerd/releases/download/v0.2.6/cri-dockerd_0.2.6.3-0.ubuntu-focal_amd64.deb
+           # apt install -y ./cri-dockerd_0.2.6.3-0.ubuntu-focal_amd64.deb
+           # dpkg -i cri-dockerd_0.2.6.3-0.ubuntu-focal_amd64.deb
+    #      apt:
+    #        deb: https://ghproxy.com/https://github.com/Mirantis/cri-dockerd/releases/download/v0.2.6/cri-dockerd_0.2.6.3-0.ubuntu-focal_amd64.deb
+    #
+    #  rescue:
+    #    - name: clean apt lock
+    #      shell: |
+    #        sudo rm /var/lib/apt/lists/lock
+    #        sudo rm /var/cache/apt/archives/lock
+    #        sudo rm /var/lib/dpkg/lock*
+    #        sudo dpkg --configure -a
+    #        sudo apt update  
+    #    - name: Deploy CRI-Docker
+    #      apt:
+    #        deb: https://ghproxy.com/https://github.com/Mirantis/cri-dockerd/releases/download/v0.2.6/cri-dockerd_0.2.6.3-0.ubuntu-focal_amd64.deb
 
-      rescue:
-        - name: clean apt lock
-          shell: |
-            sudo rm /var/lib/apt/lists/lock
-            sudo rm /var/cache/apt/archives/lock
-            sudo rm /var/lib/dpkg/lock*
-            sudo dpkg --configure -a
-            sudo apt update  
-        - name: Deploy CRI-Docker
-          apt:
-            deb: https://ghproxy.com/https://github.com/Mirantis/cri-dockerd/releases/download/v0.2.6/cri-dockerd_0.2.6.3-0.ubuntu-focal_amd64.deb
-
-    - name: modify sandbox image to aliyun
-      shell: |
-        sed -i 's/ExecStart=.*/ExecStart=\/usr\/bin\/cri-dockerd --container-runtime-endpoint fd:\/\/ --network-plugin=cni --pod-infra-container-image=registry.cn-hangzhou.aliyuncs.com\/google_containers\/pause:3.8/' /lib/systemd/system/cri-docker.service
-    - name: starting cri-docker service
-      systemd:
-        state: restarted
-        daemon_reload: yes
-        name: cri-docker
-        enabled: yes
+    #- name: modify sandbox image to aliyun
+    ## ExecStart=/usr/bin/cri-dockerd --pod-infra-container-image=registry.aliyuncs.com/google_containers/pause:3.8 --container-runtime-endpoint fd:// --network-plugin=cni --cni-bin-dir=/opt/cni/bin --cni-cache-dir=/var/lib/cni/cache --cni-conf-dir=/etc/cni/net.d
+    #  shell: |
+    #    sed -i 's/ExecStart=.*/ExecStart=\/usr\/bin\/cri-dockerd --container-runtime-endpoint fd:\/\/ --network-plugin=cni --pod-infra-container-image=registry.cn-hangzhou.aliyuncs.com\/google_containers\/pause:3.8/' /lib/systemd/system/cri-docker.service
+    #- name: starting cri-docker service
+    #  systemd:
+    #    state: restarted
+    #    daemon_reload: yes
+    #    name: cri-docker
+    #    enabled: yes
     - name: disable swap on /etc/fstab
+      # cat /etc/fstab
+      # sed -i 's/^\/swap.img/#\/swap.img/' /etc/fstab
+      # cat /etc/fstab
+      # swapoff -a
+      # rm -rfv /swap.img
       lineinfile:
         path: /etc/fstab
         regexp: '.*swap.*'
@@ -4229,12 +4255,20 @@ cat > create-k8s.yaml <<'EOF'
     - name: disable swap runtime
       shell: swapoff -a
     - name: configure iptables module
+    # cat <<EOF | sudo tee /etc/modules-load.d/k8s.conf
+    # br_netfilter
+    # EOF
       lineinfile:
         path: /etc/modules-load.d/k8s.conf
         line: br_netfilter
         state: present
         create: true
     - name: configure iptables bridge
+    # cat > /etc/sysctl.d/k8s.conf <<EOF
+    # net.bridge.bridge-nf-call-ip6tables = 1
+    # net.bridge.bridge-nf-call-iptables = 1
+    # net.ipv4.ip_forward = 1
+    # EOF
       lineinfile:
         path: /etc/sysctl.d/k8s.conf
         line: |
@@ -4272,6 +4306,7 @@ cat > create-k8s.yaml <<'EOF'
     #     EOF
     #   when: ansible_facts.distribution == 'RedHat' or ansible_facts.distribution == 'CentOS'
     - name: install kubeadm kubectl kubelet
+    # apt install -y kubeadm=1.25.4-00 kubelet=1.25.4-00 kubectl=1.25.4-00 sshpass
       package:
         name:
           - kubeadm=1.25.4-00
@@ -4287,7 +4322,19 @@ cat > create-k8s.yaml <<'EOF'
         sudo dpkg --configure -a
         sudo apt update
     - name: integrate with docker
-      shell: crictl config runtime-endpoint unix:///run/cri-dockerd.sock
+      # ps -ef|grep sock
+      # vim /etc/containerd/config.toml
+      # #disabled_plugins = ["cri"]
+      # systemctl restart containerd
+      # ps -ef|grep sock
+      # crictl config --get runtime-endpoint
+      shell: crictl config runtime-endpoint unix:///var/run/containerd/containerd.sock
+      # systemctl stop cri-docker && systemctl disable cri-docker
+      #shell: crictl config runtime-endpoint unix:///run/cri-dockerd.sock
+    - name: modify /etc/containerd/config.toml
+      shell: sed -i 's/^disabled_plugins/#disabled_plugins/g' /etc/containerd/config.toml
+    - name: restart containerd
+      shell: systemctl restart containerd
     - name: creating kubeadm.yaml
       shell: kubeadm config print init-defaults > kubeadm.yaml
       when: "'master' in group_names"
@@ -4312,15 +4359,40 @@ cat > create-k8s.yaml <<'EOF'
         line: 'imageRepository: registry.cn-hangzhou.aliyuncs.com/google_containers'
         state: present
       when: "'master' in group_names"
-    - name: modify crisock to cri-docker
+    #- name: modify crisock to cri-docker
+    #  lineinfile:
+    #  # criSocket: unix:///var/run/containerd/containerd.sock
+    #    path: kubeadm.yaml
+    #    regexp: '  criSocket.*'
+    #    #line: '  criSocket: unix:///run/cri-dockerd.sock'
+    #    line: '  criSocket: unix:///var/run/containerd/containerd.sock'
+    #    state: present
+    #  when: "'master' in group_names"  
+    - name: modify crisock to containerd
       lineinfile:
+      # criSocket: unix:///var/run/containerd/containerd.sock
         path: kubeadm.yaml
         regexp: '  criSocket.*'
-        line: '  criSocket: unix:///run/cri-dockerd.sock'
+        #line: '  criSocket: unix:///run/cri-dockerd.sock'
+        line: '  criSocket: unix:///var/run/containerd/containerd.sock'
         state: present
-      when: "'master' in group_names"      
+      when: "'master' in group_names"  
+    - name: scp kubeadm.yaml 
+      shell: |
+        scp /root/kubeadm.yaml k8s-docker1:/root/
+        scp /root/kubeadm.yaml k8s-docker2:/root/
+      when: "'master' in group_names"
+    - name: Pull kubernetes images on all nodes
+      # kubeadm config images list --config kubeadm.yaml
+      # kubeadm config images pull --config kubeadm.yaml
+      shell: kubeadm config images pull --config kubeadm.yaml
+    - name: Modify kubernetes image pause tag on all nodes
+      # ctr -n k8s.io image ls
+      # ctr -n k8s.io image tag registry.cn-hangzhou.aliyuncs.com/google_containers/pause:3.8 registry.k8s.io/pause:3.6
+      # ctr -n k8s.io image ls -q|grep pause
+      shell: ctr -n k8s.io image tag registry.cn-hangzhou.aliyuncs.com/google_containers/pause:3.8 registry.k8s.io/pause:3.6  
     - name: Deploy kubernetes on Master node
-      shell: kubeadm init --config kubeadm.yaml | tee /root/installdetails.log
+      shell: kubeadm init --config kubeadm.yaml | tee -a /root/installdetails.log
       when: "'master' in group_names"
     - name: pause 30s after cluster init
       shell: sleep 30s
@@ -4344,9 +4416,10 @@ cat > create-k8s.yaml <<'EOF'
       when: "'master' in group_names"
     - name: join workers
       shell: |
-        sleep 30
+        sleep 30s
         join=`sshpass -p 1 ssh -A -g -o StrictHostKeyChecking=no root@k8s-master kubeadm token create --print-join-command`
-        echo $join --cri-socket=unix:///var/run/cri-dockerd.sock | bash
+        # echo $join --cri-socket=unix:///var/run/cri-dockerd.sock | bash
+        echo $join --cri-socket=unix:///var/run/containerd/containerd.sock | bash
       when: "'worker' in group_names"
     - name: assign worker role label to workers
       shell: |
@@ -4359,7 +4432,7 @@ cat > create-k8s.yaml <<'EOF'
         kubeadm completion bash > /etc/bash_completion.d/kubeadm
         source /etc/bash_completion.d/kubectl
         source /etc/bash_completion.d/kubeadm
-       # rm -rf /root/installdetails.log
+        #rm -rf /root/installdetails.log
       when: "'master' in group_names"
 EOF
 
@@ -4394,13 +4467,588 @@ echo
 
 
 
+手动安装部署过程
+
+```bash
+0. this tools will only install kubernetes v1.25.4 for CKA Exam upgrad，三台服务器root密码为1
+   除了单独指定在某台服务器上执行的命令，其余命令在三台服务器上要全部执行
+1. 环境准备
+1.0 sudo -i
+1.1 complete /etc/hosts file
+# sed -i 's/^/#/g' /etc/hosts
+
+# cat >> /etc/hosts <<EOF
+127.0.0.1 localhost
+192.168.1.234 k8s-master
+192.168.1.235 k8s-docker1
+192.168.1.236 k8s-docker2
+EOF
+
+# cat /etc/hosts
+
+  
+1.2 enable root ssh login on /etc/ssh/sshd_config 
+# sudo sed -i 's/^#PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config
+# sudo systemctl restart sshd
+	
+1.3 Modify Ubuntu Repository to Nanjing Edu
+
+# cat > /etc/apt/sources.list <<EOF
+deb https://mirror.nju.edu.cn/ubuntu focal main restricted
+deb https://mirror.nju.edu.cn/ubuntu focal-updates main restricted
+deb https://mirror.nju.edu.cn/ubuntu focal universe
+deb https://mirror.nju.edu.cn/ubuntu focal-updates universe
+deb https://mirror.nju.edu.cn/ubuntu focal multiverse
+deb https://mirror.nju.edu.cn/ubuntu focal-updates multiverse
+deb https://mirror.nju.edu.cn/ubuntu focal-backports main restricted universe multiverse
+deb https://mirror.nju.edu.cn/ubuntu focal-security main restricted
+deb https://mirror.nju.edu.cn/ubuntu focal-security universe
+deb https://mirror.nju.edu.cn/ubuntu focal-security multiverse
+EOF
+
+# apt update && apt install sshpass wget bash-completion -y
+
+或者执行：
+# cp /etc/apt/sources.list /etc/apt/sources.list.bak
+# sed -i 's/^deb.*archive.ubuntu.com/deb https:\/\/mirrors.nju.edu.cn/' /etc/apt/sources.list
+
+# apt update && apt install sshpass wget bash-completion -y
+
+1.4 disable swap on /etc/fstab
+# cat /etc/fstab
+# sed -i 's/^\/swap.img/#\/swap.img/' /etc/fstab
+# cat /etc/fstab
+# swapoff -a
+# rm -rfv /swap.img
+	  
+1.5 Deploy chrony for make sure time 
+# rm /var/lib/apt/lists/lock
+# rm /var/cache/apt/archives/lock
+# rm /var/lib/dpkg/lock*
+# dpkg --configure -a
+# apt update
+
+# apt install -y chrony
+# systemctl enable chrony --now
+
+1.6 修改为东八区
+# cp /usr/share/zoneinfo/Asia/Shanghai /etc/localtime
+# data -R
+
+1.7 生成ssh key
+# ssh-keygen -t rsa -f /root/.ssh/id_rsa -N ''
+
+# sshpass -p 1 ssh-copy-id -o StrictHostKeyChecking=no root@k8s-master
+
+# sshpass -p 1 ssh-copy-id -o StrictHostKeyChecking=no root@k8s-docker1
+
+# sshpass -p 1 ssh-copy-id -o StrictHostKeyChecking=no root@k8s-docker2
+
+2. Configure Kubernetes
+2.1 Deploy Nanjing Edu Docker Repository
+# apt-get -y install apt-transport-https ca-certificates curl software-properties-common
+# curl -fsSL https://mirror.nju.edu.cn/docker-ce/linux/ubuntu/gpg | sudo apt-key add -
+# add-apt-repository "deb [arch=amd64] https://mirror.nju.edu.cn/docker-ce/linux/ubuntu $(lsb_release -cs) stable"
+# apt-get -y update
+
+2.2 Deploy Docker
+# apt install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
+
+ADD 163 docker mirror
+# mkdir -p /etc/docker
+# tee /etc/docker/daemon.json <<-'EOF'
+{
+  "registry-mirrors": ["http://hub-mirror.c.163.com"],
+  "exec-opts": ["native.cgroupdriver=systemd"]
+}
+EOF
+
+# systemctl daemon-reload&&systemctl restart docker
+
+configure iptables module
+# cat <<EOF | sudo tee /etc/modules-load.d/k8s.conf
+br_netfilter
+EOF
+
+configure iptables bridge
+# cat > /etc/sysctl.d/k8s.conf <<EOF
+net.bridge.bridge-nf-call-ip6tables = 1
+net.bridge.bridge-nf-call-iptables = 1
+net.ipv4.ip_forward = 1
+EOF
+
+# modprobe br_netfilter
+# sysctl --system
+
+2.3 name: add Nanjing Edu kubernetes repo on ubuntu
+# cat > /etc/apt/sources.list.d/k8s.list <<EOF
+deb https://mirror.nju.edu.cn/kubernetes/apt/ kubernetes-xenial main
+EOF
+
+# curl https://mirrors.aliyun.com/kubernetes/apt/doc/apt-key.gpg | apt-key add -
+# apt update
+# apt-key list
+
+name: install kubeadm kubectl kubelet
+# apt install -y kubeadm=1.25.4-00 kubelet=1.25.4-00 kubectl=1.25.4-00 sshpass
+
+name: clean apt lock
+rm /var/lib/apt/lists/lock
+rm /var/cache/apt/archives/lock
+rm /var/lib/dpkg/lock*
+dpkg --configure -a
+apt update
+
+2.4 name: integrate with docker
+# ps -ef|grep sock
+root       97567       1  0 11:50 ?        00:00:02 /usr/bin/dockerd -H fd:// --containerd=/run/containerd/containerd.sock
+
+# sed -i 's/^disabled_plugins/#disabled_plugins/g' /etc/containerd/config.toml
+# systemctl restart containerd
+
+# cat /etc/containerd/config.toml |grep -v ^#
+# cat /etc/containerd/config.toml |grep disabled
+#disabled_plugins = ["cri"]
+
+# crictl config --get runtime-endpoint
+
+# crictl config runtime-endpoint unix:///var/run/containerd/containerd.sock
+# crictl config --get runtime-endpoint
+unix:///var/run/containerd/containerd.sock
+
+2.5 name: creating kubeadm.yaml---`只在k8s-master节点`
+# kubeadm config print init-defaults > kubeadm.yaml
+name: modify api server address---`只在k8s-master节点`
+# sed  -i 's/advertiseAddress: 1.2.3.4/advertiseAddress: 192.168.1.234/g' kubeadm.yaml
+
+name: modify cluster name---`只在k8s-master节点`
+# sed  -i 's/name: node/name: k8s-master/g' kubeadm.yaml
+
+name: modify image repository---`只在k8s-master节点`
+# sed  -i 's/imageRepository: registry.k8s.io/imageRepository: registry.cn-hangzhou.aliyuncs.com\/google_containers/g' kubeadm.yaml
+
+name: 检查criSocket: unix:///var/run/containerd/containerd.sock
+
+name: scp kubeadm.yaml---`只在k8s-master节点`
+# scp /root/kubeadm.yaml k8s-docker1:/root/
+# scp /root/kubeadm.yaml k8s-docker2:/root/
+
+2.6 name: Pull kubernetes images on all nodes
+# kubeadm config images list --config kubeadm.yaml
+# kubeadm config images pull --config kubeadm.yaml
+
+name: Modify kubernetes image pause tag on all nodes
+# ctr -n k8s.io image ls
+# ctr -n k8s.io image tag registry.cn-hangzhou.aliyuncs.com/google_containers/pause:3.8 registry.k8s.io/pause:3.6
+# ctr -n k8s.io image ls -q|grep pause
+
+2.7 name: Deploy kubernetes on Master node---`只在k8s-master节点`
+# kubeadm init --config kubeadm.yaml | tee -a /root/installdetails.log
+
+name: set up admin role
+# mkdir -p $HOME/.kube
+# cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+# chown $(id -u):$(id -g) $HOME/.kube/config
+# sshpass -p 1 ssh -A -g -o StrictHostKeyChecking=no root@k8s-docker1 mkdir /root/.kube 
+# sshpass -p 1 ssh -A -g -o StrictHostKeyChecking=no root@k8s-docker2 mkdir /root/.kube
+# scp /etc/kubernetes/admin.conf root@k8s-docker1:/root/.kube/config
+# scp /etc/kubernetes/admin.conf root@k8s-docker2:/root/.kube/config
+
+name: Deploy Calico
+# kubectl create -f https://gitee.com/cnlxh/Kubernetes/raw/master/cka-yaml/calico.yaml
+
+等待所有podRunning
+# kubectl get pod -A
+# kubectl get pod -A
+NAMESPACE     NAME                                       READY   STATUS    RESTARTS   AGE
+kube-system   calico-kube-controllers-655f995d4d-h55kn   1/1     Running   0          3m1s
+kube-system   calico-node-6gt9f                          1/1     Running   0          3m1s
+kube-system   coredns-7f8cbcb969-gmxrt                   1/1     Running   0          5m45s
+kube-system   coredns-7f8cbcb969-mskms                   1/1     Running   0          5m45s
+kube-system   etcd-k8s-master                            1/1     Running   0          5m50s
+kube-system   kube-apiserver-k8s-master                  1/1     Running   0          5m50s
+kube-system   kube-controller-manager-k8s-master         1/1     Running   0          5m50s
+kube-system   kube-proxy-dkrq6                           1/1     Running   0          5m46s
+kube-system   kube-scheduler-k8s-master                  1/1     Running   0          5m50s
+
+2.8  name: join workers---仅在`k8s-docker1/k8s-docker2`上执行
+# join=`sshpass -p 1 ssh -A -g -o StrictHostKeyChecking=no root@k8s-master kubeadm token create --print-join-command`
+# echo $join --cri-socket=unix:///var/run/containerd/containerd.sock | bash
+
+preflight] Running pre-flight checks
+[preflight] Reading configuration from the cluster...
+[preflight] FYI: You can look at this config file with 'kubectl -n kube-system get cm kubeadm-config -o yaml'
+[kubelet-start] Writing kubelet configuration to file "/var/lib/kubelet/config.yaml"
+[kubelet-start] Writing kubelet environment file with flags to file "/var/lib/kubelet/kubeadm-flags.env"
+[kubelet-start] Starting the kubelet
+[kubelet-start] Waiting for the kubelet to perform the TLS Bootstrap...
+
+This node has joined the cluster:
+* Certificate signing request was sent to apiserver and a response was received.
+* The Kubelet was informed of the new secure connection details.
+
+Run 'kubectl get nodes' on the control-plane to see this node join the cluster.
+
+2.9 name: assign worker role label to workers---`只在k8s-master节点`
+# kubectl get nodes
+NAME          STATUS   ROLES           AGE     VERSION
+k8s-docker1   Ready    <none>          4m21s   v1.25.4
+k8s-docker2   Ready    <none>          4m21s   v1.25.4
+k8s-master    Ready    control-plane   17m     v1.25.4
+# kubectl label nodes k8s-docker2 k8s-docker1 node-role.kubernetes.io/worker=
+node/k8s-docker2 labeled
+node/k8s-docker1 labeled
+# kubectl get nodes
+NAME          STATUS   ROLES           AGE     VERSION
+k8s-docker1   Ready    worker          4m30s   v1.25.4
+k8s-docker2   Ready    worker          4m30s   v1.25.4
+k8s-master    Ready    control-plane   17m     v1.25.4
+
+3.0 name: add TAB completion for kubernetes
+# kubectl completion bash > /etc/bash_completion.d/kubectl
+# kubeadm completion bash > /etc/bash_completion.d/kubeadm
+# source /etc/bash_completion.d/kubectl
+# source /etc/bash_completion.d/kubeadm
+
+# kubectl get nodes
+# kubectl get pod -A
+
+# kubectl get pod -A --field-selector spec.nodeName=k8s-master
+NAMESPACE     NAME                                       READY   STATUS    RESTARTS   AGE
+kube-system   calico-kube-controllers-655f995d4d-h55kn   1/1     Running   0          18m
+kube-system   calico-node-6gt9f                          1/1     Running   0          18m
+kube-system   coredns-7f8cbcb969-gmxrt                   1/1     Running   0          21m
+kube-system   coredns-7f8cbcb969-mskms                   1/1     Running   0          21m
+kube-system   etcd-k8s-master                            1/1     Running   0          21m
+kube-system   kube-apiserver-k8s-master                  1/1     Running   0          21m
+kube-system   kube-controller-manager-k8s-master         1/1     Running   0          21m
+kube-system   kube-proxy-dkrq6                           1/1     Running   0          21m
+kube-system   kube-scheduler-k8s-master                  1/1     Running   0          21m
+# kubectl get pod -A --field-selector spec.nodeName=k8s-docker1
+NAMESPACE     NAME                READY   STATUS    RESTARTS   AGE
+kube-system   calico-node-c5kpq   1/1     Running   0          9m15s
+kube-system   kube-proxy-c2qmh    1/1     Running   0          9m15s
+# kubectl get pod -A --field-selector spec.nodeName=k8s-docker2
+NAMESPACE     NAME                READY   STATUS    RESTARTS   AGE
+kube-system   calico-node-jg9ck   1/1     Running   0          9m17s
+kube-system   kube-proxy-bjz9j    1/1     Running   0          9m17s
+```
+
+```bash
+kubeadm init日志：
+# kubeadm init --config kubeadm.yaml | tee -a /root/installdetails.log
+[init] Using Kubernetes version: v1.25.0
+[preflight] Running pre-flight checks
+[preflight] Pulling images required for setting up a Kubernetes cluster
+[preflight] This might take a minute or two, depending on the speed of your internet connection
+[preflight] You can also perform this action in beforehand using 'kubeadm config images pull'
+[certs] Using certificateDir folder "/etc/kubernetes/pki"
+[certs] Generating "ca" certificate and key
+[certs] Generating "apiserver" certificate and key
+[certs] apiserver serving cert is signed for DNS names [k8s-master kubernetes kubernetes.default kubernetes.default.svc kubernetes.default.svc.cluster.local] and IPs [10.96.0.1 192.168.1.234]
+[certs] Generating "apiserver-kubelet-client" certificate and key
+[certs] Generating "front-proxy-ca" certificate and key
+[certs] Generating "front-proxy-client" certificate and key
+[certs] Generating "etcd/ca" certificate and key
+[certs] Generating "etcd/server" certificate and key
+[certs] etcd/server serving cert is signed for DNS names [k8s-master localhost] and IPs [192.168.1.234 127.0.0.1 ::1]
+[certs] Generating "etcd/peer" certificate and key
+[certs] etcd/peer serving cert is signed for DNS names [k8s-master localhost] and IPs [192.168.1.234 127.0.0.1 ::1]
+[certs] Generating "etcd/healthcheck-client" certificate and key
+[certs] Generating "apiserver-etcd-client" certificate and key
+[certs] Generating "sa" key and public key
+[kubeconfig] Using kubeconfig folder "/etc/kubernetes"
+[kubeconfig] Writing "admin.conf" kubeconfig file
+[kubeconfig] Writing "kubelet.conf" kubeconfig file
+[kubeconfig] Writing "controller-manager.conf" kubeconfig file
+[kubeconfig] Writing "scheduler.conf" kubeconfig file
+[kubelet-start] Writing kubelet environment file with flags to file "/var/lib/kubelet/kubeadm-flags.env"
+[kubelet-start] Writing kubelet configuration to file "/var/lib/kubelet/config.yaml"
+[kubelet-start] Starting the kubelet
+[control-plane] Using manifest folder "/etc/kubernetes/manifests"
+[control-plane] Creating static Pod manifest for "kube-apiserver"
+[control-plane] Creating static Pod manifest for "kube-controller-manager"
+[control-plane] Creating static Pod manifest for "kube-scheduler"
+[etcd] Creating static Pod manifest for local etcd in "/etc/kubernetes/manifests"
+[wait-control-plane] Waiting for the kubelet to boot up the control plane as static Pods from directory "/etc/kubernetes/manifests". This can take up to 4m0s
+[apiclient] All control plane components are healthy after 13.002734 seconds
+[upload-config] Storing the configuration used in ConfigMap "kubeadm-config" in the "kube-system" Namespace
+[kubelet] Creating a ConfigMap "kubelet-config" in namespace kube-system with the configuration for the kubelets in the cluster
+[upload-certs] Skipping phase. Please see --upload-certs
+[mark-control-plane] Marking the node k8s-master as control-plane by adding the labels: [node-role.kubernetes.io/control-plane node.kubernetes.io/exclude-from-external-load-balancers]
+[mark-control-plane] Marking the node k8s-master as control-plane by adding the taints [node-role.kubernetes.io/control-plane:NoSchedule]
+[bootstrap-token] Using token: abcdef.0123456789abcdef
+[bootstrap-token] Configuring bootstrap tokens, cluster-info ConfigMap, RBAC Roles
+[bootstrap-token] Configured RBAC rules to allow Node Bootstrap tokens to get nodes
+[bootstrap-token] Configured RBAC rules to allow Node Bootstrap tokens to post CSRs in order for nodes to get long term certificate credentials
+[bootstrap-token] Configured RBAC rules to allow the csrapprover controller automatically approve CSRs from a Node Bootstrap Token
+[bootstrap-token] Configured RBAC rules to allow certificate rotation for all node client certificates in the cluster
+[bootstrap-token] Creating the "cluster-info" ConfigMap in the "kube-public" namespace
+[kubelet-finalize] Updating "/etc/kubernetes/kubelet.conf" to point to a rotatable kubelet client certificate and key
+[addons] Applied essential addon: CoreDNS
+[addons] Applied essential addon: kube-proxy
+
+Your Kubernetes control-plane has initialized successfully!
+
+To start using your cluster, you need to run the following as a regular user:
+
+  mkdir -p $HOME/.kube
+  sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+  sudo chown $(id -u):$(id -g) $HOME/.kube/config
+
+Alternatively, if you are the root user, you can run:
+
+  export KUBECONFIG=/etc/kubernetes/admin.conf
+
+You should now deploy a pod network to the cluster.
+Run "kubectl apply -f [podnetwork].yaml" with one of the options listed at:
+  https://kubernetes.io/docs/concepts/cluster-administration/addons/
+
+Then you can join any number of worker nodes by running the following on each as root:
+
+kubeadm join 192.168.1.234:6443 --token abcdef.0123456789abcdef \
+	--discovery-token-ca-cert-hash sha256:f8ea63b813e503236287d5def1eb91832e82d28df5d93ed226523b03a86c8412 
+	
+# kubectl create -f https://gitee.com/cnlxh/Kubernetes/raw/master/cka-yaml/calico.yaml
+poddisruptionbudget.policy/calico-kube-controllers created
+serviceaccount/calico-kube-controllers created
+serviceaccount/calico-node created
+configmap/calico-config created
+customresourcedefinition.apiextensions.k8s.io/bgpconfigurations.crd.projectcalico.org created
+customresourcedefinition.apiextensions.k8s.io/bgppeers.crd.projectcalico.org created
+customresourcedefinition.apiextensions.k8s.io/blockaffinities.crd.projectcalico.org created
+customresourcedefinition.apiextensions.k8s.io/caliconodestatuses.crd.projectcalico.org created
+customresourcedefinition.apiextensions.k8s.io/clusterinformations.crd.projectcalico.org created
+customresourcedefinition.apiextensions.k8s.io/felixconfigurations.crd.projectcalico.org created
+customresourcedefinition.apiextensions.k8s.io/globalnetworkpolicies.crd.projectcalico.org created
+customresourcedefinition.apiextensions.k8s.io/globalnetworksets.crd.projectcalico.org created
+customresourcedefinition.apiextensions.k8s.io/hostendpoints.crd.projectcalico.org created
+customresourcedefinition.apiextensions.k8s.io/ipamblocks.crd.projectcalico.org created
+customresourcedefinition.apiextensions.k8s.io/ipamconfigs.crd.projectcalico.org created
+customresourcedefinition.apiextensions.k8s.io/ipamhandles.crd.projectcalico.org created
+customresourcedefinition.apiextensions.k8s.io/ippools.crd.projectcalico.org created
+customresourcedefinition.apiextensions.k8s.io/ipreservations.crd.projectcalico.org created
+customresourcedefinition.apiextensions.k8s.io/kubecontrollersconfigurations.crd.projectcalico.org created
+customresourcedefinition.apiextensions.k8s.io/networkpolicies.crd.projectcalico.org created
+customresourcedefinition.apiextensions.k8s.io/networksets.crd.projectcalico.org created
+clusterrole.rbac.authorization.k8s.io/calico-kube-controllers created
+clusterrole.rbac.authorization.k8s.io/calico-node created
+clusterrolebinding.rbac.authorization.k8s.io/calico-kube-controllers created
+clusterrolebinding.rbac.authorization.k8s.io/calico-node created
+daemonset.apps/calico-node created
+deployment.apps/calico-kube-controllers created
+
+kubeadm join日志：
+# join=`sshpass -p 1 ssh -A -g -o StrictHostKeyChecking=no root@k8s-master kubeadm token create --print-join-command`
+# echo $join --cri-socket=unix:///var/run/containerd/containerd.sock | bash
+[preflight] Running pre-flight checks
+[preflight] Reading configuration from the cluster...
+[preflight] FYI: You can look at this config file with 'kubectl -n kube-system get cm kubeadm-config -o yaml'
+[kubelet-start] Writing kubelet configuration to file "/var/lib/kubelet/config.yaml"
+[kubelet-start] Writing kubelet environment file with flags to file "/var/lib/kubelet/kubeadm-flags.env"
+[kubelet-start] Starting the kubelet
+[kubelet-start] Waiting for the kubelet to perform the TLS Bootstrap...
+
+This node has joined the cluster:
+* Certificate signing request was sent to apiserver and a response was received.
+* The Kubelet was informed of the new secure connection details.
+
+Run 'kubectl get nodes' on the control-plane to see this node join the cluster.
+```
+
 
 
 ### 7.Deployment管理和使用
 
-#### 7.1.
+#### 7.1.创建deployments
 
-#### 7.2.
+```bash
+方式一： kubectl create deployment dp-name --image=imageName:tag
+
+# kubectl -n lead create deployment nginx --image=nginx:latest
+
+# kubectl -n lead get deployments
+NAME    READY   UP-TO-DATE   AVAILABLE   AGE
+nginx   2/2     2            2           28m
+# kubectl -n lead describe deployments nginx
+
+方式二： 首先创建deployment的yaml文件，然后kubectl create/apply -f dp-name.yaml
+# kubectl apply -f nginx-lamp.yaml 
+deployment.apps/nginx created
+# kubectl -n lamp get all
+NAME                         READY   STATUS              RESTARTS   AGE
+pod/nginx-6b9797f6cc-blj4x   0/1     ContainerCreating   0          26s
+pod/nginx-6b9797f6cc-lb224   0/1     ContainerCreating   0          26s
+
+NAME                    READY   UP-TO-DATE   AVAILABLE   AGE
+deployment.apps/nginx   0/2     2            0           26s
+
+NAME                               DESIRED   CURRENT   READY   AGE
+replicaset.apps/nginx-6b9797f6cc   2         2         0       26s
+
+# kubectl -n lamp get all
+NAME                         READY   STATUS              RESTARTS   AGE
+pod/nginx-6b9797f6cc-blj4x   0/1     ContainerCreating   0          65s
+pod/nginx-6b9797f6cc-lb224   1/1     Running             0          65s
+
+NAME                    READY   UP-TO-DATE   AVAILABLE   AGE
+deployment.apps/nginx   1/2     2            1           65s
+
+NAME                               DESIRED   CURRENT   READY   AGE
+replicaset.apps/nginx-6b9797f6cc   2         2         1       65s
+
+```
+
+```yaml
+#nginx deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata: 
+  name: nginx
+  namespace: lead
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: nginx
+  template:
+    metadata:
+      labels:
+        app: nginx
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:1.23.3
+        imagePullPolicy: IfNotPresent        
+```
+
+
+
+#### 7.2.升级和扩缩容
+
+##### 7.2.1.升级
+
+```bash
+方式一：通过编辑yaml文件，修改里面的image后面的数值，然后kubectl apply -f nginx-dp.yaml 来实现
+
+方式二：直接通过kubectl edit命令来实现升级
+```
+
+##### 7.2.2.降级
+
+```bash
+方式一：通过编辑yaml文件，修改里面的image后面的数值，然后kubectl apply -f nginx-dp.yaml --record来实现
+
+方式二：直接通过kubectl edit命令来实现升级；直接通过kubectl rollout history命令来实现降级
+
+# cat nginx-lamp.yaml |grep image
+        image: nginx:1.23.3
+        imagePullPolicy: IfNotPresent
+# cat nginx-v1.yaml |grep image
+        image: nginx:1.19.7
+# cat nginx-v2.yaml |grep image
+        image: nginx:1.19.8
+        
+# kubectl apply -f nginx-v1.yaml 
+deployment.apps/nginx configured
+# kubectl apply -f nginx-v2.yaml 
+deployment.apps/nginx configured
+
+# kubectl -n lamp rollout history deployment nginx 
+deployment.apps/nginx 
+REVISION  CHANGE-CAUSE
+1         <none>
+2         <none>
+3         <none>
+
+# kubectl apply -f nginx-v1.yaml --record
+deployment.apps/nginx configured
+# kubectl apply -f nginx-v2.yaml --record
+deployment.apps/nginx configured
+# kubectl -n lamp rollout history deployment nginx 
+deployment.apps/nginx 
+REVISION  CHANGE-CAUSE
+1         <none>
+4         kubectl apply --filename=nginx-v1.yaml --record=true
+5         kubectl apply --filename=nginx-v2.yaml --record=true
+
+# kubectl -n lamp rollout history deployment nginx --revision=4
+deployment.apps/nginx with revision #4
+Pod Template:
+  Labels:	app=nginx
+	pod-template-hash=59f854fb7c
+  Annotations:	kubernetes.io/change-cause: kubectl apply --filename=nginx-v1.yaml --record=true
+  Containers:
+   nginx:
+    Image:	`nginx:1.19.7`
+    Port:	80/TCP
+    Host Port:	0/TCP
+    Environment:	<none>
+    Mounts:	<none>
+  Volumes:	<none>
+
+[root@docker01 k8s]# kubectl -n lamp rollout history deployment nginx --revision=5
+deployment.apps/nginx with revision #5
+Pod Template:
+  Labels:	app=nginx
+	pod-template-hash=575fc7645b
+  Annotations:	kubernetes.io/change-cause: kubectl apply --filename=nginx-v2.yaml --record=true
+  Containers:
+   nginx:
+    Image:	`nginx:1.19.8`
+    Port:	80/TCP
+    Host Port:	0/TCP
+    Environment:	<none>
+    Mounts:	<none>
+  Volumes:	<none>
+
+# kubectl -n lamp rollout 
+history  pause    restart  resume   status   undo     
+# kubectl -n lamp rollout undo deployment nginx --to-revision=4
+deployment.apps/nginx rolled back
+
+# kubectl -n lamp get pod
+NAME                     READY   STATUS    RESTARTS   AGE
+nginx-59f854fb7c-djbtz   1/1     Running   0          12s
+nginx-59f854fb7c-qvfss   1/1     Running   0          14s
+
+# kubectl -n lamp get pod
+NAME                     READY   STATUS    RESTARTS   AGE
+nginx-59f854fb7c-djbtz   1/1     Running   0          14s
+nginx-59f854fb7c-qvfss   1/1     Running   0          16s
+
+# kubectl -n lamp describe pod nginx-59f854fb7c-djbtz |grep nginx:
+  nginx:
+    Image:          `nginx:1.19.7`
+  Normal  Pulled     46s   kubelet            Container image "nginx:1.19.7" already present on machine
+
+```
+
+##### 7.2.3.扩缩容
+
+```bash
+方式一：通过编辑yaml文件，修改里面的replicas后面的数值，然后kubectl apply -f nginx-dp.yaml 来实现
+
+方式二：直接通过kubectl scale命令来实现
+# kubectl -n lead get deployments
+NAME    READY   UP-TO-DATE   AVAILABLE   AGE
+nginx   2/2     2            2           58m
+
+# kubectl -n lead scale deployment nginx --replicas=3
+deployment.apps/nginx scaled
+
+# kubectl -n lead get deployments
+NAME    READY   UP-TO-DATE   AVAILABLE   AGE
+nginx   3/3     3            3           59m
+
+# kubectl -n lead get pod
+NAME                     READY   STATUS    RESTARTS   AGE
+nginx-6b689c98c5-8xzrc   1/1     Running   0          8s
+nginx-6b689c98c5-cdz6s   1/1     Running   0          34m
+nginx-6b689c98c5-jdxk9   1/1     Running   0          35m
+```
+
+
 
 ### 8.Pod管理和应用
 
