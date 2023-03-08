@@ -5052,7 +5052,506 @@ nginx-6b689c98c5-jdxk9   1/1     Running   0          35m
 
 ### 8.Pod管理和应用
 
-#### 8.1.
+#### 8.1.Pod
+
+```bash
+---Pod是k8s管理的最小基础单元
+---一个Pod封装了：
+   1)一个或多个紧耦合的应用容器
+   2)存储资源
+   3)独立的IP
+   4)容器运行的选项
+```
+
+![image-20230308213016133](cka培训截图/image-20230308213016133.png)
+
+```BASH
+Pod的两种模式
+---只包含一个应用容器的Pod
+   1)"一个Pod一个容器"的模式是k8s中主流的使用场景
+   2)在这种场景中，Pod可以被看作“包装纸”包着容器
+---包含多个应用的Pod
+   1)仅当两种容器紧耦合，且需要共享相同的资源时使用这一种模式
+   2)这些在一个Pod内的容器形成一个统一的服务单元
+     例如：一个容器从共享卷提供文件，而另一个容器刷新或更新资源
+          Pod将这些容器和存储资源作为单个可管理的实体包装在一起
+```
+
+```bash
+Pod内部结构
+---一个Pod中会分配一个pause容器，这也被称为根容器
+   1)pause容器的状态代表整个pod的状态
+   2)Pod中多个容器共享pause容器的存储和IP，容器间可以通过localhost互访
+```
+
+![image-20230308214709402](cka培训截图/image-20230308214709402.png)
+
+```bash
+Pod生命周期
+---Pod一旦被创建，会被master调度到某个具体的node上进行绑定
+   Pod会呈现不同的状态
+```
+
+
+
+![image-20230308223310530](cka培训截图/image-20230308223310530.png)
+
+| **Value** | **Description**                                              |
+| :-------- | ------------------------------------------------------------ |
+| Pending   | The Pod has been accepted by the Kubernetes cluster, but one or more of the containers has not been set up and made ready to run. This includes time a Pod spends waiting to be scheduled as well as the time spent downloading container images over the network. |
+| Running   | The Pod has been bound to a node, and all of the containers have been created. At least one container is still running, or is in the process of starting or restarting. |
+| Succeeded | All containers in the Pod have terminated in success, and will not be restarted. |
+| Failed    | All containers in the Pod have terminated, and at least one container has terminated in failure. That is, the container either exited with non-zero status or was terminated by the system. |
+| Unknown   | For some reason the state of the Pod could not be obtained. This phase typically occurs due to an error in communicating with the node where the Pod should be running. |
+
+
+
+```
+Container states
+As well as the phase of the Pod overall, Kubernetes tracks the state of each container inside a Pod. You can use container lifecycle hooks to trigger events to run at certain points in a container's lifecycle.
+
+Once the scheduler assigns a Pod to a Node, the kubelet starts creating containers for that Pod using a container runtime. There are three possible container states: Waiting, Running, and Terminated.
+
+To check the state of a Pod's containers, you can use kubectl describe pod <name-of-pod>. The output shows the state for each container within that Pod.
+
+Each state has a specific meaning:
+
+Waiting
+If a container is not in either the Running or Terminated state, it is Waiting. A container in the Waiting state is still running the operations it requires in order to complete start up: for example, pulling the container image from a container image registry, or applying Secret data. When you use kubectl to query a Pod with a container that is Waiting, you also see a Reason field to summarize why the container is in that state.
+
+Running
+The Running status indicates that a container is executing without issues. If there was a postStart hook configured, it has already executed and finished. When you use kubectl to query a Pod with a container that is Running, you also see information about when the container entered the Running state.
+
+Terminated
+A container in the Terminated state began execution and then either ran to completion or failed for some reason. When you use kubectl to query a Pod with a container that is Terminated, you see a reason, an exit code, and the start and finish time for that container's period of execution.
+
+If a container has a preStop hook configured, this hook runs before the container enters the Terminated state.
+
+
+```
+
+
+
+
+
+```bash
+第一种模式的Pod：
+vi mypod.yaml
+```
+
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: mypod
+spec:
+  containers:
+  - name: mypod
+    image: busybox
+    args:
+    - /bin/sh
+    - -c
+    - echo "hello,world!" && sleep 3h
+```
+
+```bash
+# kubectl create -f mypod.yaml 
+pod/mypod created
+# kubectl get pod
+NAME    READY   STATUS              RESTARTS   AGE
+mypod   0/1     ContainerCreating   0          3s
+# kubectl get pod
+NAME    READY   STATUS    RESTARTS   AGE
+mypod   1/1     Running   0          4s
+# kubectl get pod mypod 
+NAME    READY   STATUS    RESTARTS   AGE
+mypod   1/1     Running   0          11s
+# kubectl get pod -owide
+NAME    READY   STATUS    RESTARTS   AGE   IP             NODE          NOMINATED NODE   READINESS GATES
+mypod   1/1     Running   0          10s   172.16.94.65   k8s-docker2   <none>           <none>
+# kubectl logs -f mypod 
+hello,world!
+^C
+# kubectl describe pod mypod 
+Name:             mypod
+Namespace:        default
+Priority:         0
+Service Account:  default
+Node:             k8s-docker2/192.168.1.236
+Start Time:       Wed, 08 Mar 2023 22:17:13 +0800
+Labels:           <none>
+Annotations:      cni.projectcalico.org/containerID: ce5597effe6382cb5a189e915ff777f2eb76390c80fef4a790de477fc24634f7
+                  cni.projectcalico.org/podIP: 172.16.94.65/32
+                  cni.projectcalico.org/podIPs: 172.16.94.65/32
+Status:           Running
+IP:               172.16.94.65
+IPs:
+  IP:  172.16.94.65
+Containers:
+  mypod:
+    Container ID:  containerd://9e62823917b030d7bbd1640adf2a091e06150beda600b145eb1fd92f1b983ff0
+    Image:         busybox
+    Image ID:      docker.io/library/busybox@sha256:c118f538365369207c12e5794c3cbfb7b042d950af590ae6c287ede74f29b7d4
+    Port:          <none>
+    Host Port:     <none>
+    Args:
+      /bin/sh
+      -c
+      echo "hello,world!" && sleep 3h
+    State:          Running
+      Started:      Wed, 08 Mar 2023 22:17:20 +0800
+    Ready:          True
+    Restart Count:  0
+    Environment:    <none>
+    Mounts:
+      /var/run/secrets/kubernetes.io/serviceaccount from kube-api-access-pqdc5 (ro)
+Conditions:
+  Type              Status
+  Initialized       True 
+  Ready             True 
+  ContainersReady   True 
+  PodScheduled      True 
+Volumes:
+  kube-api-access-pqdc5:
+    Type:                    Projected (a volume that contains injected data from multiple sources)
+    TokenExpirationSeconds:  3607
+    ConfigMapName:           kube-root-ca.crt
+    ConfigMapOptional:       <nil>
+    DownwardAPI:             true
+QoS Class:                   BestEffort
+Node-Selectors:              <none>
+Tolerations:                 node.kubernetes.io/not-ready:NoExecute op=Exists for 300s
+                             node.kubernetes.io/unreachable:NoExecute op=Exists for 300s
+Events:
+  Type    Reason     Age   From               Message
+  ----    ------     ----  ----               -------
+  Normal  Scheduled  98s   default-scheduler  Successfully assigned default/mypod to k8s-docker2
+  Normal  Pulling    97s   kubelet            Pulling image "busybox"
+  Normal  Pulled     91s   kubelet            Successfully pulled image "busybox" in 6.439993681s
+  Normal  Created    91s   kubelet            Created container mypod
+  Normal  Started    91s   kubelet            Started container mypod
+
+# ssh k8s-docker1 ctr -n k8s.io c ls|grep busybox
+# ssh k8s-docker2 ctr -n k8s.io c ls|grep busybox
+9e62823917b030d7bbd1640adf2a091e06150beda600b145eb1fd92f1b983ff0    docker.io/library/busybox:latest                                          io.containerd.runc.v2    
+# ssh k8s-docker2 ctr -n k8s.io c info 9e62823917b030d7bbd1640adf2a091e06150beda600b145eb1fd92f1b983ff0
+{
+    "ID": "9e62823917b030d7bbd1640adf2a091e06150beda600b145eb1fd92f1b983ff0",
+    "Labels": {
+        "io.cri-containerd.kind": "container",
+        "io.kubernetes.container.name": "mypod",
+        "io.kubernetes.pod.name": "mypod",
+        "io.kubernetes.pod.namespace": "default",
+        "io.kubernetes.pod.uid": "3903ad86-dd5c-415f-9c1b-41f4518b1341"
+    },
+    "Image": "docker.io/library/busybox:latest",
+    "Runtime": {
+        "Name": "io.containerd.runc.v2",
+        "Options": {
+            "type_url": "containerd.runc.v1.Options"
+        }
+    },
+    "SnapshotKey": "9e62823917b030d7bbd1640adf2a091e06150beda600b145eb1fd92f1b983ff0",
+    "Snapshotter": "overlayfs",
+    "CreatedAt": "2023-03-08T14:17:20.817335824Z",
+    "UpdatedAt": "2023-03-08T14:17:20.817335824Z",
+    "Extensions": {
+        "io.cri-containerd.container.metadata": {
+            "type_url": "github.com/containerd/cri/pkg/store/container/Metadata",
+            "value": "...jwt.io...省略""
+        }
+    },
+    "Spec": {
+        "ociVersion": "1.0.2-dev",
+        "process": {
+            "user": {
+                "uid": 0,
+                "gid": 0,
+                "additionalGids": [
+                    0,
+                    10
+                ]
+            },
+            "args": [
+                "/bin/sh",
+                "-c",
+                "echo \"hello,world!\" \u0026\u0026 sleep 3h"
+            ],
+            "env": [
+                "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+                "HOSTNAME=mypod",
+                "KUBERNETES_SERVICE_PORT_HTTPS=443",
+                "KUBERNETES_PORT=tcp://10.96.0.1:443",
+                "KUBERNETES_PORT_443_TCP=tcp://10.96.0.1:443",
+                "KUBERNETES_PORT_443_TCP_PROTO=tcp",
+                "KUBERNETES_PORT_443_TCP_PORT=443",
+                "KUBERNETES_PORT_443_TCP_ADDR=10.96.0.1",
+                "KUBERNETES_SERVICE_HOST=10.96.0.1",
+                "KUBERNETES_SERVICE_PORT=443"
+            ],
+            "cwd": "/",
+            "capabilities": {
+                "bounding": [
+                  ...省略...
+                ],
+                "effective": [
+                  ...省略...
+                ],
+                "permitted": [
+                  ...省略...
+                ]
+            },
+            "apparmorProfile": "cri-containerd.apparmor.d",
+            "oomScoreAdj": 1000
+        },
+        "root": {
+            "path": "rootfs"
+        },
+        "mounts": [
+            {
+                "destination": "/proc",
+                "type": "proc",
+                "source": "proc",
+                "options": [
+                    "nosuid",
+                    "noexec",
+                    "nodev"
+                ]
+            },
+            {
+                "destination": "/dev",
+                "type": "tmpfs",
+                "source": "tmpfs",
+                "options": [
+                    "nosuid",
+                    "strictatime",
+                    "mode=755",
+                    "size=65536k"
+                ]
+            },
+            {
+                "destination": "/dev/pts",
+                "type": "devpts",
+                "source": "devpts",
+                "options": [
+                    "nosuid",
+                    "noexec",
+                    "newinstance",
+                    "ptmxmode=0666",
+                    "mode=0620",
+                    "gid=5"
+                ]
+            },
+            {
+                "destination": "/dev/mqueue",
+                "type": "mqueue",
+                "source": "mqueue",
+                "options": [
+                    "nosuid",
+                    "noexec",
+                    "nodev"
+                ]
+            },
+            {
+                "destination": "/sys",
+                "type": "sysfs",
+                "source": "sysfs",
+                "options": [
+                    "nosuid",
+                    "noexec",
+                    "nodev",
+                    "ro"
+                ]
+            },
+            {
+                "destination": "/sys/fs/cgroup",
+                "type": "cgroup",
+                "source": "cgroup",
+                "options": [
+                    "nosuid",
+                    "noexec",
+                    "nodev",
+                    "relatime",
+                    "ro"
+                ]
+            },
+            {
+                "destination": "/etc/hosts",
+                "type": "bind",
+                "source": "/var/lib/kubelet/pods/3903ad86-dd5c-415f-9c1b-41f4518b1341/etc-hosts",
+                "options": [
+                    "rbind",
+                    "rprivate",
+                    "rw"
+                ]
+            },
+            {
+                "destination": "/dev/termination-log",
+                "type": "bind",
+                "source": "/var/lib/kubelet/pods/3903ad86-dd5c-415f-9c1b-41f4518b1341/containers/mypod/256ec88c",
+                "options": [
+                    "rbind",
+                    "rprivate",
+                    "rw"
+                ]
+            },
+            {
+                "destination": "/etc/hostname",
+                "type": "bind",
+                "source": "/var/lib/containerd/io.containerd.grpc.v1.cri/sandboxes/ce5597effe6382cb5a189e915ff777f2eb76390c80fef4a790de477fc24634f7/hostname",
+                "options": [
+                    "rbind",
+                    "rprivate",
+                    "rw"
+                ]
+            },
+            {
+                "destination": "/etc/resolv.conf",
+                "type": "bind",
+                "source": "/var/lib/containerd/io.containerd.grpc.v1.cri/sandboxes/ce5597effe6382cb5a189e915ff777f2eb76390c80fef4a790de477fc24634f7/resolv.conf",
+                "options": [
+                    "rbind",
+                    "rprivate",
+                    "rw"
+                ]
+            },
+            {
+                "destination": "/dev/shm",
+                "type": "bind",
+                "source": "/run/containerd/io.containerd.grpc.v1.cri/sandboxes/ce5597effe6382cb5a189e915ff777f2eb76390c80fef4a790de477fc24634f7/shm",
+                "options": [
+                    "rbind",
+                    "rprivate",
+                    "rw"
+                ]
+            },
+            {
+                "destination": "/var/run/secrets/kubernetes.io/serviceaccount",
+                "type": "bind",
+                "source": "/var/lib/kubelet/pods/3903ad86-dd5c-415f-9c1b-41f4518b1341/volumes/kubernetes.io~projected/kube-api-access-pqdc5",
+                "options": [
+                    "rbind",
+                    "rprivate",
+                    "ro"
+                ]
+            }
+        ],
+        "annotations": {
+            "io.kubernetes.cri.container-name": "mypod",
+            "io.kubernetes.cri.container-type": "container",
+            "io.kubernetes.cri.image-name": "docker.io/library/busybox:latest",
+            "io.kubernetes.cri.sandbox-id": "ce5597effe6382cb5a189e915ff777f2eb76390c80fef4a790de477fc24634f7",
+            "io.kubernetes.cri.sandbox-name": "mypod",
+            "io.kubernetes.cri.sandbox-namespace": "default",
+            "io.kubernetes.cri.sandbox-uid": "3903ad86-dd5c-415f-9c1b-41f4518b1341"
+        },
+        "linux": {
+            "resources": {
+                "devices": [
+                    {
+                        "allow": false,
+                        "access": "rwm"
+                    }
+                ],
+                "memory": {},
+                "cpu": {
+                    "shares": 2,
+                    "period": 100000
+                }
+            },
+            "cgroupsPath": "kubepods-besteffort-pod3903ad86_dd5c_415f_9c1b_41f4518b1341.slice:cri-containerd:9e62823917b030d7bbd1640adf2a091e06150beda600b145eb1fd92f1b983ff0",
+            "namespaces": [
+                {
+                    "type": "pid"
+                },
+                {
+                    "type": "ipc",
+                    "path": "/proc/689192/ns/ipc"
+                },
+                {
+                    "type": "uts",
+                    "path": "/proc/689192/ns/uts"
+                },
+                {
+                    "type": "mount"
+                },
+                {
+                    "type": "network",
+                    "path": "/proc/689192/ns/net"
+                }
+            ],
+            "maskedPaths": [
+                "/proc/acpi",
+                "/proc/kcore",
+                "/proc/keys",
+                "/proc/latency_stats",
+                "/proc/timer_list",
+                "/proc/timer_stats",
+                "/proc/sched_debug",
+                "/proc/scsi",
+                "/sys/firmware"
+            ],
+            "readonlyPaths": [
+                "/proc/asound",
+                "/proc/bus",
+                "/proc/fs",
+                "/proc/irq",
+                "/proc/sys",
+                "/proc/sysrq-trigger"
+            ]
+        }
+    }
+}
+
+
+# kubectl get pod
+NAME    READY   STATUS    RESTARTS   AGE
+mypod   1/1     Running   0          5m14s
+# kubectl exec -it mypod /bin/sh
+kubectl exec [POD] [COMMAND] is DEPRECATED and will be removed in a future version. Use kubectl exec [POD] -- [COMMAND] instead.
+/ # 
+/ # exit
+
+# kubectl exec -it mypod -- /bin/sh
+/ # ps x
+PID   USER     TIME  COMMAND
+    1 root      0:00 /bin/sh -c echo "hello,world!" && sleep 3h
+   11 root      0:00 /bin/sh
+   17 root      0:00 ps x
+/ # exit
+
+# kubectl exec -it mypod --
+--as                        --container                 --password                  --token
+--as-group                  --context                   --pod-running-timeout       --user
+--as-uid                    --filename                  --profile                   --username
+--cache-dir                 --insecure-skip-tls-verify  --profile-output            --v
+--certificate-authority     --kubeconfig                --quiet                     --vmodule
+--client-certificate        --log-flush-frequency       --request-timeout           --warnings-as-errors
+--client-key                --match-server-version      --server                    
+--cluster                   --namespace                 --tls-server-name           
+
+# kubectl exec -it mypod --container mypod -- /bin/sh
+/ # ps x
+PID   USER     TIME  COMMAND
+    1 root      0:00 /bin/sh -c echo "hello,world!" && sleep 3h
+   18 root      0:00 /bin/sh
+   24 root      0:00 ps x
+/ # exit
+
+# kubectl get pod -owide
+NAME    READY   STATUS    RESTARTS   AGE     IP             NODE          NOMINATED NODE   READINESS GATES
+mypod   1/1     Running   0          6m58s   172.16.94.65   k8s-docker2   <none>           <none>
+
+
+```
+
+
+
+
+
+
+
+
 
 #### 8.2.
 
