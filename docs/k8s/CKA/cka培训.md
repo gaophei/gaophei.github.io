@@ -5132,11 +5132,11 @@ If a container has a preStop hook configured, this hook runs before the containe
 
 
 
-
+####  8.2.示例
 
 ```bash
-第一种模式的Pod：
-vi mypod.yaml
+第一个Pod：
+# vi mypod.yaml
 ```
 
 ```yaml
@@ -5547,20 +5547,282 @@ mypod   1/1     Running   0          6m58s   172.16.94.65   k8s-docker2   <none>
 
 
 
+```bash
+第二个pod：
+通过以下方式创建：
+Kubectl apply -f- <<EOF
+...省略内容...
+EOF
 
+状态是Succeeded
+```
 
+```bash
+# kubectl apply -f- <<EOF
+apiVersion: v1
+kind: Pod
+metadata:
+  name: hello
+  namespace: default
+spec:
+  restartPolicy: Never
+  containers:
+  - name: hello
+    image: hello-world
+EOF
 
+pod/hello created
+# kubectl get pod
+NAME    READY   STATUS              RESTARTS        AGE
+hello   0/1     ContainerCreating   0               5s
+mypod   1/1     Running             31 (124m ago)   3d23h
+# kubectl get pod
+NAME    READY   STATUS      RESTARTS        AGE
+hello   0/1     Completed   0               8s
+mypod   1/1     Running     31 (124m ago)   3d23h
 
-
-
-#### 8.2.
-
+# kubectl describe pod hello 
+Name:             hello
+Namespace:        default
+Priority:         0
+Service Account:  default
+Node:             k8s-docker1/192.168.1.235
+Start Time:       Sun, 12 Mar 2023 21:22:50 +0800
+Labels:           <none>
+Annotations:      cni.projectcalico.org/containerID: 88ee28d450acd0ae81797c376e21e348b14acf53d0af31b79cde9d4036cb3566
+                  cni.projectcalico.org/podIP: 
+                  cni.projectcalico.org/podIPs: 
+Status:           `Succeeded`
+IP:               172.16.77.195
+IPs:
+  IP:  172.16.77.195
+Containers:
+  hello:
+    Container ID:   containerd://605935380b92a9a55d74604bc4a1712989246c69660b91fc68db086db2278910
+    Image:          hello-world
+    Image ID:       docker.io/library/hello-world@sha256:6e8b6f026e0b9c419ea0fd02d3905dd0952ad1feea67543f525c73a0a790fefb
+    Port:           <none>
+    Host Port:      <none>
+    State:          `Terminated`
+      Reason:       Completed
+      Exit Code:    0
+      Started:      Sun, 12 Mar 2023 21:22:56 +0800
+      Finished:     Sun, 12 Mar 2023 21:22:56 +0800
+    Ready:          False
+    Restart Count:  0
+    Environment:    <none>
+    Mounts:
+      /var/run/secrets/kubernetes.io/serviceaccount from kube-api-access-6t87l (ro)
+Conditions:
+  Type              Status
+  Initialized       True 
+  Ready             False 
+  ContainersReady   False 
+  PodScheduled      True 
+Volumes:
+  kube-api-access-6t87l:
+    Type:                    Projected (a volume that contains injected data from multiple sources)
+    TokenExpirationSeconds:  3607
+    ConfigMapName:           kube-root-ca.crt
+    ConfigMapOptional:       <nil>
+    DownwardAPI:             true
+QoS Class:                   BestEffort
+Node-Selectors:              <none>
+Tolerations:                 node.kubernetes.io/not-ready:NoExecute op=Exists for 300s
+                             node.kubernetes.io/unreachable:NoExecute op=Exists for 300s
+Events:
+  Type    Reason     Age   From               Message
+  ----    ------     ----  ----               -------
+  Normal  Scheduled  17s   default-scheduler  Successfully assigned default/hello to k8s-docker1
+  Normal  Pulling    16s   kubelet            Pulling image "hello-world"
+  Normal  Pulled     11s   kubelet            Successfully pulled image "hello-world" in 5.021766508s
+  Normal  Created    11s   kubelet            Created container hello
+  Normal  Started    11s   kubelet            Started container hello
+```
 
 
 ### 9.标签和标签选择器
-#### 9.1.
+#### 9.1.标签
 
-#### 9.2.
+```
+---Label是附在kubernetes对象(如Pod，deployment等)上的键值对(key-value)，可以在创建时指定，也可以在创建后指定
+---Label的值本身不具备具体含义，但可以通过label来筛选对象特定的子集，源于管理
+---每一个对象可以有多个标签
+
+例如：
+"metadata": {
+  "labels": {
+    "key1" : "value1",
+    "key2" : "value2"
+  }
+}
+```
+
+![image-20230312214437754](cka培训截图\image-20230312214437754.png)
+
+```
+标签的语法：
+---标签由一组键值对组成
+---Label key的组成：
+   -key必须是唯一的
+   -可以使用前缀，使用/分割，前缀必须是DNS子域，不得超过253个字符，系统中的自动化组件创建的label必须指定前缀，
+    Kubernetes.io/由kubernetes保留
+   -不得超过63个字符
+   -起始必须是字母(大小写都可以)或数字，中间可以有连字符、下划线和点
+---Label value的组成：
+   -不得超过63个字符
+   -起始必须是字母(大小写都可以)或数字，中间可以有连字符、下划线和点
+```
+
+```bash
+# kubectl get nodes
+NAME          STATUS   ROLES           AGE    VERSION
+k8s-docker1   Ready    worker          5d3h   v1.25.4
+k8s-docker2   Ready    worker          5d3h   v1.25.4
+k8s-master    Ready    control-plane   5d3h   v1.25.4
+# kubectl get nodes --show-
+--show-kind            --show-labels          --show-managed-fields  
+# kubectl get nodes --show-labels 
+NAME          STATUS   ROLES           AGE    VERSION   LABELS
+k8s-docker1   Ready    worker          5d3h   v1.25.4   beta.kubernetes.io/arch=amd64,beta.kubernetes.io/os=linux,kubernetes.io/arch=amd64,kubernetes.io/hostname=k8s-docker1,kubernetes.io/os=linux,node-role.kubernetes.io/worker=
+k8s-docker2   Ready    worker          5d3h   v1.25.4   beta.kubernetes.io/arch=amd64,beta.kubernetes.io/os=linux,kubernetes.io/arch=amd64,kubernetes.io/hostname=k8s-docker2,kubernetes.io/os=linux,node-role.kubernetes.io/worker=
+k8s-master    Ready    control-plane   5d3h   v1.25.4   beta.kubernetes.io/arch=amd64,beta.kubernetes.io/os=linux,kubernetes.io/arch=amd64,kubernetes.io/hostname=k8s-master,kubernetes.io/os=linux,node-role.kubernetes.io/control-plane=,node.kubernetes.io/exclude-from-external-load-balancers=
+
+# kubectl get pod --show-labels 
+NAME    READY   STATUS      RESTARTS        AGE     LABELS
+hello   0/1     Completed   0               30m     <none>
+mypod   1/1     Running     31 (154m ago)   3d23h   <none>
+```
+
+
+
+```bash
+创建pod时指定标签：
+---labelpod.yaml文件创建一个pod
+---在创建时，指定两个label
+   app: busybox
+   version: new
+```
+
+```yaml
+apiVersion: v1
+kind: Pod
+metadata: 
+  name: labelpod
+  labels:
+    app: busybox
+    version: new
+  namespace: default
+spec:
+  containers:
+  - name: labelpod
+    image: busybox
+    args:
+    - /bin/sh
+    - -c
+    - echo "labelpod" && sleep 3000
+```
+
+```bash
+# kubectl apply -f labelpod.yaml 
+pod/labelpod created
+# kubectl get pod 
+NAME       READY   STATUS              RESTARTS        AGE
+hello      0/1     Completed           0               34m
+labelpod   0/1     ContainerCreating   0               4s
+mypod      1/1     Running             31 (159m ago)   3d23h
+# kubectl get pod 
+NAME       READY   STATUS      RESTARTS        AGE
+hello      0/1     Completed   0               35m
+labelpod   1/1     Running     0               9s
+mypod      1/1     Running     31 (159m ago)   3d23h
+
+# kubectl logs -f labelpod 
+labelpod
+^C
+
+# kubectl get pod --show-labels 
+NAME       READY   STATUS      RESTARTS        AGE     LABELS
+hello      0/1     Completed   0               35m     <none>
+labelpod   1/1     Running     0               27s     app=busybox,version=new
+mypod      1/1     Running     31 (159m ago)   3d23h   <none>
+
+```
+
+
+
+- 同样可以使用label指令在已创建的对象上添加标签
+
+```bash
+# kubectl get pod --show-labels 
+NAME       READY   STATUS      RESTARTS        AGE     LABELS
+hello      0/1     Completed   0               9s      <none>
+labelpod   1/1     Running     0               3m52s   app=busybox,version=new
+mypod      1/1     Running     31 (162m ago)   3d23h   <none>
+
+# kubectl label pods labelpod time=2023
+pod/labelpod labeled
+
+# kubectl get pods --show-labels
+NAME       READY   STATUS      RESTARTS        AGE     LABELS
+hello      0/1     Completed   0               5m14s   <none>
+labelpod   1/1     Running     0               8m57s   app=busybox,time=2023,version=new
+mypod      1/1     Running     31 (168m ago)   3d23h   <none>
+
+# kubectl label pods labelpod time=2025
+error: 'time' already has a value (2023), and --overwrite is false
+
+# kubectl get pods --show-labels
+NAME       READY   STATUS      RESTARTS        AGE     LABELS
+hello      0/1     Completed   0               6m58s   <none>
+labelpod   1/1     Running     0               10m     app=busybox,time=2023,version=new
+mypod      1/1     Running     31 (169m ago)   3d23h   <none>
+
+# kubectl label pods labelpod time=2025 --overwrite 
+pod/labelpod labeled
+
+# kubectl get pods --show-labels
+NAME       READY   STATUS      RESTARTS        AGE     LABELS
+hello      0/1     Completed   0               7m27s   <none>
+labelpod   1/1     Running     0               11m     app=busybox,time=2025,version=new
+mypod      1/1     Running     31 (170m ago)   3d23h   <none>
+```
+
+
+
+- 删除标签
+
+```bash
+# kubectl get pods --show-labels
+NAME       READY   STATUS      RESTARTS        AGE     LABELS
+hello      0/1     Completed   0               7m27s   <none>
+labelpod   1/1     Running     0               11m     app=busybox,time=2025,version=new
+mypod      1/1     Running     31 (170m ago)   3d23h   <none>
+
+# kubectl label pods labelpod time=2025-
+error: invalid label value: "time=2025-": a valid label must be an empty string or consist of alphanumeric characters, '-', '_' or '.', and must start and end with an alphanumeric character (e.g. 'MyValue',  or 'my_value',  or '12345', regex used for validation is '(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])?')
+
+# kubectl label pods labelpod time-
+pod/labelpod unlabeled
+
+# kubectl get pods --show-labels
+NAME       READY   STATUS      RESTARTS        AGE     LABELS
+hello      0/1     Completed   0               8m52s   <none>
+labelpod   1/1     Running     0               12m     app=busybox,version=new
+mypod      1/1     Running     31 (171m ago)   3d23h   <none>
+```
+
+
+
+
+
+#### 9.2.标签选择器
+
+
+
+
+
+
 
 
 ### 10.Service服务发现
@@ -5661,12 +5923,13 @@ mypod   1/1     Running   0          6m58s   172.16.94.65   k8s-docker2   <none>
 
 #### A5.typora快捷键
 
-| step |                    快捷键                     |      FUNC      |
-| :--: | :-------------------------------------------: | :------------: |
-|  1   |         <kbd>crtl</kbd>-<kbd>T</kbd>          |    插入表格    |
-|  2   | <kbd>crtl</kbd>-<kbd>shift</kbd>-<kbd>K</kbd> |   添加代码块   |
-|  3   |   <kbd>-</kbd><kbd>-</kbd><kbd>-</kbd> 回车   | 添加一行分隔符 |
-|  4   |                                               |                |
+| step |                            快捷键                            |      FUNC      |
+| :--: | :----------------------------------------------------------: | :------------: |
+|  1   |                 <kbd>crtl</kbd>-<kbd>T</kbd>                 |    插入表格    |
+|  2   |        <kbd>crtl</kbd>-<kbd>shift</kbd>-<kbd>K</kbd>         |   添加代码块   |
+|  3   |          <kbd>-</kbd><kbd>-</kbd><kbd>-</kbd> 回车           | 添加一行分隔符 |
+|  4   |        <kbd>crtl</kbd>-<kbd>shift</kbd>-<kbd>]</kbd>         |     小黑点     |
+|  5   | <kbd>crtl</kbd>-<kbd>shift</kbd>-<kbd>]</kbd>，然后按回车+TAB键 |   空心小圆点   |
 
 ```
 
