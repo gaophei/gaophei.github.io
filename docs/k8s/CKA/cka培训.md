@@ -5812,17 +5812,361 @@ labelpod   1/1     Running     0               12m     app=busybox,version=new
 mypod      1/1     Running     31 (171m ago)   3d23h   <none>
 ```
 
-
-
-
-
 #### 9.2.标签选择器
 
+```
+Labels Selectors:
+---标签不具备唯一性，在通常情况下，多个不的对象有着相同的标签
+---通过标签选择器，用户或客户端可以指定批量的对象进行操作
+   标签选择器也是kubernetes的核心分组方式
+---目前支持两种标签选择器：
+   基于等值的(equality-based)和基于集合的(set-based)
+```
+
+- 基于等值的标签选择器
+
+```
+Equality-based标签选择器允许用标签的key和values过滤
+有三种运算符可以使用：=/==/!=
+前两种运算符同义，代表相等，后一种代表不相等
+```
+
+```bash
+# kubectl get -h|grep -A 2 ^\ \ \ \ -l
+    -l, --selector='':
+	Selector (label query) to filter on, supports '=', '==', and '!='.(e.g. -l key1=value1,key2=value2). Matching objects must satisfy all of the specified label constraints.
+
+
+# kubectl get pod --show-labels 
+NAME        READY   STATUS      RESTARTS         AGE     LABELS
+hello       0/1     Completed   0                12h     <none>
+labelpod    1/1     Running     15 (4m59s ago)   12h     app=busybox,version=new
+labelpod1   1/1     Running     0                3m8s    app=busybox,version=product
+labelpod2   1/1     Running     0                3m8s    app=busybox,version=new
+mypod       1/1     Running     36 (14m ago)     4d12h   <none>
+
+# kubectl get pods -l version=new
+NAME        READY   STATUS    RESTARTS         AGE
+labelpod    1/1     Running   15 (5m14s ago)   12h
+labelpod2   1/1     Running   0                3m23s
+# kubectl get pods -l version=new --show-labels
+NAME        READY   STATUS    RESTARTS         AGE     LABELS
+labelpod    1/1     Running   15 (5m25s ago)   12h     app=busybox,version=new
+labelpod2   1/1     Running   0                3m34s   app=busybox,version=new
+
+# kubectl get pods -l version!=new --show-labels
+NAME        READY   STATUS      RESTARTS       AGE     LABELS
+hello       0/1     Completed   0              12h     <none>
+labelpod1   1/1     Running     0              3m41s   app=busybox,version=product
+mypod       1/1     Running     36 (15m ago)   4d12h   <none>
+
+# kubectl get pods -l version=product --show-labels
+NAME        READY   STATUS    RESTARTS   AGE     LABELS
+labelpod1   1/1     Running   0          3m49s   app=busybox,version=product
+
+```
 
 
 
+- 基于集合标签选择器
+
+```yaml
+Set-based的标签条件允许使用一组value来过滤key
+支持三种操作符：in/notin/exists
+其中exists仅针对key符号
+
+enviroment in (production, qa)
+tier notin (frontend, backend)
+partition
+!partition
+
+两种选择器也可以混用，如：
+partition in (customerA, customerB), enviroment!=qa
+```
 
 
+
+- 标签列
+
+```bash
+# kubectl label pods labelpod time=2021
+pod/labelpod labeled
+# kubectl label pods labelpod1 time=2022
+pod/labelpod1 labeled
+# kubectl label pods labelpod2 time=2023
+pod/labelpod2 labeled
+
+# kubectl get pods --show-labels
+NAME        READY   STATUS      RESTARTS       AGE     LABELS
+hello       0/1     Completed   0              12h     <none>
+labelpod    1/1     Running     15 (18m ago)   12h     app=busybox,time=2021,version=new
+labelpod1   1/1     Running     0              16m     app=busybox,time=2022,version=product
+labelpod2   1/1     Running     0              16m     app=busybox,time=2023,version=new
+mypod       1/1     Running     36 (27m ago)   4d12h   <none>
+
+# kubectl get  pods  -L version --show-labels
+NAME        READY   STATUS      RESTARTS       AGE     VERSION   LABELS
+hello       0/1     Completed   0              12h               <none>
+labelpod    1/1     Running     15 (19m ago)   12h     new       app=busybox,time=2021,version=new
+labelpod1   1/1     Running     0              17m     product   app=busybox,time=2022,version=product
+labelpod2   1/1     Running     0              17m     new       app=busybox,time=2023,version=new
+mypod       1/1     Running     36 (29m ago)   4d12h             <none>
+
+# kubectl get  pods  -L time --show-labels
+NAME        READY   STATUS      RESTARTS       AGE     TIME   LABELS
+hello       0/1     Completed   0              12h            <none>
+labelpod    1/1     Running     15 (19m ago)   12h     2021   app=busybox,time=2021,version=new
+labelpod1   1/1     Running     0              17m     2022   app=busybox,time=2022,version=product
+labelpod2   1/1     Running     0              17m     2023   app=busybox,time=2023,version=new
+mypod       1/1     Running     36 (29m ago)   4d12h          <none>
+
+```
+
+
+
+- 给节点打上标签
+
+```bash
+# kubectl get nodes
+NAME          STATUS   ROLES           AGE     VERSION
+k8s-docker1   Ready    worker          5d16h   v1.25.4
+k8s-docker2   Ready    worker          5d16h   v1.25.4
+k8s-master    Ready    control-plane   5d17h   v1.25.4
+
+# kubectl get nodes --show-labels
+NAME          STATUS   ROLES           AGE     VERSION   LABELS
+k8s-docker1   Ready    worker          5d16h   v1.25.4   beta.kubernetes.io/arch=amd64,beta.kubernetes.io/os=linux,kubernetes.io/arch=amd64,kubernetes.io/hostname=k8s-docker1,kubernetes.io/os=linux,node-role.kubernetes.io/worker=
+k8s-docker2   Ready    worker          5d16h   v1.25.4   beta.kubernetes.io/arch=amd64,beta.kubernetes.io/os=linux,kubernetes.io/arch=amd64,kubernetes.io/hostname=k8s-docker2,kubernetes.io/os=linux,node-role.kubernetes.io/worker=
+k8s-master    Ready    control-plane   5d17h   v1.25.4   beta.kubernetes.io/arch=amd64,beta.kubernetes.io/os=linux,kubernetes.io/arch=amd64,kubernetes.io/hostname=k8s-master,kubernetes.io/os=linux,node-role.kubernetes.io/control-plane=,node.kubernetes.io/exclude-from-external-load-balancers=
+
+# kubectl label nodes k8s-docker1 env=test
+node/k8s-docker1 labeled
+
+# kubectl get nodes --show-labels
+NAME          STATUS   ROLES           AGE     VERSION   LABELS
+k8s-docker1   Ready    worker          5d16h   v1.25.4   beta.kubernetes.io/arch=amd64,beta.kubernetes.io/os=linux,env=test,kubernetes.io/arch=amd64,kubernetes.io/hostname=k8s-docker1,kubernetes.io/os=linux,node-role.kubernetes.io/worker=
+k8s-docker2   Ready    worker          5d16h   v1.25.4   beta.kubernetes.io/arch=amd64,beta.kubernetes.io/os=linux,kubernetes.io/arch=amd64,kubernetes.io/hostname=k8s-docker2,kubernetes.io/os=linux,node-role.kubernetes.io/worker=
+k8s-master    Ready    control-plane   5d17h   v1.25.4   beta.kubernetes.io/arch=amd64,beta.kubernetes.io/os=linux,kubernetes.io/arch=amd64,kubernetes.io/hostname=k8s-master,kubernetes.io/os=linux,node-role.kubernetes.io/control-plane=,node.kubernetes.io/exclude-from-external-load-balancers=
+
+# kubectl get nodes -L env
+NAME          STATUS   ROLES           AGE     VERSION   ENV
+k8s-docker1   Ready    worker          5d16h   v1.25.4   test
+k8s-docker2   Ready    worker          5d16h   v1.25.4   
+k8s-master    Ready    control-plane   5d17h   v1.25.4   
+
+# kubectl get nodes -l env=test
+NAME          STATUS   ROLES    AGE     VERSION
+k8s-docker1   Ready    worker   5d16h   v1.25.4
+
+# kubectl get nodes -l env=test --show-labels 
+NAME          STATUS   ROLES    AGE     VERSION   LABELS
+k8s-docker1   Ready    worker   5d16h   v1.25.4   beta.kubernetes.io/arch=amd64,beta.kubernetes.io/os=linux,env=test,kubernetes.io/arch=amd64,kubernetes.io/hostname=k8s-docker1,kubernetes.io/os=linux,node-role.kubernetes.io/worker=
+
+```
+
+
+
+- 节点调度三种方式
+
+```yaml
+1)通过nodeName指定节点
+nodeName: k8s-docker1
+
+2)通过nodeSelector选择节点
+nodeSelector:
+  disk=ssd
+  
+3)通过 node affinity优先选择节点
+affinity:
+  nodeAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      nodeSelectorTerms:
+      - key: disk
+        operator: In
+        values:
+        - ssd
+```
+
+- yaml示例
+
+  - nodeName
+
+  ```yaml
+  apiVersion: apps/v1
+  kind: Deployment
+  metadata:
+    name: nginx-dep1
+    namespace: default
+    labels:
+      app: nginx
+  spec:
+    replicas: 3
+    selector:
+      matchLabels:
+        app: nginx
+    template:
+      metadata:
+        labels:
+          app: nginx
+      spec:
+        nodeName: k8s-docker1
+        containers:
+          - name: nginx
+            image: nginx:1.7.9
+            ports:
+            - containerPort: 80
+  ```
+
+  ```bash
+  # kubectl apply -f nodeName.yaml 
+  deployment.apps/nginx-dep1 created
+  
+  # kubectl get deployments.apps 
+  NAME         READY   UP-TO-DATE   AVAILABLE   AGE
+  nginx-dep1   3/3     3            3           71s
+  # kubectl get pods --show-labels -l app=nginx
+  NAME                          READY   STATUS    RESTARTS   AGE   LABELS
+  nginx-dep1-5d579b96c7-9vjms   1/1     Running   0          92s   app=nginx,pod-template-hash=5d579b96c7
+  nginx-dep1-5d579b96c7-n8cd2   1/1     Running   0          92s   app=nginx,pod-template-hash=5d579b96c7
+  nginx-dep1-5d579b96c7-s55vx   1/1     Running   0          92s   app=nginx,pod-template-hash=5d579b96c7
+  # kubectl get pods --show-labels -l app=nginx -owide
+  NAME                          READY   STATUS    RESTARTS   AGE    IP              NODE          NOMINATED NODE   READINESS GATES   LABELS
+  nginx-dep1-5d579b96c7-9vjms   1/1     Running   0          111s   172.16.77.200   k8s-docker1   <none>           <none>            app=nginx,pod-template-hash=5d579b96c7
+  nginx-dep1-5d579b96c7-n8cd2   1/1     Running   0          111s   172.16.77.199   k8s-docker1   <none>           <none>            app=nginx,pod-template-hash=5d579b96c7
+  nginx-dep1-5d579b96c7-s55vx   1/1     Running   0          111s   172.16.77.201   k8s-docker1   <none>           <none>            app=nginx,pod-template-hash=5d579b96c7
+  
+  # kubectl get pods -owide
+  NAME                          READY   STATUS      RESTARTS        AGE     IP              NODE          NOMINATED NODE   READINESS GATES
+  nginx-dep1-5d579b96c7-9vjms   1/1     Running     0               2m4s    172.16.77.200   k8s-docker1   <none>           <none>
+  nginx-dep1-5d579b96c7-n8cd2   1/1     Running     0               2m4s    172.16.77.199   k8s-docker1   <none>           <none>
+  nginx-dep1-5d579b96c7-s55vx   1/1     Running     0               2m4s    172.16.77.201   k8s-docker1   <none>           <none>
+  ```
+
+  
+
+  - nodeSelector
+
+  ```yaml
+  apiVersion: apps/v1
+  kind: Deployment
+  metadata:
+    name: nginx-dep2
+    namespace: default
+    labels:
+      app: nginx
+  spec:
+    replicas: 3
+    selector:
+      matchLabels:
+        app: nginx
+    template:
+      metadata:
+        labels:
+          app: nginx
+      spec:
+        nodeSelector:
+          env: ssd
+        containers:
+          - name: nginx
+            image: nginx:1.7.9
+            ports:
+            - containerPort: 80
+  ```
+
+  ```bash
+  # kubectl get nodes -L env
+  NAME          STATUS   ROLES           AGE     VERSION   ENV
+  k8s-docker1   Ready    worker          5d17h   v1.25.4   test
+  k8s-docker2   Ready    worker          5d17h   v1.25.4   
+  k8s-master    Ready    control-plane   5d17h   v1.25.4   
+  
+  # kubectl label nodes k8s-docker2 env=ssd
+  node/k8s-docker2 labeled
+  
+  # kubectl get nodes -L env
+  NAME          STATUS   ROLES           AGE     VERSION   ENV
+  k8s-docker1   Ready    worker          5d17h   v1.25.4   test
+  k8s-docker2   Ready    worker          5d17h   v1.25.4   ssd
+  k8s-master    Ready    control-plane   5d17h   v1.25.4   
+  
+  # kubectl apply -f nodeSelector.yaml 
+  deployment.apps/nginx-dep2 created
+  
+  # kubectl get pods -owide
+  NAME                          READY   STATUS      RESTARTS       AGE     IP              NODE          NOMINATED NODE   READINESS GATES
+  nginx-dep1-5d579b96c7-9vjms   1/1     Running     0              10m     172.16.77.200   k8s-docker1   <none>           <none>
+  nginx-dep1-5d579b96c7-n8cd2   1/1     Running     0              10m     172.16.77.199   k8s-docker1   <none>           <none>
+  nginx-dep1-5d579b96c7-s55vx   1/1     Running     0              10m     172.16.77.201   k8s-docker1   <none>           <none>
+  nginx-dep2-579fb45b55-6r66n   1/1     Running     0              34s     172.16.94.68    k8s-docker2   <none>           <none>
+  nginx-dep2-579fb45b55-mqf78   1/1     Running     0              34s     172.16.94.67    k8s-docker2   <none>           <none>
+  nginx-dep2-579fb45b55-xv2x5   1/1     Running     0              34s     172.16.94.69    k8s-docker2   <none>           <none>
+  
+  ```
+
+  
+
+  - node affinity
+
+  ```yaml
+  apiVersion: apps/v1
+  kind: Deployment
+  metadata:
+    name: nginx-dep3
+    namespace: default
+    labels:
+      app: nginx
+  spec:
+    replicas: 3
+    selector:
+      matchLabels:
+        app: nginx
+    template:
+      metadata:
+        labels:
+          app: nginx
+      spec:
+        affinity:
+          nodeAffinity:
+            requiredDuringSchedulingIgnoredDuringExecution:
+              nodeSelectorTerms:
+              - matchExpressions:
+                - key: env
+                  operator: In
+                  values:
+                  - test
+        containers:
+          - name: nginx
+            image: nginx:1.7.9
+            ports:
+            - containerPort: 80 
+  
+  ```
+
+  ```bash
+  # kubectl get nodes -L env
+  NAME          STATUS   ROLES           AGE     VERSION   ENV
+  k8s-docker1   Ready    worker          5d17h   v1.25.4   test
+  k8s-docker2   Ready    worker          5d17h   v1.25.4   ssd
+  k8s-master    Ready    control-plane   5d17h   v1.25.4   
+  
+  # kubectl apply -f nodeAffinity.yaml 
+  deployment.apps/nginx-dep3 created
+  
+  # kubectl get pods -owide
+  NAME                          READY   STATUS      RESTARTS       AGE     IP              NODE          NOMINATED NODE   READINESS GATES
+  nginx-dep1-5d579b96c7-9vjms   1/1     Running     0              19m     172.16.77.200   k8s-docker1   <none>           <none>
+  nginx-dep1-5d579b96c7-n8cd2   1/1     Running     0              19m     172.16.77.199   k8s-docker1   <none>           <none>
+  nginx-dep1-5d579b96c7-s55vx   1/1     Running     0              19m     172.16.77.201   k8s-docker1   <none>           <none>
+  nginx-dep2-579fb45b55-6r66n   1/1     Running     0              9m4s    172.16.94.68    k8s-docker2   <none>           <none>
+  nginx-dep2-579fb45b55-mqf78   1/1     Running     0              9m4s    172.16.94.67    k8s-docker2   <none>           <none>
+  nginx-dep2-579fb45b55-xv2x5   1/1     Running     0              9m4s    172.16.94.69    k8s-docker2   <none>           <none>
+  nginx-dep3-5468bc7999-9xl9z   1/1     Running     0              3m27s   172.16.77.203   k8s-docker1   <none>           <none>
+  nginx-dep3-5468bc7999-cttrv   1/1     Running     0              3m27s   172.16.77.204   k8s-docker1   <none>           <none>
+  nginx-dep3-5468bc7999-nw6m2   1/1     Running     0              3m27s   172.16.77.202   k8s-docker1   <none>           <none>
+  
+  ```
+
+  
 
 
 ### 10.Service服务发现
@@ -5912,12 +6256,13 @@ mypod      1/1     Running     31 (171m ago)   3d23h   <none>
 
 
 
-| step |    快捷键     |                FUNC                |
-| :--: | :-----------: | :--------------------------------: |
-|  1   |   :%s/^/#/g   |         全部行首快速添加#          |
-|  2   |   :%s/$/#/g   |         全部行尾快速添加#          |
-|  3   | :r !seq 1 100 |              递归数字              |
-|  4   | :r dockerfile | 导入所在文件夹下的dockerfile的内容 |
+| step |      快捷键       |                FUNC                 |
+| :--: | :---------------: | :---------------------------------: |
+|  1   |     :%s/^/#/g     |          全部行首快速添加#          |
+|  2   |     :%s/$/#/g     |          全部行尾快速添加#          |
+|  3   |   :r !seq 1 100   |              递归数字               |
+|  4   |   :r dockerfile   | 导入所在文件夹下的dockerfile的内容  |
+|  5   | :set paste ---> i | 解决在vim中直接粘贴内容时的缩进错乱 |
 
 
 
