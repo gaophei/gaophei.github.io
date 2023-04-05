@@ -310,6 +310,66 @@ AH00558: httpd: Could not reliably determine the server's fully qualified domain
 # curl localhost:8080
 <html><body><h1>It works!</h1></body></html>
 ```
+###### 1.4.1.1.运行两个容器（wordpress+mysql)
+```bash
+# docker run -d -P --name mysql5.7 -e MYSQL_ROOT_PASSWORD=wordpress -e MYSQL_DATABASE=wordpress mysql:5.7 
+
+# docker run -d -P --name wordpress -e WORDPRESS_DB_HOST=192.168.1.222 -e WORDPRESS_DB_USER=root -e WORDPRESS_DB_PASSWORD=wordpress -e WORDPRESS_DB_NAME=wordpress wordpress
+```
+```bash
+# docker run -d -P --name mysql5.7 -e MYSQL_ROOT_PASSWORD=wordpress -e MYSQL_DATABASE=wordpress mysql:5.7 
+f102f6a4ea1d0d1c4f8d3c6aebe8ad6f3da7fd06477ca90d1ae5786dadd57df0
+
+# docker ps|grep mysql
+f102f6a4ea1d        mysql:5.7                                                            "docker-entrypoint.s…"   About a minute ago   Up About a minute   0.0.0.0:32769->3306/tcp, 0.0.0.0:32768->33060/tcp   mysql5.7
+
+# docker run -d -P --name wordpress -e WORDPRESS_DB_HOST=192.168.1.222:32769 -e WORDPRESS_DB_USER=root -e WORDPRESS_DB_PASSWORD=wordpress -e WORDPRESS_DB_NAME=wordpress wordpress
+Unable to find image 'wordpress:latest' locally
+
+latest: Pulling from library/wordpress
+a2abf6c4d29d: Already exists 
+c5608244554d: Pull complete 
+2d07066487a0: Pull complete 
+1b6dfaf1958c: Pull complete 
+32c5e6a60073: Pull complete 
+90cf855b27cc: Pull complete 
+8b0f1068c586: Pull complete 
+5355461305e8: Pull complete 
+ad1eec592342: Pull complete 
+e03fbc76cb78: Pull complete 
+1f5796e48b39: Pull complete 
+72fbe8e1d4e7: Pull complete 
+96edece66175: Pull complete 
+5f46f0743de2: Pull complete 
+c9f9671a5e1f: Pull complete 
+3f543dcd35b1: Pull complete 
+c88e21a0c2a0: Pull complete 
+964b4457a910: Pull complete 
+0d55fb9a64ef: Pull complete 
+fb009ff7c567: Pull complete 
+4f058a67a50d: Pull complete 
+Digest: sha256:fc33b796b04162a0db2e9ea9b4c361a07058b21597b1317ad9ab3ea4593de241
+Status: Downloaded newer image for wordpress:latest
+ac1e751deaac3f4172718cee82da84a77bf83ca556ab0dc67f2b945f389a6f09
+
+
+]# docker ps|grep wordpress
+ac1e751deaac        wordpress                                                            "docker-entrypoint.s…"   33 seconds ago      Up 32 seconds       0.0.0.0:32771->80/tcp                               wordpress
+
+# netstat -tnulp|grep 32771
+tcp6       0      0 :::32771                :::*                    LISTEN      22679/docker-proxy
+
+```
+
+
+
+![image-20230404100217637](cka培训截图\image-20230404100217637.png)
+
+![image-20230404100338931](cka培训截图\image-20230404100338931.png)
+
+
+
+![image-20230404101117365](cka培训截图\image-20230404101117365.png)
 
 ##### 1.4.2.容器的生命周期管理
 
@@ -6166,19 +6226,1572 @@ affinity:
   
   ```
 
+### 10.Service服务发现
+
+#### 10.1.Service基本概念
+
+- Pod的特征
+
+  - Pod有自己独立的IP
+  - Pod可以被创建、销毁
+  - 当扩缩容时，pod的数量会发生变更
+  - 当pod故障时，replicaset会创建新的pod
+  - 如何保证在pod进行如此多变化时，业务都能被访问？
+
+- 一种解决方案
+
+  - 通过逻辑对象
+
+  ![image-20230404103056871](cka培训截图\image-20230404103056871.png)
+
+- Service
+
+  - kubernetes service定义了这样一种抽象：
+
+  ​       逻辑上的一组pod，一种可以访问它们的策略---通常称为微服务
+
+  ​       这一组pod能够被service访问到，通常是通过Label Selector实现的
+
+  - Service的实现类型
+    - ClusterIP: 提供一个集群内部的虚拟IP地址以供pod访问(默认模式)
+    - NodePort: 在node上打开一个端口以供外部访问
+    - LoadBalancer: 通过外部的负载均衡器来访问
+
+- Service模型
+
+  ![image-20230404104124985](cka培训截图\image-20230404104124985.png)
+
+- Endpoint Controller
+
+  - 负责生成和维护所有endpoint对象的控制器
+  - 负责监听service和对应pod的变化
+  - 监听到service被删除，则删除和该service同名的endpoint对象
+  - 监听到新的service被创建，则根据新建service信息获取相关pod列表，然后创建对应endpoint对象
+  - 监听到service被更新，则根据更新后的service信息获取相关pod列表，然后更新对应endpoint对象
+  - 监听到pod事件，则更新对应的service的endpoint对象，将pod ip记录到endpoint中
+
+- kube-proxy iptables
+
+  ![image-20230404104915026](cka培训截图\image-20230404104915026.png)
+
+  ![image-20230404105632076](cka培训截图\image-20230404105632076.png)
+
+  - In this mode, kube-proxy watches the Kubernetes [control plane](https://kubernetes.io/docs/reference/glossary/?all=true#term-control-plane) for the addition and removal of Service and EndpointSlice [objects.](https://kubernetes.io/docs/concepts/overview/working-with-objects/kubernetes-objects/#kubernetes-objects) For each Service, it installs iptables rules, which capture traffic to the Service's `clusterIP` and `port`, and redirect that traffic to one of the Service's backend sets. For each endpoint, it installs iptables rules which select a backend Pod.
+
+  
+
+- kube-proxy ipvs
+
+  
+
+  ![image-20230404105952562](cka培训截图\image-20230404105952562.png)
+
+  - In `ipvs` mode, kube-proxy watches Kubernetes Services and EndpointSlices, calls `netlink` interface to create IPVS rules accordingly and synchronizes IPVS rules with Kubernetes Services and EndpointSlices periodically. This control loop ensures that IPVS status matches the desired state. When accessing a Service, IPVS directs traffic to one of the backend Pods.It uses a hash table as the underlying data structure and works in the kernel space.
+  - IPVS provides more options for balancing traffic to backend Pods; these are:
+    - `rr`: round-robin
+    - `lc`: least connection (smallest number of open connections)
+    - `dh`: destination hashing
+    - `sh`: source hashing
+    - `sed`: shortest expected delay
+    - `nq`: never queue
+
+- iptables VS IPVS
+
+![image-20230404111215321](cka培训截图\image-20230404111215321.png)
+
+#### 10.2.服务发现
+
+- 创建后端Deployment
+
+  ```bash
+  # kubectl create -f httpd.yaml
+  deployment.apps/httpd created
+  ```
+
+  
+
+  ```yaml
+  # httpd.yaml
+  apiVersion: apps/v1
+  kind: Deployment
+  metadata:
+    name: httpd
+    namespace: default
+  spec:
+    replicas: 3
+    selector:
+      matchLabels:
+        app: httpd
+    template:
+      metadata:
+        labels:
+          app: httpd
+      spec:
+        containers:
+        - name: httpd
+          image: httpd
+          ports:
+          - containerPort: 80
+  ```
+
+  ```bash
+  #第二种办法，直接创建deployment
+  # kubectl get pod
+  No resources found in default namespace.
+  
+  # kubectl create -f- <<EOF
+  apiVersion: apps/v1
+  kind: Deployment
+  metadata:
+    name: httpd
+    namespace: default
+  spec:
+    replicas: 3
+    selector:
+      matchLabels:
+        app: httpd
+    template:
+      metadata:
+        labels:
+          app: httpd
+      spec:
+        containers:
+        - name: httpd
+          image: httpd
+          ports:
+          - containerPort: 80
+  EOF
+  
+  ```
+
+  
+
+- 创建对应的service---默认为ClusterIP类型
+
+  - spec参数中添加selector字段，指定一组label的键值对，本实例中为app: httpd，该值和上面的deployment(httpd)中的相匹配
+  - ports参数中，需要指定两个端口：
+    - port为该service的端口，客户端访问该服务时使用
+    - targetPort为后端pod的端口，需要与之前创建的pod提供服务端口(即containerPort)一致
+
+  ```yam
+  #httpd-svc.yaml
+  apiVersion: v1
+  kind: Service
+  metadata:
+    name: httpd-svc
+    namespace: default
+  spec:
+    type: ClusterIP
+    selector:
+      app: httpd
+    ports:
+    - name: httpd-svc-port
+      protocol: TCP
+      port: 8080
+      targetPort: 80
+  ```
+
+  ```bash
+  # kubectl create -f httpd-svc.yaml
+  service/httpd-svc created
+  ```
+
+- 也可以两个yaml一起创建，中间加上---分割
+
+  ```bash
+  kubectl create -f- <<EOF
+  apiVersion: apps/v1
+  kind: Deployment
+  metadata:
+    name: httpd
+    namespace: default
+  spec:
+    replicas: 3
+    selector:
+      matchLabels:
+        app: httpd
+    template:
+      metadata:
+        labels:
+          app: httpd
+      spec:
+        containers:
+        - name: httpd
+          image: httpd
+          ports:
+          - containerPort: 80
+  ---
+  apiVersion: v1
+  kind: Service
+  metadata:
+    name: httpd-svc
+    namespace: default
+  spec:
+    type: ClusterIP
+    selector:
+      app: httpd
+    ports:
+    - name: httpd-svc-port
+      protocol: TCP
+      port: 8080
+      targetPort: 80
+  EOF
+  
+  ```
+
+  
+
+- 查看service
+
+  - 查看service简要信息
+
+    ```bash
+    # kubectl get service
+    NAME         TYPE        CLUSTER-IP       EXTERNAL-IP   PORT(S)    AGE
+    httpd-svc    ClusterIP   10.111.228.202   <none>        8080/TCP   108s
+    kubernetes   ClusterIP   10.96.0.1        <none>        443/TCP    27d
+    ```
+
+  - 测试service是否正常提供服务
+
+    ```bash
+    # curl 10.111.228.202:8080
+    <html><body><h1>It works!</h1></body></html>
+    ```
+
+  - 使用describe可以查看service详细信息
+
+    ```bash
+    # kubectl describe service httpd-svc 
+    Name:              httpd-svc
+    Namespace:         default
+    Labels:            <none>
+    Annotations:       <none>
+    Selector:          app=httpd
+    Type:              ClusterIP
+    IP Family Policy:  SingleStack
+    IP Families:       IPv4
+    IP:                10.111.228.202
+    IPs:               10.111.228.202
+    Port:              httpd-svc-port  8080/TCP
+    TargetPort:        80/TCP
+    Endpoints:         172.16.77.248:80,172.16.94.85:80,172.16.94.90:80
+    Session Affinity:  None
+    Events:            <none>
+    ```
+
+  - 查看endpoints
+
+    ```bash
+    # kubectl get endpoints
+    NAME         ENDPOINTS                                          AGE
+    httpd-svc    172.16.77.248:80,172.16.94.85:80,172.16.94.90:80   6m56s
+    kubernetes   192.168.1.234:6443                                 27d
+    ```
+
+  - 查看pod
+
+    ```bash
+    # kubectl get pods -owide
+    NAME                     READY   STATUS    RESTARTS   AGE   IP              NODE          NOMINATED NODE   READINESS GATES
+    httpd-85c6cdcddd-5ksrk   1/1     Running   0          16m   172.16.94.85    k8s-docker2   <none>           <none>
+    httpd-85c6cdcddd-ddjkf   1/1     Running   0          16m   172.16.77.248   k8s-docker1   <none>           <none>
+    httpd-85c6cdcddd-x2fj6   1/1     Running   0          16m   172.16.94.90    k8s-docker2   <none>           <none>
+    ```
+
+  - 查看所有信息
+
+    ```bash
+    # kubectl get all
+    NAME                         READY   STATUS    RESTARTS   AGE
+    pod/httpd-85c6cdcddd-5ksrk   1/1     Running   0          16m
+    pod/httpd-85c6cdcddd-ddjkf   1/1     Running   0          16m
+    pod/httpd-85c6cdcddd-x2fj6   1/1     Running   0          16m
+    
+    NAME                 TYPE        CLUSTER-IP       EXTERNAL-IP   PORT(S)    AGE
+    service/httpd-svc    ClusterIP   10.111.228.202   <none>        8080/TCP   7m55s
+    service/kubernetes   ClusterIP   10.96.0.1        <none>        443/TCP    27d
+    
+    NAME                    READY   UP-TO-DATE   AVAILABLE   AGE
+    deployment.apps/httpd   3/3     3            3           16m
+    
+    NAME                               DESIRED   CURRENT   READY   AGE
+    replicaset.apps/httpd-85c6cdcddd   3         3         3       16m
+    
+    # kubectl get all -owide
+    NAME                         READY   STATUS    RESTARTS   AGE   IP              NODE          NOMINATED NODE   READINESS GATES
+    pod/httpd-85c6cdcddd-5ksrk   1/1     Running   0          16m   172.16.94.85    k8s-docker2   <none>           <none>
+    pod/httpd-85c6cdcddd-ddjkf   1/1     Running   0          16m   172.16.77.248   k8s-docker1   <none>           <none>
+    pod/httpd-85c6cdcddd-x2fj6   1/1     Running   0          16m   172.16.94.90    k8s-docker2   <none>           <none>
+    
+    NAME                 TYPE        CLUSTER-IP       EXTERNAL-IP   PORT(S)    AGE    SELECTOR
+    service/httpd-svc    ClusterIP   10.111.228.202   <none>        8080/TCP   8m4s   app=httpd
+    service/kubernetes   ClusterIP   10.96.0.1        <none>        443/TCP    27d    <none>
+    
+    NAME                    READY   UP-TO-DATE   AVAILABLE   AGE   CONTAINERS   IMAGES   SELECTOR
+    deployment.apps/httpd   3/3     3            3           16m   httpd        httpd    app=httpd
+    
+    NAME                               DESIRED   CURRENT   READY   AGE   CONTAINERS   IMAGES   SELECTOR
+    replicaset.apps/httpd-85c6cdcddd   3         3         3       16m   httpd        httpd    app=httpd,pod-template-hash=85c6cdcddd
+    ```
+
+    
+
+- 创建可供外部访问的Service---nodePort类型
+  
+      ```yaml
+      #httpd-svc-np.yaml
+      apiVersion: v1
+      kind: Service
+      metadata:
+        name: httpd-svc-np
+        namespace: default
+      spec:
+        type: NodePort
+        selector:
+          app: httpd
+        ports:
+        - name: httpd-svc-np-port
+          protocol: TCP
+          port: 8081
+          targetPort: 80
+          nodePort: 31228
+      
+      ```
+      
+      ```bash
+      # kubectl create -f httpd-svc-np.yaml
+      service/httpd-svc-np created
+      ```
+  
+  - 可以使用nodePort字段指定对外服务端口，如果不进行指定，系统会自动分配空闲端口。端口范围：30000-32767
+  
+  - 访问时，通过访问"节点IP地址:端口"来进行服务使用
+  
+  - 访问新创建的service：httpd-svc-np
+  
+    ```bash
+    # kubectl get svc
+    NAME           TYPE        CLUSTER-IP       EXTERNAL-IP   PORT(S)          AGE
+    httpd-svc      ClusterIP   10.111.228.202   <none>        8080/TCP         15m
+    httpd-svc-np   NodePort    10.100.15.126    <none>        8081:31228/TCP   4s
+    kubernetes     ClusterIP   10.96.0.1        <none>        443/TCP          27d
+    
+    # kubectl get endpoints
+    NAME           ENDPOINTS                                          AGE
+    httpd-svc      172.16.77.248:80,172.16.94.85:80,172.16.94.90:80   19m
+    httpd-svc-np   172.16.77.248:80,172.16.94.85:80,172.16.94.90:80   3m28s
+    kubernetes     192.168.1.234:6443                                 27d
+    
+    # curl 172.16.77.248:80
+    <html><body><h1>It works!</h1></body></html>
+    
+    # curl 10.100.15.126:8081
+    <html><body><h1>It works!</h1></body></html>
+    
+    # curl localhost:31228
+    <html><body><h1>It works!</h1></body></html>
+    ```
+  
+    
+
+#### 10.3.集群中的DNS
+
+- CoreDNS
+
+  - kube-system命名空间下有coredns的pod
+
+    ```bash
+    # kubectl -n kube-system get pod |grep dns
+    coredns-7f8cbcb969-gmxrt                   1/1     Running   0              28d
+    coredns-7f8cbcb969-mskms                   1/1     Running   0              28d
+    
+    # kubectl -n kube-system get svc
+    NAME       TYPE        CLUSTER-IP   EXTERNAL-IP   PORT(S)                  AGE
+    kube-dns   ClusterIP   10.96.0.10   <none>        53/UDP,53/TCP,9153/TCP   28d
+    ```
+
+    
+
+  - CoreDNS是一个轻量级的DNS服务器，通过插件的形式在kubernetes集群内实现，提供服务发现功能，使得用户除了可以用IP访问服务外，也可以用域名来访问服务
+
+
+- 查看服务的完整域名(serviceName.namespace.svc.cluster.local)
+
+  ```bash
+  kubectl apply -f- <<EOF
+  apiVersion: v1
+  kind: Pod
+  metadata:
+    name: clientpod
+  spec:
+    containers:
+    - name: clientpod
+      image: busybox:1.28.3
+      args:
+      - /bin/sh
+      - -c
+      - sleep 3h
+  EOF
+  ```
+
+  ```bash
+  # kubectl get pods
+  NAME                     READY   STATUS    RESTARTS   AGE
+  clientpod                1/1     Running   0          34s
+  httpd-85c6cdcddd-5ksrk   1/1     Running   0          9h
+  httpd-85c6cdcddd-ddjkf   1/1     Running   0          9h
+  httpd-85c6cdcddd-x2fj6   1/1     Running   0          9h
+  
+  # kubectl get svc
+  NAME           TYPE        CLUSTER-IP       EXTERNAL-IP   PORT(S)          AGE
+  httpd-svc      ClusterIP   10.111.228.202   <none>        8080/TCP         9h
+  httpd-svc-np   NodePort    10.100.15.126    <none>        8081:31228/TCP   8h
+  kubernetes     ClusterIP   10.96.0.1        <none>        443/TCP          28d
+  
+  kubectl exec -it clientpod -- /bin/sh
+  / # nslookup httpd-svc
+  Server:    10.96.0.10
+  Address 1: 10.96.0.10 kube-dns.kube-system.svc.cluster.local
+  
+  Name:      httpd-svc
+  Address 1: 10.111.228.202 httpd-svc.default.svc.cluster.local
+  
+  
+  / # nslookup 10.111.228.202
+  Server:    10.96.0.10
+  Address 1: 10.96.0.10 kube-dns.kube-system.svc.cluster.local
+  
+  Name:      10.111.228.202
+  Address 1: 10.111.228.202 httpd-svc.default.svc.cluster.local
+  
+  
+  / # nslookup httpd-svc.default.svc.cluster.local
+  Server:    10.96.0.10
+  Address 1: 10.96.0.10 kube-dns.kube-system.svc.cluster.local
+  
+  Name:      httpd-svc.default.svc.cluster.local
+  Address 1: 10.111.228.202 httpd-svc.default.svc.cluster.local
+  / # 
+  
+  
+  / # nslookup httpd-svc-np
+  Server:    10.96.0.10
+  Address 1: 10.96.0.10 kube-dns.kube-system.svc.cluster.local
+  
+  Name:      httpd-svc-np
+  Address 1: 10.100.15.126 httpd-svc-np.default.svc.cluster.local
+  
+  
+  / # nslookup 10.100.15.126
+  Server:    10.96.0.10
+  Address 1: 10.96.0.10 kube-dns.kube-system.svc.cluster.local
+  
+  Name:      10.100.15.126
+  Address 1: 10.100.15.126 httpd-svc-np.default.svc.cluster.local
+  
+  
+  / # nslookup kubernetes
+  Server:    10.96.0.10
+  Address 1: 10.96.0.10 kube-dns.kube-system.svc.cluster.local
+  
+  Name:      kubernetes
+  Address 1: 10.96.0.1 kubernetes.default.svc.cluster.local
+  
+  
+  / # wget httpd-svc:8080
+  Connecting to httpd-svc:8080 (10.111.228.202:8080)
+  index.html           100% |*******************************************************************************************************************************************|    45   0:00:00 ETA
+  / # cat index.html 
+  <html><body><h1>It works!</h1></body></html>
+  
+  / # wget httpd-svc-np:8081 -O index1.html
+  Connecting to httpd-svc-np:8081 (10.100.15.126:8081)
+  index1.html          100% |*******************************************************************************************************************************************|    45   0:00:00 ETA
+  / # cat index1.html 
+  <html><body><h1>It works!</h1></body></html>
+  
+  
+  ```
+  
   
 
 
-### 10.Service服务发现
+- DNS记录
 
-#### 10.1.
 
-#### 10.2.
+  - 服务的DNS记录名称为：<serviceName>.<namespace>.svc.cluster.local
+
+  - 服务后端的deployment中pod的DNS记录名称为：<podIP>.<serviceName>.<namespace>.svc.cluster.local
+
+  - clientPod访问服务时，可以使用<serviceName>.<namespace>便捷抵达服务，甚至在clientPod与服务在同一个namespace时，直接用<serviceName>进行访问
+
+    ```bash
+    # kubectl get pod
+    NAME                     READY   STATUS    RESTARTS   AGE
+    clientpod                1/1     Running   0          21m
+    httpd-85c6cdcddd-5ksrk   1/1     Running   0          9h
+    httpd-85c6cdcddd-ddjkf   1/1     Running   0          9h
+    httpd-85c6cdcddd-x2fj6   1/1     Running   0          9h
+    
+    # kubectl get pod -owide
+    NAME                     READY   STATUS    RESTARTS   AGE   IP              NODE          NOMINATED NODE   READINESS GATES
+    clientpod                1/1     Running   0          21m   172.16.77.210   k8s-docker1   <none>           <none>
+    httpd-85c6cdcddd-5ksrk   1/1     Running   0          9h    172.16.94.85    k8s-docker2   <none>           <none>
+    httpd-85c6cdcddd-ddjkf   1/1     Running   0          9h    172.16.77.248   k8s-docker1   <none>           <none>
+    httpd-85c6cdcddd-x2fj6   1/1     Running   0          9h    172.16.94.90    k8s-docker2   <none>           <none>
+    
+    # kubectl get svc
+    NAME           TYPE        CLUSTER-IP       EXTERNAL-IP   PORT(S)          AGE
+    httpd-svc      ClusterIP   10.111.228.202   <none>        8080/TCP         9h
+    httpd-svc-np   NodePort    10.100.15.126    <none>        8081:31228/TCP   9h
+    kubernetes     ClusterIP   10.96.0.1        <none>        443/TCP          28d
+    
+    # kubectl get svc -owide
+    NAME           TYPE        CLUSTER-IP       EXTERNAL-IP   PORT(S)          AGE   SELECTOR
+    httpd-svc      ClusterIP   10.111.228.202   <none>        8080/TCP         9h    app=httpd
+    httpd-svc-np   NodePort    10.100.15.126    <none>        8081:31228/TCP   9h    app=httpd
+    kubernetes     ClusterIP   10.96.0.1        <none>        443/TCP          28d   <none>
+    
+    # kubectl get endpoints
+    NAME           ENDPOINTS                                          AGE
+    httpd-svc      172.16.77.248:80,172.16.94.85:80,172.16.94.90:80   9h
+    httpd-svc-np   172.16.77.248:80,172.16.94.85:80,172.16.94.90:80   9h
+    kubernetes     192.168.1.234:6443                                 28d
+    
+    # kubectl exec -it clientpod -- /bin/sh
+    / # nslookup 172.16.94.85
+    Server:    10.96.0.10
+    Address 1: 10.96.0.10 kube-dns.kube-system.svc.cluster.local
+    
+    Name:      172.16.94.85
+    Address 1: 172.16.94.85 172-16-94-85.httpd-svc.default.svc.cluster.local
+    / # nslookup httpd-85c6cdcddd-5ksrk
+    Server:    10.96.0.10
+    Address 1: 10.96.0.10 kube-dns.kube-system.svc.cluster.local
+    
+    nslookup: can't resolve 'httpd-85c6cdcddd-5ksrk'
+    / # nslookup 172-16-94-85.httpd-svc.default.svc.cluster.local
+    Server:    10.96.0.10
+    Address 1: 10.96.0.10 kube-dns.kube-system.svc.cluster.local
+    
+    Name:      172-16-94-85.httpd-svc.default.svc.cluster.local
+    Address 1: 172.16.94.85 172-16-94-85.httpd-svc.default.svc.cluster.local
+    / # 
+    
+    / # wget httpd-svc:8080 -O index2.html
+    Connecting to httpd-svc:8080 (10.111.228.202:8080)
+    index2.html          100% |*******************************************************************************************************************************************|    45   0:00:00 ETA
+    / # cat index2.html 
+    <html><body><h1>It works!</h1></body></html>
+    / # 
+    
+    ```
+
+    
+
+
+#### 10.4.Headless Service
+
+- headless service
+
+  - 有的时候不需要或者不想要负载均衡，以及单独的Service IP，可以通过指定Cluster IP的值为"none"来创建Headless Service
+
+  - 对这类Service，并不会分配Cluster IP
+
+    kube-proxy不会处理它们，并且平台也不会为它们进行负载均衡和路由
+
+  - 对定义了selector的headless service，意味着后端有一些提供业务的pod，Endpoint Controller在API中创建了Endpoints记录，当通过域名访问服务时，流量会被直接转发到对应的pod上
+
+- 创建及使用headless service
+
+```yaml
+#headless-svc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: headless-svc
+spec:
+  type: ClusterIP
+  clusterIP: None
+  selector:
+    app: httpd
+  ports:
+  - port: 80
+    targetPort: 80
+    protocol: TCP
+```
+
+```bash
+# kubectl create -f headless-svc.yaml
+service/headless-svc created
+
+# kubectl get svc
+NAME           TYPE        CLUSTER-IP       EXTERNAL-IP   PORT(S)          AGE
+headless-svc   ClusterIP   `None`           <none>        80/TCP           24s
+httpd-svc      ClusterIP   10.111.228.202   <none>        8080/TCP         10h
+httpd-svc-np   NodePort    10.100.15.126    <none>        8081:31228/TCP   10h
+kubernetes     ClusterIP   10.96.0.1        <none>        443/TCP          28d
+
+# kubectl get svc -owide
+NAME           TYPE        CLUSTER-IP       EXTERNAL-IP   PORT(S)          AGE   SELECTOR
+headless-svc   ClusterIP   `None`           <none>        80/TCP           29s   app=httpd
+httpd-svc      ClusterIP   10.111.228.202   <none>        8080/TCP         10h   app=httpd
+httpd-svc-np   NodePort    10.100.15.126    <none>        8081:31228/TCP   10h   app=httpd
+kubernetes     ClusterIP   10.96.0.1        <none>        443/TCP          28d   <none>
+
+# kubectl get ep
+NAME           ENDPOINTS                                          AGE
+headless-svc   172.16.77.248:80,172.16.94.85:80,172.16.94.90:80   6m38s
+httpd-svc      172.16.77.248:80,172.16.94.85:80,172.16.94.90:80   10h
+httpd-svc-np   172.16.77.248:80,172.16.94.85:80,172.16.94.90:80   10h
+kubernetes     192.168.1.234:6443                                 28d
+
+# kubectl exec -it clientpod -- /bin/sh
+
+/ # nslookup headless-svc
+Server:    10.96.0.10
+Address 1: 10.96.0.10 kube-dns.kube-system.svc.cluster.local
+
+Name:      headless-svc
+Address 1: 172.16.94.85 172-16-94-85.httpd-svc.default.svc.cluster.local
+Address 2: 172.16.77.248 172-16-77-248.httpd-svc.default.svc.cluster.local
+Address 3: 172.16.94.90 172-16-94-90.httpd-svc.default.svc.cluster.local
+
+/ # nslookup httpd-svc
+Server:    10.96.0.10
+Address 1: 10.96.0.10 kube-dns.kube-system.svc.cluster.local
+
+Name:      httpd-svc
+Address 1: 10.111.228.202 httpd-svc.default.svc.cluster.local
+/ # 
+
+/ # wget headless-svc:80 -O index3.html
+Connecting to headless-svc:80 (172.16.94.90:80)
+index3.html          100% |*******************************************************************************************************************************************|    45   0:00:00 ETA
+/ # cat index3.html 
+<html><body><h1>It works!</h1></body></html>
+/ # 
+
+```
+
+
+
+### 11.DaemonSet与Job
+
+#### 11.1.DaemonSet
+
+- kube-proxy的特殊性
+
+  - 在k8s组件章节中，我们介绍了kube-proxy组件，它被封装在pod中，并且时刻运行在每个Node节点中
+
+  - Replicaset侧重保证pod数量的恒定，那该如何实现kube-proxy类应用的调度
+
+    ![image-20230405151239100](cka培训截图\image-20230405151239100.png)
+
+    ```bash
+    # kubectl -n kube-system get pods |grep kube-proxy
+    kube-proxy-bjz9j                           1/1     Running   1 (7d4h ago)   28d
+    kube-proxy-c2qmh                           1/1     Running   1 (7d4h ago)   28d
+    kube-proxy-dkrq6                           1/1     Running   0              28d
+    
+    # kubectl -n kube-system get pods -owide|grep kube-proxy
+    kube-proxy-bjz9j                           1/1     Running   1 (7d4h ago)   28d   192.168.1.236    k8s-docker2   <none>           <none>
+    kube-proxy-c2qmh                           1/1     Running   1 (7d4h ago)   28d   192.168.1.235    k8s-docker1   <none>           <none>
+    kube-proxy-dkrq6                           1/1     Running   0              28d   192.168.1.234    k8s-master    <none>           <none>
+    ```
+
+- DaemonSet的特性
+
+  - DaemonSet部署的副本pod会分布在各个Node上，删除DaemonSet将会删除它创建的所有pod
+  - DaemonSet经典场景：
+    - 在集群的各个节点上运行存储Daemon，如glusterd,ceph
+    - 在每个节点上运行监控Daemon，如Prometheus Node Exporter
+
+- 创建DaemonSet
+
+  - 创建DaemonSet的yaml文件和创建Deployment的yaml文件类似
+
+  - DaemonSet的yaml文件不需要副本数量项
+
+  - 默认情况下，DaemonSet会在所有的Node上创建pod
+
+  - 如果将DaemonSet中的某一个pod强制删除，默认daemonset会自动启动一个新的pod
+
+  - 当k8s集群出现节点故障时，daemonset中的pod数量会减少，不会像deployment一样受到影响的pod在其他节点上启动
+
+    ```yaml
+    #nginx-ds.yaml
+    apiVersion: apps/v1
+    kind: DaemonSet
+    metadata:
+      name: nginx-daemonset
+      namespace: default
+    spec:
+      selector:
+        matchLabels:
+          app: nginx-ds
+      template:
+        metadata:
+          labels:
+            app: nginx-ds
+        spec:
+          containers:
+          - name: nginx
+            image: nginx:1.7.9
+            ports:
+            - containerPort: 80
+    ```
+
+    ```bash
+    # kubectl apply -f nginx-ds.yaml 
+    daemonset.apps/nginx-daemonset created
+    
+    # kubectl get daemonsets
+    NAME              DESIRED   CURRENT   READY   UP-TO-DATE   AVAILABLE   NODE SELECTOR   AGE
+    nginx-daemonset   2         2         1       2            1           <none>          19s
+    # kubectl get daemonsets -owide
+    NAME              DESIRED   CURRENT   READY   UP-TO-DATE   AVAILABLE   NODE SELECTOR   AGE   CONTAINERS   IMAGES        SELECTOR
+    nginx-daemonset   2         2         2       2            2           <none>          23s   nginx        nginx:1.7.9   app=nginx-ds
+    
+    # kubectl get pods -owide
+    NAME                     READY   STATUS    RESTARTS      AGE   IP              NODE          NOMINATED NODE   READINESS GATES
+    nginx-daemonset-8c5js    1/1     Running   0             11m   172.16.77.216   k8s-docker1   <none>           <none>
+    nginx-daemonset-whbl2    1/1     Running   0             11m   172.16.94.87    k8s-docker2   <none>           <none>
+    
+    # kubectl get daemonsets -n kube-system -owide
+    NAME          DESIRED   CURRENT   READY   UP-TO-DATE   AVAILABLE   NODE SELECTOR            AGE   CONTAINERS    IMAGES                                                                   SELECTOR
+    calico-node   3         3         3       3            3           kubernetes.io/os=linux   28d   calico-node   registry.cn-shanghai.aliyuncs.com/cnlxh/node:v3.24.5                     k8s-app=calico-node
+    kube-proxy    3         3         3       3            3           kubernetes.io/os=linux   28d   kube-proxy    registry.cn-hangzhou.aliyuncs.com/google_containers/kube-proxy:v1.25.0   k8s-app=kube-proxy
+    
+    # kubectl get nodes
+    NAME          STATUS   ROLES           AGE   VERSION
+    k8s-docker1   Ready    worker          28d   v1.25.4
+    k8s-docker2   Ready    worker          28d   v1.25.4
+    k8s-master    Ready    control-plane   28d   v1.25.4
+    ```
+
+    
+
+  - 如果想在master节点和node节点上都有daemonset的pod，那么可以在spec.template.spec中加上：tolerations: - operator: Exists
+
+    ```yaml
+    #nginx-ds.yaml
+    apiVersion: apps/v1
+    kind: DaemonSet
+    metadata:
+      name: nginx-daemonset
+      namespace: default
+    spec:
+      selector:
+        matchLabels:
+          app: nginx-ds
+      template:
+        metadata:
+          labels:
+            app: nginx-ds
+        spec:
+          tolerations:
+          - operator: Exists
+          containers:
+          - name: nginx
+            image: nginx:1.7.9
+            ports:
+            - containerPort: 80
+    ```
+
+    
+
+    ```bash
+    # kubectl apply -f nginx-ds.yaml 
+    daemonset.apps/nginx-daemonset configured
+    
+    # kubectl get daemonsets.apps nginx-daemonset 
+    NAME              DESIRED   CURRENT   READY   UP-TO-DATE   AVAILABLE   NODE SELECTOR   AGE
+    nginx-daemonset   3         3         3       3            3           <none>          47m
+    
+    # kubectl get pods -l app=nginx-ds -owide
+    NAME                    READY   STATUS    RESTARTS   AGE   IP               NODE          NOMINATED NODE   READINESS GATES
+    nginx-daemonset-kvpww   1/1     Running   0          28m   172.16.77.215    k8s-docker1   <none>           <none>
+    nginx-daemonset-ltlq6   1/1     Running   0          28m   172.16.235.196   k8s-master    <none>           <none>
+    nginx-daemonset-wpgnw   1/1     Running   0          28m   172.16.94.91     k8s-docker2   <none>           <none>
+    
+    # kubectl get pods -l app=nginx-ds
+    NAME                    READY   STATUS    RESTARTS   AGE
+    nginx-daemonset-kvpww   1/1     Running   0          28m
+    nginx-daemonset-ltlq6   1/1     Running   0          28m
+    nginx-daemonset-wpgnw   1/1     Running   0          28m
+    
+    # kubectl delete pod nginx-daemonset-kvpww
+    pod "nginx-daemonset-kvpww" deleted
+    root@k8s-master:~# kubectl get pods -l app=nginx-ds
+    NAME                    READY   STATUS    RESTARTS   AGE
+    nginx-daemonset-ltlq6   1/1     Running   0          31m
+    nginx-daemonset-sv57c   1/1     Running   0          5s
+    nginx-daemonset-wpgnw   1/1     Running   0          31m
+    ```
+
+#### 11.2.Job
+
+- 一次性任务场景
+
+  - 通过Deployment我们可以部署常驻型应用，它可以保证pod数量，保证应用的实时可用，也可以通过灵活的扩缩容让业务处于最佳状态
+
+  - 通过DaemonSet我们可以部署守护进程，它使得每个Node上运行这个一个固定pod
+
+  - 应该使用哪种方式解决如下问题？
+
+    ![image-20230405162832889](cka培训截图\image-20230405162832889.png)
+
+    ![image-20230405162927474](cka培训截图\image-20230405162927474.png)
+
+- 运行一个Job
+
+  - 相对于Deployment和DaemonSet通常提供持续的服务，Job执行一次性任务
+
+  - restartPolicy只能选择Never或OnFailure
+
+  - backoffLimit指定job失败后进行重试的次数
+
+  - yaml文件
+
+    ```yaml
+    apiVersion: batch/v1
+    kind: Job
+    metadata:
+      name: pi
+      namespace: default
+    spec:
+      template:
+        spec:
+          containers:
+          - name: pi
+            image: perl: 5.30.1
+            command: ["perl","-Mbignum=bpi","-wle","print bpi(2000)"]
+          restartPolicy: Never
+      backoffLimit: 4
+    ```
+
+    ```bash
+    # kubectl create -f pi.yaml 
+    job.batch/pi created
+    
+    # kubectl get pods
+    NAME                     READY   STATUS              RESTARTS       AGE
+    pi-rkhh4                 0/1     ContainerCreating   0              3s
+    
+    # kubectl get jobs.batch
+    NAME   COMPLETIONS   DURATION   AGE
+    pi     0/1           31s        32s
+    
+    # kubectl get pods
+    NAME                     READY   STATUS      RESTARTS       AGE
+    pi-4zd8m                 0/1     Completed   0              94s
+    
+    # kubectl get jobs.batch 
+    NAME   COMPLETIONS   DURATION   AGE
+    pi     1/1           67s        2m2s
+    
+    # kubectl logs -f pi-4zd8m 
+    3.1415926535897......
+    ```
+
+#### 11.3.CronJob
+
+- 在日常应用中，一种常见情景是需要Job在指定时间或周期运行，这种类型，我们称其为CronJob，主要管理基于时间的Job
+
+  - 在给定的时间点只运行一次
+  - 在给定的时间点周期性地运行
+
+- 使用配置文件创建CronJob
+
+- yaml
+
+  ```yaml
+  apiVersion: batch/v1
+  kind: CronJob
+  metadata: 
+    name: hello
+    namespace: default
+  spec:
+    schedule: "*/1 * * * *"
+    jobTemplate:
+      spec:
+        template:
+          spec:
+            containers:
+            - name: hello
+              image: busybox
+              args:
+              - /bin/sh
+              - -c
+              - date; echo Hello from Kubernetes Cluster
+            restartPolicy: OnFailure
+           
+  ```
+
+  ```bash
+  # kubectl apply -f hello.yaml 
+  cronjob.batch/hello created
+  
+  # kubectl get jobs.batch
+  NAME   COMPLETIONS   DURATION   AGE
+  pi     1/1           67s        13m
+  
+  # kubectl get cronjobs.batch 
+  NAME    SCHEDULE      SUSPEND   ACTIVE   LAST SCHEDULE   AGE
+  hello   */1 * * * *   False     0        <none>          8s
+  
+  # kubectl get pods
+  NAME                     READY   STATUS      RESTARTS       AGE
+  pi-4zd8m                 0/1     Completed   0              14m
+  
+  # kubectl get cronjobs.batch 
+  NAME    SCHEDULE      SUSPEND   ACTIVE   LAST SCHEDULE   AGE
+  hello   */1 * * * *   False     0        <none>          33s
+  
+  # kubectl describe cronjobs.batch hello 
+  Name:                          hello
+  Namespace:                     default
+  Labels:                        <none>
+  Annotations:                   <none>
+  Schedule:                      */1 * * * *
+  Concurrency Policy:            Allow
+  Suspend:                       False
+  Successful Job History Limit:  3
+  Failed Job History Limit:      1
+  Starting Deadline Seconds:     <unset>
+  Selector:                      <unset>
+  Parallelism:                   <unset>
+  Completions:                   <unset>
+  Pod Template:
+    Labels:  <none>
+    Containers:
+     hello:
+      Image:      busybox
+      Port:       <none>
+      Host Port:  <none>
+      Args:
+        /bin/sh
+        -c
+        date; echo Hello from Kubernetes Cluster
+      Environment:     <none>
+      Mounts:          <none>
+    Volumes:           <none>
+  Last Schedule Time:  <unset>
+  Active Jobs:         <none>
+  Events:              <none>
+  
+  # kubectl describe cronjobs.batch hello 
+  ........省略输出..........
+  Last Schedule Time:  Wed, 05 Apr 2023 17:09:00 +0800
+  Active Jobs:         <none>
+  Events:
+    Type    Reason            Age                From                Message
+    ----    ------            ----               ----                -------
+    Normal  SuccessfulCreate  5m11s              cronjob-controller  Created job hello-28011424
+    Normal  SawCompletedJob   4m28s              cronjob-controller  Saw completed job: hello-28011424, status: Complete
+    Normal  SuccessfulCreate  4m11s              cronjob-controller  Created job hello-28011425
+    Normal  SawCompletedJob   4m6s               cronjob-controller  Saw completed job: hello-28011425, status: Complete
+    Normal  SuccessfulCreate  3m11s              cronjob-controller  Created job hello-28011426
+    Normal  SawCompletedJob   3m                 cronjob-controller  Saw completed job: hello-28011426, status: Complete
+    Normal  SuccessfulCreate  2m11s              cronjob-controller  Created job hello-28011427
+    Normal  SawCompletedJob   2m6s               cronjob-controller  Saw completed job: hello-28011427, status: Complete
+    Normal  SuccessfulDelete  2m6s               cronjob-controller  Deleted job hello-28011424
+    Normal  SuccessfulCreate  71s                cronjob-controller  Created job hello-28011428
+    Normal  SawCompletedJob   66s (x2 over 66s)  cronjob-controller  Saw completed job: hello-28011428, status: Complete
+    Normal  SuccessfulDelete  66s                cronjob-controller  Deleted job hello-28011425
+    Normal  SuccessfulCreate  11s                cronjob-controller  Created job hello-28011429
+    Normal  SawCompletedJob   6s                 cronjob-controller  Saw completed job: hello-28011429, status: Complete
+    Normal  SuccessfulDelete  6s                 cronjob-controller  Deleted job hello-28011426
+    
+  ```
+
+
+### 12.Pod健康检查
+
+#### 12.1.Pod探针基本概念
+
+- Pod状态
+
+  - Pod的状态信息在pod status中定义，其中有一个phase字段，就是以下一些状态：
+
+    ![image-20230405172829397](cka培训截图\image-20230405172829397.png)
+
+    ```bash
+    # kubectl get pods
+    NAME                     READY   STATUS      RESTARTS       AGE
+    clientpod                1/1     Running     6 (172m ago)   20h
+    pi-4zd8m                 0/1     Completed   0              37m
+    
+    # kubectl get pods clientpod -o yaml|grep phase
+      phase: Running
+    
+    # kubectl get pods pi-4zd8m -o yaml|grep phase
+      phase: Succeeded
+    ```
+
+- 更准确地判断pod状态
+
+  - kubernetes借助探针(Probes)机制，探针会周期性的检测容器运行的状态，返回结果
+
+    - Liveness探针：存活探针
+
+      用户捕获容器的状态是否处于存活状态。如果探测失败，kubelet会根据重启的策略尝试恢复容器
+
+    - Readiness探针：就绪探针
+
+      如果readiness探针探测失败，则kubelet认为该容器没有准备好对外提供服务，则endpoint controller会从与pod匹配的所有service的endpoint中删除该pod的地址
+
+- 容器探针
+
+  - kubelet可以周期性的执行Container的诊断。
+
+    为了执行诊断，kubelet调用Container实现的Handler，有三种Handler类型：
+
+     - 1.ExecAction：在容器内执行指定命令。
+
+       ​                          如果命令退出时返回码为0(表示命令执行成功了)，则认为诊断成功
+
+     - 2.TCPSocketAction：对指定端口上的容器的IP地址进行TCP检查。
+
+       ​                                     如果端口打开了，则认为诊断成功
+
+     - 3.HTTPGetAction：对指定端口和路径上的容器IP地址执行HTTP Get请求。
+
+       ​                                 如果响应的状态码>=200且<400，则诊断认为是成功的
+
+  ```bash
+  # kubectl explain deployment.spec.template.spec.containers.livenessProbe.exec
+  KIND:     Deployment
+  VERSION:  apps/v1
+  
+  RESOURCE: exec <Object>
+  
+  DESCRIPTION:
+       Exec specifies the action to take.
+  
+       ExecAction describes a "run in container" action.
+  
+  FIELDS:
+     command	<[]string>
+       Command is the command line to execute inside the container, the working
+       directory for the command is root ('/') in the container's filesystem. The
+       command is simply exec'd, it is not run inside a shell, so traditional
+       shell instructions ('|', etc) won't work. To use a shell, you need to
+       explicitly call out to that shell. Exit status of 0 is treated as
+       live/healthy and non-zero is unhealthy.
+  
+  # kubectl explain deployment.spec.template.spec.containers.livenessProbe.tcpSocket
+  KIND:     Deployment
+  VERSION:  apps/v1
+  
+  RESOURCE: tcpSocket <Object>
+  
+  DESCRIPTION:
+       TCPSocket specifies an action involving a TCP port.
+  
+       TCPSocketAction describes an action based on opening a socket
+  
+  FIELDS:
+     host	<string>
+       Optional: Host name to connect to, defaults to the pod IP.
+  
+     port	<string> -required-
+       Number or name of the port to access on the container. Number must be in
+       the range 1 to 65535. Name must be an IANA_SVC_NAME.
+  
+  # kubectl explain deployment.spec.template.spec.containers.livenessProbe.httpGet
+  KIND:     Deployment
+  VERSION:  apps/v1
+  
+  RESOURCE: httpGet <Object>
+  
+  DESCRIPTION:
+       HTTPGet specifies the http request to perform.
+  
+       HTTPGetAction describes an action based on HTTP Get requests.
+  
+  FIELDS:
+     host	<string>
+       Host name to connect to, defaults to the pod IP. You probably want to set
+       "Host" in httpHeaders instead.
+  
+     httpHeaders	<[]Object>
+       Custom headers to set in the request. HTTP allows repeated headers.
+  
+     path	<string>
+       Path to access on the HTTP server.
+  
+     port	<string> -required-
+       Name or number of the port to access on the container. Number must be in
+       the range 1 to 65535. Name must be an IANA_SVC_NAME.
+  
+     scheme	<string>
+       Scheme to use for connecting to the host. Defaults to HTTP.
+       Possible enum values:
+       - `"HTTP"` means that the scheme used will be http://
+       - `"HTTPS"` means that the scheme used will be https://
+  
+  
+  ```
+
+  
+
+- 检测结果
+
+  ![image-20230405180125553](cka培训截图\image-20230405180125553.png)
+
+#### 12.2.使用存活探针
+
+-  livenessProbe-exec
+
+  ```yaml
+  #liveness.yaml
+  apiVersion: v1
+  kind: Pod
+  metadata:
+    name: liveness-exec
+    labels:
+      test: liveness
+  spec:
+    containers:
+    - name: liveness
+      image: busybox
+      args:
+      - /bin/sh
+      - -c
+      - touch /tmp/healthy; sleep 30; rm -rf /tmp/healthy; sleep 600
+      livenessProbe:
+        exec:
+          command:
+          - cat
+          - /tmp/healthy
+        initialDelaySeconds: 5
+        periodSeconds: 5
+  
+  ```
+
+  
+
+  ```bash
+  # kubectl create -f liveness.yaml 
+  pod/liveness-exec created
+  
+  # kubectl get pod liveness-exec 
+  NAME            READY   STATUS    RESTARTS   AGE
+  liveness-exec   1/1     Running   0          65s
+  
+  # kubectl get pod liveness-exec 
+  NAME            READY   STATUS    RESTARTS      AGE
+  liveness-exec   1/1     Running   1 (57s ago)   2m12s
+  
+  # kubectl get pod liveness-exec 
+  NAME            READY   STATUS    RESTARTS      AGE
+  liveness-exec   1/1     Running   2 (15s ago)   2m45s
+  
+  # kubectl describe pod liveness-exec 
+  Name:             liveness-exec
+  Namespace:        default
+  Priority:         0
+  Service Account:  default
+  Node:             k8s-docker1/192.168.1.235
+  Start Time:       Wed, 05 Apr 2023 21:20:32 +0800
+  Labels:           test=liveness
+  Annotations:      cni.projectcalico.org/containerID: 867a37af6f0af84353e702dd347e8bb2de270bf4cb72063d1a26322758fa8008
+                    cni.projectcalico.org/podIP: 172.16.77.235/32
+                    cni.projectcalico.org/podIPs: 172.16.77.235/32
+  Status:           Running
+  IP:               172.16.77.235
+  IPs:
+    IP:  172.16.77.235
+  Containers:
+    liveness:
+      Container ID:  containerd://c9aa8916990fa6a18a2d18e911c4e69130aa5e50fde373006657deddde5a59b1
+      Image:         busybox
+      Image ID:      docker.io/library/busybox@sha256:b5d6fe0712636ceb7430189de28819e195e8966372edfc2d9409d79402a0dc16
+      Port:          <none>
+      Host Port:     <none>
+      Args:
+        /bin/sh
+        -c
+        touch /tmp/healthy; sleep 30; rm -rf /tmp/healthy; sleep 600
+      State:          Running
+        Started:      Wed, 05 Apr 2023 21:23:04 +0800
+      Last State:     Terminated
+        Reason:       Error
+        Exit Code:    137
+        Started:      Wed, 05 Apr 2023 21:21:49 +0800
+        Finished:     Wed, 05 Apr 2023 21:23:02 +0800
+      Ready:          True
+      Restart Count:  2
+      Liveness:       exec [cat /tmp/healthy] delay=5s timeout=1s period=5s #success=1 #failure=3
+      Environment:    <none>
+      Mounts:
+        /var/run/secrets/kubernetes.io/serviceaccount from kube-api-access-ksp66 (ro)
+  Conditions:
+    Type              Status
+    Initialized       True 
+    Ready             True 
+    ContainersReady   True 
+    PodScheduled      True 
+  Volumes:
+    kube-api-access-ksp66:
+      Type:                    Projected (a volume that contains injected data from multiple sources)
+      TokenExpirationSeconds:  3607
+      ConfigMapName:           kube-root-ca.crt
+      ConfigMapOptional:       <nil>
+      DownwardAPI:             true
+  QoS Class:                   BestEffort
+  Node-Selectors:              <none>
+  Tolerations:                 node.kubernetes.io/not-ready:NoExecute op=Exists for 300s
+                               node.kubernetes.io/unreachable:NoExecute op=Exists for 300s
+  Events:
+    Type     Reason     Age                  From               Message
+    ----     ------     ----                 ----               -------
+    Normal   Scheduled  2m47s                default-scheduler  Successfully assigned default/liveness-exec to k8s-docker1
+    Normal   Pulled     2m45s                kubelet            Successfully pulled image "busybox" in 1.589214754s
+    Normal   Pulled     90s                  kubelet            Successfully pulled image "busybox" in 1.619748988s
+    Warning  Unhealthy  47s (x6 over 2m12s)  kubelet            Liveness probe failed: cat: can't open '/tmp/healthy': No such file or directory
+    Normal   Killing    47s (x2 over 2m2s)   kubelet            Container liveness failed liveness probe, will be restarted
+    Normal   Pulling    17s (x3 over 2m47s)  kubelet            Pulling image "busybox"
+    Normal   Created    15s (x3 over 2m45s)  kubelet            Created container liveness
+    Normal   Started    15s (x3 over 2m45s)  kubelet            Started container liveness
+    Normal   Pulled     15s                  kubelet            Successfully pulled image "busybox" in 1.641853955s
+  
+  ```
+
+  - 该实例存活探针的流程：
+
+    ![image-20230405213453259](cka培训截图\image-20230405213453259.png)
+
+- 探针高级配置
+
+  Liveness:       exec [cat /tmp/healthy] delay=5s timeout=1s period=5s #success=1 #failure=3
+
+  Liveness:       tcp-socket :23 delay=60s timeout=1s period=20s #success=1 #failure=3
+
+  Liveness:       http-get http://:8080/healthy delay=3s timeout=2s period=3s #success=1 #failure=4
+
+  
+
+  - delay=5s：initialDelaySeconds，表示探针在容器启动后5s开始进行第一次探测
+  - timeout=1s：timeoutSeconds，表示容器必须在1s内反馈信息给探针，否则视为失败
+  - period=5s：periodSeconds，表示每5s探针进行一次探测
+  - #success=1：successThreshold，表示探测连续成功1次，表示成功
+  - #failure=3：failureThreshold，表示探测连续失败3次，视为pod处于failure状态，重启容器
+
+  
+
+- livenessProbe-tcpSocket
+
+  - tcpSocket探针检测能否建立连接。实验中部署一个telnet服务，探针探测23端口
+
+  - yaml
+
+    ```yaml
+    #linveness-tcp.yaml
+    apiVersion: v1
+    kind: Pod
+    metadata:
+      name: liveness-tcp
+      labels: 
+        app: liveness
+    spec:
+      containers:
+      - name: liveness
+        image: ubuntu
+        args:
+        - /bin/sh
+        - -c
+        - apt-get update && apt-get -y install openbsd-inetd telnetd && /etc/init.d/openbsd-inetd start; sleep 3000
+        livenessProbe:
+          tcpSocket:
+            port: 23
+          initialDelaySeconds: 60
+          periodSeconds: 20
+    ```
+
+    ```bash
+    # kubectl create -f liveness-tcp.yaml 
+    pod/liveness-tcp created
+    # kubectl get pod -l app=liveness
+    NAME           READY   STATUS    RESTARTS   AGE
+    liveness-tcp   1/1     Running   0          27s
+    
+    # kubectl get pod -l app=liveness
+    NAME           READY   STATUS    RESTARTS   AGE
+    liveness-tcp   1/1     Running   0          3m3s
+    # kubectl describe pod liveness-tcp 
+    Name:             liveness-tcp
+    Namespace:        default
+    Priority:         0
+    Service Account:  default
+    Node:             k8s-docker1/192.168.1.235
+    Start Time:       Wed, 05 Apr 2023 22:24:24 +0800
+    Labels:           app=liveness
+    Annotations:      cni.projectcalico.org/containerID: 8a3a675ba77650e582b1371ae0ef3209d19093f5cdd9291d42e326e2654c6a8a
+                      cni.projectcalico.org/podIP: 172.16.77.251/32
+                      cni.projectcalico.org/podIPs: 172.16.77.251/32
+    Status:           Running
+    IP:               172.16.77.251
+    IPs:
+      IP:  172.16.77.251
+    Containers:
+      liveness:
+        Container ID:  containerd://b0a530fd0411b945496eef864dc256e9f7ab8d1f47d52eb54c83ebf1e9abdc3f
+        Image:         ubuntu
+        Image ID:      docker.io/library/ubuntu@sha256:67211c14fa74f070d27cc59d69a7fa9aeff8e28ea118ef3babc295a0428a6d21
+        Port:          <none>
+        Host Port:     <none>
+        Args:
+          /bin/sh
+          -c
+          apt-get update && apt-get -y install openbsd-inetd telnetd && /etc/init.d/openbsd-inetd start; sleep 3000
+        State:          Running
+          Started:      Wed, 05 Apr 2023 22:24:36 +0800
+        Ready:          True
+        Restart Count:  0
+        Liveness:       tcp-socket :23 delay=60s timeout=1s period=20s #success=1 #failure=3
+        Environment:    <none>
+        Mounts:
+          /var/run/secrets/kubernetes.io/serviceaccount from kube-api-access-xnqbm (ro)
+    Conditions:
+      Type              Status
+      Initialized       True 
+      Ready             True 
+      ContainersReady   True 
+      PodScheduled      True 
+    Volumes:
+      kube-api-access-xnqbm:
+        Type:                    Projected (a volume that contains injected data from multiple sources)
+        TokenExpirationSeconds:  3607
+        ConfigMapName:           kube-root-ca.crt
+        ConfigMapOptional:       <nil>
+        DownwardAPI:             true
+    QoS Class:                   BestEffort
+    Node-Selectors:              <none>
+    Tolerations:                 node.kubernetes.io/not-ready:NoExecute op=Exists for 300s
+                                 node.kubernetes.io/unreachable:NoExecute op=Exists for 300s
+    Events:
+      Type    Reason     Age    From               Message
+      ----    ------     ----   ----               -------
+      Normal  Scheduled  3m4s   default-scheduler  Successfully assigned default/liveness-tcp to k8s-docker1
+      Normal  Pulling    3m4s   kubelet            Pulling image "ubuntu"
+      Normal  Pulled     2m53s  kubelet            Successfully pulled image "ubuntu" in 10.82878182s
+      Normal  Created    2m53s  kubelet            Created container liveness
+      Normal  Started    2m53s  kubelet            Started container liveness
+    
+    # kubectl get pod liveness-tcp -owide
+    NAME           READY   STATUS    RESTARTS   AGE     IP              NODE          NOMINATED NODE   READINESS GATES
+    liveness-tcp   1/1     Running   0          7m13s   172.16.77.251   k8s-docker1   <none>           <none>
+    
+    ## telnet 172.16.77.251 23
+    Trying 172.16.77.251...
+    Connected to 172.16.77.251.
+    Escape character is '^]'.
+    ^C
+    Ubuntu 22.04.2 LTS
+    
+    liveness-tcp login: ^CConnection closed by foreign host.
+    
+    ```
+
+    
+
+- livenessProbe-httpGet
+
+  - httpGet方法的存活探针，通过get方法定期向容器发送http请求。方法中定义了请求路径、端口、请求头等信息
+
+  - 由于探针仅在返回码>=200&&返回码<400的情况下返回正常。如果探针失败，那么默认三次失败后，kubelet会重启容器
+
+  - yaml
+
+    ```yaml
+    #liveness-http.yaml
+    apiVersion: v1
+    kind: Pod
+    metadata:
+      name: liveness-http
+      labels:
+        test: liveness
+    spec:
+      containers:
+      - name: liveness
+        image: mirrorgooglecontainers/liveness
+        args:
+        - /server
+        livenessProbe:
+          httpGet:
+            path: /healthy
+            port: 8080
+            httpHeaders:
+            - name: X-Custom-Header
+              value: Awesome
+          initialDelaySeconds: 3
+          periodSeconds: 3
+          timeoutSeconds: 2
+          failureThreshold: 4
+          successThreshold: 1
+    
+    ```
+
+    ```bash
+    # kubectl create -f liveness-http.yaml 
+    pod/liveness-http created
+    
+    # kubectl get pod -l test=liveness
+    NAME            READY   STATUS              RESTARTS   AGE
+    liveness-http   0/1     ContainerCreating   0          10s
+    
+    # kubectl get pod -l test=liveness
+    NAME            READY   STATUS    RESTARTS   AGE
+    liveness-http   1/1     Running   4          2m6s
+    
+    # kubectl describe pod liveness-http 
+    Name:         liveness-http
+    Namespace:    default
+    Priority:     0
+    Node:         docker01/192.168.1.222
+    Start Time:   Wed, 05 Apr 2023 22:09:21 +0800
+    Labels:       test=liveness
+    Annotations:  cni.projectcalico.org/podIP: 10.42.5.15/32
+                  cni.projectcalico.org/podIPs: 10.42.5.15/32
+    Status:       Running
+    IP:           10.42.5.15
+    IPs:
+      IP:  10.42.5.15
+    Containers:
+      liveness:
+        Container ID:  docker://8a4114d6387dc8fee660b127e9b80d795ba6da60bb67e3e4af601997433ee152
+        Image:         mirrorgooglecontainers/liveness
+        Image ID:      docker-pullable://mirrorgooglecontainers/liveness@sha256:854458862be990608ad916980f9d3c552ac978ff70ceb0f90508858ec8fc4a62
+        Port:          <none>
+        Host Port:     <none>
+        Args:
+          /server
+        State:          Running
+          Started:      Wed, 05 Apr 2023 22:11:21 +0800
+        Last State:     Terminated
+          Reason:       Error
+          Exit Code:    2
+          Started:      Wed, 05 Apr 2023 22:11:06 +0800
+          Finished:     Wed, 05 Apr 2023 22:11:20 +0800
+        Ready:          True
+        Restart Count:  4
+        Liveness:       http-get http://:8080/healthy delay=3s timeout=2s period=3s #success=1 #failure=4
+        Environment:    <none>
+        Mounts:
+          /var/run/secrets/kubernetes.io/serviceaccount from default-token-rb29s (ro)
+    Conditions:
+      Type              Status
+      Initialized       True 
+      Ready             True 
+      ContainersReady   True 
+      PodScheduled      True 
+    Volumes:
+      default-token-rb29s:
+        Type:        Secret (a volume populated by a Secret)
+        SecretName:  default-token-rb29s
+        Optional:    false
+    QoS Class:       BestEffort
+    Node-Selectors:  <none>
+    Tolerations:     node.kubernetes.io/not-ready:NoExecute op=Exists for 300s
+                     node.kubernetes.io/unreachable:NoExecute op=Exists for 300s
+    Events:
+      Type     Reason     Age                  From               Message
+      ----     ------     ----                 ----               -------
+      Normal   Scheduled  2m2s                 default-scheduler  Successfully assigned default/liveness-http to docker01
+      Normal   Pulled     105s                 kubelet            Successfully pulled image "mirrorgooglecontainers/liveness" in 16.094717687s
+      Normal   Pulled     77s                  kubelet            Successfully pulled image "mirrorgooglecontainers/liveness" in 15.255544337s
+      Normal   Killing    63s (x2 over 93s)    kubelet            Container liveness failed liveness probe, will be restarted
+      Normal   Pulling    63s (x3 over 2m1s)   kubelet            Pulling image "mirrorgooglecontainers/liveness"
+      Normal   Created    47s (x3 over 105s)   kubelet            Created container liveness
+      Normal   Started    47s (x3 over 105s)   kubelet            Started container liveness
+      Normal   Pulled     47s                  kubelet            Successfully pulled image "mirrorgooglecontainers/liveness" in 15.24434599s
+      Warning  Unhealthy  36s (x11 over 102s)  kubelet            Liveness probe failed: HTTP probe failed with statuscode: 404
+    ```
+
+    
+
+    
+
+#### 12.3.使用就绪探针
+
+#### 
+
+### 13.K8s网络
+
+#### 13.1.K8s网络模型
+
+#### 13.2.Pod网络实现方式与CNI插件及常见的实现
+
+#### 
+
+### 14.K8s存储
+
+#### 14.1.EmptyDir
+
+#### 14.2.hostPath、PV和PVC
+
+
+
+
+### 15.ConfigMap与Secret
+
+#### 15.1.ConfigMap
+
+#### 15.2.Secret
+
+#### 
+
+### 16.StatefulSet
+
+#### 16.1.StatefulSet管理与使用
+
+#### 16.2.使用StatefulSet
+
+#### 
+
+### 17.kubernetes服务质量
+
+#### 17.1.Service基本概念
+
+#### 17.2.服务发现
+
+#### 17.3.集群中的DNS
+
+#### 17.4.Headless Service
+
+### 18.Kubernetes资源调度
+
+#### 11.1.Service基本概念
+
+#### 11.2.服务发现
+
+#### 11.3.集群中的DNS
+
+#### 11.4.Headless Service
 
 ### 11.
 
+#### 11.1.Service基本概念
 
+#### 11.2.服务发现
 
+#### 11.3.集群中的DNS
+
+#### 11.4.Headless Service
+
+### 11.
+
+#### 11.1.Service基本概念
+
+#### 11.2.服务发现
+
+#### 11.3.集群中的DNS
+
+#### 11.4.Headless Service
 
 
 
