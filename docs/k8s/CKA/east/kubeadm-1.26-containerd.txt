@@ -1,0 +1,445 @@
+#!/bin/bash
+
+echo "######################################################################################################
+#    Author：Xiaohui Li
+#    Contact me via WeChat: Lxh_Chat
+#    Contact me via QQ: 939958092
+#    Version： 2022-03-01
+#
+#    please make sure you have three node and have been done as below:
+#
+#    0. complete /etc/hosts file
+#       vi /etc/hosts
+#       :%s/^/#/g
+#       127.0.0.1 localhost
+#       192.168.1.234 k8s-master
+#       192.168.1.235 k8s-docker1
+#       192.168.1.236 k8s-docker2
+#      
+#       记得将127.0.0.1 localhost保留,将127.0.0.1 k8s-master等注释掉
+#        
+#       127.0.0.1 localhost
+#       192.168.1.234 k8s-master
+#       192.168.1.235 k8s-docker1
+#       192.168.1.236 k8s-docker2
+#
+#    1. complete /etc/hosts file
+#       vi /etc/hosts
+#       101.226.28.188 mirrors.aliyun.com
+#       
+#       
+#       
+#            
+#    2. root password has been set to 1 on all of node
+#
+#       tips:
+#         sudo echo root:1 | chpasswd
+#        
+#    3. enable root ssh login on /etc/ssh/sshd_config
+#
+#       tips: 
+#         sudo sed -i 's/^#PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config
+#         sudo systemctl restart sshd
+#
+#    4. this tools will only install kubernetes v1.26.0 for CKA Exam upgrade, if you want other version, please modify kubeadm kubelet kubectl version in script
+#
+######################################################################################################"
+echo
+echo
+echo -n Have you done the above? yes or no: 
+read input
+case $input in
+yes)
+  echo
+    echo now starting deploy
+;;
+no)
+    echo please correct it && exit 1
+;;
+*)
+    echo please input yes or no
+  exit 1
+;;
+esac
+
+# if [ $input = "yes" ];then
+#	sleep 1;
+#else
+#	echo you enter a word without yes && exit 1;
+#fi
+
+cat > /etc/apt/sources.list << EOF
+deb https://mirrors.aliyun.com/ubuntu/ focal main restricted universe multiverse
+deb-src https://mirrors.aliyun.com/ubuntu/ focal main restricted universe multiverse
+
+deb https://mirrors.aliyun.com/ubuntu/ focal-security main restricted universe multiverse
+deb-src https://mirrors.aliyun.com/ubuntu/ focal-security main restricted universe multiverse
+
+deb https://mirrors.aliyun.com/ubuntu/ focal-updates main restricted universe multiverse
+deb-src https://mirrors.aliyun.com/ubuntu/ focal-updates main restricted universe multiverse
+
+# deb https://mirrors.aliyun.com/ubuntu/ focal-proposed main restricted universe multiverse
+# deb-src https://mirrors.aliyun.com/ubuntu/ focal-proposed main restricted universe multiverse
+
+deb https://mirrors.aliyun.com/ubuntu/ focal-backports main restricted universe multiverse
+deb-src https://mirrors.aliyun.com/ubuntu/ focal-backports main restricted universe multiverse
+EOF
+
+apt update && apt install sshpass wget bash-completion ansible -y
+sed -i 's/^#host_key_checking = False/host_key_checking = False/' /etc/ansible/ansible.cfg
+
+ls /root/.ssh/*.pub
+case $? in
+0)
+    sleep 1
+;;
+*)
+    ssh-keygen -t rsa -f /root/.ssh/id_rsa -N ''
+;;
+esac
+
+sshpass -p 1 ssh-copy-id -o StrictHostKeyChecking=no root@k8s-master
+
+sshpass -p 1 ssh-copy-id -o StrictHostKeyChecking=no root@k8s-docker1
+
+sshpass -p 1 ssh-copy-id -o StrictHostKeyChecking=no root@k8s-docker2
+
+cat > /etc/ansible/hosts <<EOF
+[master]
+k8s-master ansible_user=root ansible_password=1
+[worker]
+k8s-docker1 ansible_user=root ansible_password=1
+k8s-docker2 ansible_user=root ansible_password=1
+
+EOF
+
+cat > create-k8s.yaml <<'EOF'
+---
+- name: Configure Kubernetes
+  hosts: all
+  remote_user: root
+  tasks:
+    - name: Modify Ubuntu Repository to aliyun
+      shell: |
+        cp /etc/apt/sources.list /etc/apt/sources.list.bak
+        sed -i 's/^deb.*archive.ubuntu.com/deb https:\/\/mirrors.aliyun.com/' /etc/apt/sources.list
+    - name: Deploy aliyun Docker Repository
+      shell: |
+        cp /usr/share/zoneinfo/Asia/Shanghai /etc/localtime
+        apt-get update
+        apt-get -y install apt-transport-https ca-certificates curl software-properties-common
+        curl -fsSL https://mirrors.aliyun.com/docker-ce/linux/ubuntu/gpg | sudo apt-key add -
+        add-apt-repository "deb [arch=amd64] https://mirrors.aliyun.com/docker-ce/linux/ubuntu $(lsb_release -cs) stable"
+        apt-get -y update
+    - name: clean apt lock
+      shell: |
+        sudo rm /var/lib/apt/lists/lock
+        sudo rm /var/cache/apt/archives/lock
+        sudo rm /var/lib/dpkg/lock*
+        sudo dpkg --configure -a
+        sudo apt update
+    - name: Deploy chrony for make sure time on all node is same
+      # apt install -y chrony
+      # systemctl enable chrony --now
+      # chronyc sources
+      apt:
+        pkg:
+          - chrony
+    - name: restart chronyd service for timesync
+      systemd:
+        state: restarted
+        daemon_reload: yes
+        name: chronyd
+        enabled: yes
+    - name: Deploy containerd on all node
+    # apt install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
+      apt:
+        pkg:
+        #- docker-ce
+        #- docker-ce-cli
+        - containerd.io
+        #- docker-compose-plugin
+    - name: integrate with docker
+      # ps -ef|grep sock
+      # vim /etc/containerd/config.toml
+      # #disabled_plugins = ["cri"]
+      # systemctl restart containerd
+      # ps -ef|grep sock
+      shell: |
+        mkdir -p /etc/containerd
+        containerd config default > /etc/containerd/config.toml
+    - name: modify /etc/containerd/config.toml image-pause
+      lineinfile:
+        path: /etc/containerd/config.toml
+        regexp: '    sandbox_image.*'
+        line: '    sandbox_image = "registry.cn-hangzhou.aliyuncs.com/google_containers/pause:3.9"'
+        state: present   
+    - name: modify /etc/containerd/config.toml SystemCgroup
+      lineinfile:
+        path: /etc/containerd/config.toml
+        regexp: '            SystemdCgroup = false'
+        line: '            SystemdCgroup = true'
+        state: present
+    - name: restart/enable containerd service 
+      systemd:
+        state: restarted
+        daemon_reload: yes
+        name: containerd
+        enabled: yes
+    #- name: ADD 163 docker mirror
+      #shell: |
+        #mkdir -p /etc/docker
+        #tee /etc/docker/daemon.json <<-'EOF'
+        #{
+          #"registry-mirrors": ["http://hub-mirror.c.163.com"],
+          #"exec-opts": ["native.cgroupdriver=systemd"]
+        #}
+        #EOF
+    #- name: starting docker service
+    # systemctl daemon-reload&&systemctl restart docker
+      #systemd:
+        #state: restarted
+        #daemon_reload: yes
+        #name: docker
+        #enabled: yes
+
+    #- block:
+        #- name: clean apt lock
+          #shell: |
+            #sudo rm /var/lib/apt/lists/lock
+            #sudo rm /var/cache/apt/archives/lock
+            #sudo rm /var/lib/dpkg/lock*
+            #sudo dpkg --configure -a
+            #sudo apt update  
+        #- name: Deploy CRI-Docker
+        # curl -LO  https://ghproxy.com/https://github.com/Mirantis/cri-dockerd/releases/download/v0.2.6/cri-dockerd_0.2.6.3-0.ubuntu-focal_amd64.deb
+        # apt install -y ./cri-dockerd_0.2.6.3-0.ubuntu-focal_amd64.deb
+        # dpkg -i cri-dockerd_0.2.6.3-0.ubuntu-focal_amd64.deb
+          #apt:
+            #deb: https://ghproxy.com/https://github.com/Mirantis/cri-dockerd/releases/download/v0.2.6/cri-dockerd_0.2.6.3-0.ubuntu-focal_amd64.deb
+      #只使用containerd，不再使用cri-docker
+      #rescue:
+      #  - name: clean apt lock
+      #    shell: |
+      #      sudo rm /var/lib/apt/lists/lock
+      #      sudo rm /var/cache/apt/archives/lock
+      #      sudo rm /var/lib/dpkg/lock*
+      #      sudo dpkg --configure -a
+      #      sudo apt update  
+      #  - name: Deploy CRI-Docker
+      #    apt:
+      #      deb: https://ghproxy.com/https://github.com/Mirantis/cri-dockerd/releases/download/v0.2.6/cri-dockerd_0.2.6.3-0.ubuntu-focal_amd64.deb
+
+    #- name: modify sandbox image to aliyun
+    # ExecStart=/usr/bin/cri-dockerd --pod-infra-container-image=registry.aliyuncs.com/google_containers/pause:3.8 --container-runtime-endpoint fd:// --network-plugin=cni --cni-bin-dir=/opt/cni/bin --cni-cache-dir=/var/lib/cni/cache --cni-conf-dir=/etc/cni/net.d
+    #  shell: |
+    #    sed -i 's/ExecStart=.*/ExecStart=\/usr\/bin\/cri-dockerd --container-runtime-endpoint fd:\/\/ --network-plugin=cni --pod-infra-container-image=registry.cn-hangzhou.aliyuncs.com\/google_containers\/pause:3.8/' /lib/systemd/system/cri-docker.service
+    #- name: starting cri-docker service
+    #  systemd:
+    #    state: restarted
+    #    daemon_reload: yes
+    #    name: cri-docker
+    #    enabled: yes
+    - name: disable swap on /etc/fstab
+    # cat /etc/fstab
+    # sed -i 's/^\/swap.img/#\/swap.img/' /etc/fstab
+    # cat /etc/fstab
+    # swapoff -a
+    # rm -rfv /swap.img
+      lineinfile:
+        path: /etc/fstab
+        regexp: '.*swap.*'
+        state: absent
+    - name: disable swap runtime
+      shell: swapoff -a
+    - name: configure iptables module
+    # cat <<EOF | sudo tee /etc/modules-load.d/k8s.conf
+    # br_netfilter
+    # ip_vs
+    # ip_vs_rr
+    # ip_vs_wrr
+    # ip_vs_sh
+    # nf_conntrack
+    # EOF
+    # for i in br_netfilter ip_vs ip_vs_rr ip_vs_wrr ip_vs_sh nf_conntrack;do modprobe $i;done
+      lineinfile:
+        path: /etc/modules-load.d/k8s.conf
+        line: |
+          br_netfilter
+          ip_vs
+          ip_vs_rr
+          ip_vs_wrr
+          ip_vs_sh
+          nf_conntrack
+        state: present
+        create: true
+    - name: configure iptables bridge
+    # cat > /etc/sysctl.d/k8s.conf <<EOF
+    # net.ipv4.ip_forward = 1
+    # vm.swappiness = 0
+    # net.bridge.bridge-nf-call-ip6tables = 1
+    # net.bridge.bridge-nf-call-iptables = 1
+    # EOF
+      lineinfile:
+        path: /etc/sysctl.d/k8s.conf
+        line: |
+          vm.swappiness = 0
+          net.bridge.bridge-nf-call-ip6tables = 1
+          net.bridge.bridge-nf-call-iptables = 1
+          net.ipv4.ip_forward = 1
+        create: true
+    - name: apply sysctl
+      shell: |
+        modprobe br_netfilter
+        sysctl --system
+    - name: add aliyun kubernetes repo on ubuntu
+      shell: |
+        cat > /etc/apt/sources.list.d/k8s.list <<EOF
+        deb https://mirrors.aliyun.com/kubernetes/apt/ kubernetes-xenial main
+        EOF
+        curl https://mirrors.aliyun.com/kubernetes/apt/doc/apt-key.gpg | apt-key add -
+        apt update
+      #when: ansible_facts.distribution == 'Ubuntu'
+      #- name: add kubernetes repo
+      #  apt_repository:
+      #  repo: deb https://mirrors.tuna.tsinghua.edu.cn/kubernetes/apt/ kubernetes-xenial main
+      #  validate_certs: false
+      #  state: present
+      #  filename: k8s
+      #  update_cache: true
+    # - name: add kubernetes repo on RHEL
+    #   shell: |
+    #     cat > /etc/yum.repos.d/kubernetes.repo <<EOF
+    #     [kubernetes]
+    #     name=Kubernetes
+    #     baseurl=https://mirrors.tuna.tsinghua.edu.cn/kubernetes/yum/repos/kubernetes-el7-x86_64/
+    #     enabled=1
+    #     gpgcheck=0
+    #     EOF
+    #   when: ansible_facts.distribution == 'RedHat' or ansible_facts.distribution == 'CentOS'
+    - name: install kubeadm kubectl kubelet
+    # apt-cache madison kubeadm
+    # apt install -y kubeadm=1.26.2-00 kubelet=1.26.2-00 kubectl=1.26.2-00 sshpass
+    # dpkg -l|grep kubeadm
+      package:
+        name:
+          - kubeadm=1.26.2-00
+          - kubelet=1.26.2-00
+          - kubectl=1.26.2-00
+          - sshpass
+        state: present
+    - name: clean apt lock
+      shell: |
+        sudo rm /var/lib/apt/lists/lock
+        sudo rm /var/cache/apt/archives/lock
+        sudo rm /var/lib/dpkg/lock*
+        sudo dpkg --configure -a
+        sudo apt update
+    - name: creating kubeadm.yaml
+      shell: kubeadm config print init-defaults > kubeadm.yaml
+      when: "'master' in group_names"
+    - name: modify api server address
+      lineinfile:
+        path: kubeadm.yaml
+        regexp: '.*advert.*'
+        line: '  advertiseAddress: 192.168.1.234'
+        state: present
+      when: "'master' in group_names"
+    - name: modify cluster name
+      lineinfile:
+        path: kubeadm.yaml
+        regexp: '.*name.*'
+        line: '  name: k8s-master'
+        state: present
+      when: "'master' in group_names"
+    - name: modify image repository
+      lineinfile:
+        path: kubeadm.yaml
+        regexp: 'imageRepo.*'
+        line: 'imageRepository: registry.cn-hangzhou.aliyuncs.com/google_containers'
+        state: present
+      when: "'master' in group_names"
+    - name: modify crisock to cri-docker
+      lineinfile:
+      # criSocket: unix:///var/run/containerd/containerd.sock
+        path: kubeadm.yaml
+        regexp: '  criSocket.*'
+        #line: '  criSocket: unix:///run/cri-dockerd.sock'
+        line: '  criSocket: unix:///var/run/containerd/containerd.sock'
+        state: present
+      when: "'master' in group_names" 
+    - name: pull image  kubeadm.yaml
+      # kubeadm config images list --config kubeadm.yaml
+      # kubeadm config images pull --config kubeadm.yaml
+      # ctr -n k8s.io image ls
+      # ctr -n k8s.io image tag registry.cn-hangzhou.aliyuncs.com/google_containers/pause:3.8 registry.k8s.io/pause:3.6
+      shell: kubeadm config images pull --config kubeadm.yaml  
+      when: "'master' in group_names" 
+    - name: Deploy kubernetes on Master node
+      shell: kubeadm init --config kubeadm.yaml | tee -a /root/installdetails.log
+      when: "'master' in group_names"
+    - name: pause 30s after cluster init
+      shell: sleep 30s
+      when: "'master' in group_names"
+
+    - name: set up admin role
+      shell: |
+        mkdir -p $HOME/.kube
+        cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+        chown $(id -u):$(id -g) $HOME/.kube/config
+        sshpass -p 1 ssh -A -g -o StrictHostKeyChecking=no root@k8s-docker1 mkdir /root/.kube 
+        sshpass -p 1 ssh -A -g -o StrictHostKeyChecking=no root@k8s-docker2 mkdir /root/.kube
+        scp /etc/kubernetes/admin.conf root@k8s-docker1:/root/.kube/config
+        scp /etc/kubernetes/admin.conf root@k8s-docker2:/root/.kube/config
+        sleep 30s
+      when: "'master' in group_names"
+    - name: Deploy Calico
+      shell: |
+        kubectl create -f https://gitee.com/cnlxh/Kubernetes/raw/master/cka-yaml/calico.yaml
+        sleep 30s
+      when: "'master' in group_names"
+    - name: join workers
+      shell: |
+        sleep 30
+        join=`sshpass -p 1 ssh -A -g -o StrictHostKeyChecking=no root@k8s-master kubeadm token create --print-join-command`
+        # echo $join --cri-socket=unix:///var/run/cri-dockerd.sock | bash
+        echo $join --cri-socket=unix:///var/run/containerd/containerd.sock | bash
+      when: "'worker' in group_names"
+    - name: assign worker role label to workers
+      shell: |
+        sleep 30
+        kubectl label nodes k8s-docker2 k8s-docker1 node-role.kubernetes.io/worker=
+      when: "'master' in group_names"
+EOF
+
+
+cp /etc/ansible/ansible.cfg /root/ansible.cfg
+
+sed -i '/^# command_warnings.*/a\command_warnings = False' /root/ansible.cfg
+
+echo
+echo 'Deploy K8S Cluster now'
+echo
+ansible-playbook create-k8s.yaml
+
+
+kubectl completion bash > /etc/bash_completion.d/kubectl
+kubeadm completion bash > /etc/bash_completion.d/kubeadm
+source /etc/bash_completion.d/kubectl
+source /etc/bash_completion.d/kubeadm
+
+echo
+
+echo "Please wait one minute for nodes ready"
+
+echo
+
+echo
+
+sleep 1m
+
+kubectl get nodes
+
+echo
+
+echo
