@@ -7718,15 +7718,549 @@ index3.html          100% |*****************************************************
 
 #### 12.3.使用就绪探针
 
-#### 
+- 就绪探针
+
+  - Pod处于存活状态并不意味着可以提供服务，pod创建完成后，通常需要进行诸如准备数据、安装和运行程序等步骤，才能对外提供服务
+  - liveness探针指示Pod是否处于存活状态；readiness探针则可指示容器是否已经一切准备就绪，可以对外提供服务
+
+- 存活探针和就绪探针对比
+
+  - 就绪探针与存活探针一致，可以使用ExecAction,TCPSocketAction,HTTPGetAction三种方法
+
+  - 就绪探针用于检测和显示pod是否已经准备好对外提供业务
+
+    在实际场景中，就绪探针需要和业务绑定
+
+    ![image-20230411091918042](cka培训截图/image-20230411091918042.png)
+
+- 创建HTTP服务
+
+  - 创建http的deployment和service，并在其中加入就绪探针，探测是否存在index.html文件
+
+  - yaml
+
+    ```yaml
+    #rediness-test.yaml
+    #httpd-deployment
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: httpd-deployment
+    spec:
+      replicas: 3
+      selector:
+        matchLabels:
+          app: httpd
+      template:
+        metadata:
+          labels:
+            app: httpd
+        spec:
+          containers:
+          - name: httpd
+            image: httpd
+            ports:
+            - containerPort: 80
+            readinessProbe:
+              exec:
+                command:
+                - cat
+                - /usr/local/apache2/htdocs/index.html
+              initialDelaySeconds: 5
+              periodSeconds: 5
+    ---
+    #httpd-svc
+    apiVersion: v1
+    kind: Service
+    metadata:
+      name: httpd-svc
+    spec:
+      selector:
+        app: httpd
+      ports:
+      - protocol: TCP
+        port: 8080
+        targetPort: 80
+    ```
+
+    ```bash
+    # kubectl create -f rediness-test.yaml 
+    deployment.apps/httpd-deployment created
+    service/httpd-svc created
+    
+    # kubectl get deployments.apps httpd-deployment 
+    NAME               READY   UP-TO-DATE   AVAILABLE   AGE
+    httpd-deployment   3/3     3            3           115s
+    
+    # kubectl get pod -l app=httpd
+    NAME                                READY   STATUS    RESTARTS   AGE
+    httpd-deployment-78bc6f55d5-899vc   1/1     Running   0          2m2s
+    httpd-deployment-78bc6f55d5-fg7dg   1/1     Running   0          2m2s
+    httpd-deployment-78bc6f55d5-h775w   1/1     Running   0          2m2s
+    
+    # kubectl get svc
+    NAME         TYPE        CLUSTER-IP       EXTERNAL-IP   PORT(S)    AGE
+    httpd-svc    ClusterIP   10.105.188.170   <none>        8080/TCP   2m5s
+    kubernetes   ClusterIP   10.96.0.1        <none>        443/TCP    3d16h
+    
+    # kubectl get endpoints
+    NAME         ENDPOINTS                                           AGE
+    httpd-svc    172.16.77.197:80,172.16.77.198:80,172.16.94.70:80   2m11s
+    kubernetes   192.168.1.234:6443                                  3d16h
+    
+    # kubectl describe deployments.apps httpd-deployment |grep -i readiness
+        Readiness:    exec [cat /usr/local/apache2/htdocs/index.html] delay=5s timeout=1s period=5s success=1 failure=3
+    
+    # kubectl exec -it httpd-deployment-78bc6f55d5-899vc -- /bin/bash
+    root@httpd-deployment-78bc6f55d5-899vc:/usr/local/apache2# cd htdocs/
+    root@httpd-deployment-78bc6f55d5-899vc:/usr/local/apache2/htdocs# ls
+    index.html
+    root@httpd-deployment-78bc6f55d5-899vc:/usr/local/apache2/htdocs# mv index.html index.html.bak
+    root@httpd-deployment-78bc6f55d5-899vc:/usr/local/apache2/htdocs# exit
+    exit
+    
+    # kubectl get pod -l app=httpd
+    NAME                                READY   STATUS    RESTARTS       AGE
+    httpd-deployment-78bc6f55d5-899vc   0/1     Running   0              76m
+    httpd-deployment-78bc6f55d5-fg7dg   1/1     Running   0              76m
+    httpd-deployment-78bc6f55d5-h775w   1/1     Running   0              76m
+    root@k8s-master:~# kubectl get ep
+    NAME         ENDPOINTS                          AGE
+    httpd-svc    172.16.77.198:80,172.16.94.70:80   77m
+    kubernetes   192.168.1.234:6443                 3d17h
+    
+    # kubectl describe pod httpd-deployment-78bc6f55d5-899vc|grep  -A 4 Events
+    Events:
+      Type     Reason     Age                     From     Message
+      ----     ------     ----                    ----     -------
+      Warning  Unhealthy  5m31s (x25 over 7m21s)  kubelet  Readiness probe failed: cat: /usr/local/apache2/htdocs/index.html: No such file or directory
+    
+    # kubectl describe deployments.apps httpd-deployment |grep ^\Replicas
+    Replicas:               3 desired | 3 updated | 3 total | 2 available | 1 unavailable
+    
+    
+    # kubectl exec -it httpd-deployment-78bc6f55d5-899vc -- /bin/bash
+    root@httpd-deployment-78bc6f55d5-899vc:/usr/local/apache2# cd htdocs/
+    root@httpd-deployment-78bc6f55d5-899vc:/usr/local/apache2/htdocs# ls
+    index.html.bak
+    root@httpd-deployment-78bc6f55d5-899vc:/usr/local/apache2/htdocs# mv index.html.bak index.html     
+    root@httpd-deployment-78bc6f55d5-899vc:/usr/local/apache2/htdocs# exit
+    exit
+    command terminated with exit code 127
+    
+    # kubectl describe deployments.apps httpd-deployment |grep ^\Replicas
+    Replicas:               3 desired | 3 updated | 3 total | 3 available | 0 unavailable
+    
+    # kubectl get pods -l app=httpd
+    NAME                                READY   STATUS    RESTARTS   AGE
+    httpd-deployment-78bc6f55d5-899vc   1/1     Running   0          81m
+    httpd-deployment-78bc6f55d5-fg7dg   1/1     Running   0          81m
+    httpd-deployment-78bc6f55d5-h775w   1/1     Running   0          81m
+    # kubectl get ep
+    NAME         ENDPOINTS                                           AGE
+    httpd-svc    172.16.77.197:80,172.16.77.198:80,172.16.94.70:80   81m
+    kubernetes   192.168.1.234:6443                                  3d17h
+    ```
+
+    
 
 ### 13.K8s网络
 
 #### 13.1.K8s网络模型
 
-#### 13.2.Pod网络实现方式与CNI插件及常见的实现
+- kubernetes的网络模型设计目标
 
-#### 
+  - kubernetes网络模型用于满足以下四种通信需求
+    - 同一pod内容器间的通信(Container to Container)
+    - pod间的通信(Pod to Pod)
+    - Service到Pod间的通信(Service to Pod)
+    - 集群外部与Service之间的通信(external to Service)
+
+- 容器间通信
+
+  - pod内各容器共享同一网络名称空间，该名称空间通常由基础架构容器所提供
+
+    - 例如：由pause镜像启动容器
+
+      所有运行于同一个pod内的容器与同一个主机上的多个进程类似，彼此之间可通过环回接口完成交互
+
+      如图所示，pod N内的container1, container2,container3之间的通信即为容器间通信
+
+      ![image-20230411112713770](cka培训截图/image-20230411112713770.png)
+
+  - 不同pod之间不存在端口冲突的问题，因为每个pod都有自己的地址
+
+- pod间通信
+
+  - pod的IP是集群可见的，即集群中的任何其他pod和节点都可以通过IP直接与pod通信，这种通信不需要借助任何的网络地址转换、隧道或代理技术
+
+  - pod内部和外部使用的是同一个IP，这也意味着标准的命名服务和发现机制，比如DNS可以直接使用
+
+  - pod间通信示意图
+
+    ![image-20230411113515387](cka培训截图/image-20230411113515387.png)
+
+- Service与pod间的通信
+
+  - Service资源的专用网络也称为集群网络(Cluster Network)
+
+  - pod间可以直接通过IP地址通信，但前提是pod得知道对方的IP。在kubernetes集群中，pod可能会频繁的销毁和创建，也就是说pod的IP不是固定的
+
+  - 为了解决这个问题，Service提供了访问pod的抽象层。无论后端的pod如何变化，Service都作为稳定的前端对外提供服务。同时，Service还是提供了高可用和负载均衡功能，Service复制将请求转发给正确的pod
+
+    ![image-20230411115248839](cka培训截图/image-20230411115248839.png)
+
+- 集群外部访问
+
+  - kubernetes提供了两种方式让外界能够与pod通信
+
+    - NodePort:
+
+      Service通过Cluster节点的静态端口对外提供服务。外部可以通过<nodeIP>:<nodePort>访问Service
+
+    - LoadBalance:
+
+      Service利用load balancer(服务或设备)对外提供服务，LB负责将流量导向Service
+
+      ![image-20230411115816539](cka培训截图/image-20230411115816539.png)
+
+    
+
+- Node与Pod之间通信实验
+
+  1. 创建一个pod
+
+     ```bash
+     # kubectl run nginx --image=nginx --port=80
+     pod/nginx created
+     ```
+
+     
+
+  2. 查看该pod的IP地址及所处节点
+
+     ```bash
+     # kubectl get pod nginx -owide
+     NAME    READY   STATUS    RESTARTS   AGE   IP             NODE          NOMINATED NODE   READINESS GATES
+     nginx   1/1     Running   0          15s   172.16.94.71   k8s-docker2   <none>           <none>
+     ```
+
+     
+
+  3. 从master节点访问该pod
+
+     ```bash
+     # curl 172.16.94.71
+     <!DOCTYPE html>
+     <html>
+     <head>
+     <title>Welcome to nginx!</title>
+     ...输出省略...
+      
+     ```
+
+     
+
+- Pod和Pod之间通信实验
+
+  1. 紧跟上个实验，创建一个client pod
+
+     ```bash
+     # kubectl run busybox --image=busybox -- sleep 3h
+     pod/busybox created
+     
+     # kubectl get pod -o wide
+     NAME                                READY   STATUS    RESTARTS   AGE     IP              NODE          NOMINATED NODE   READINESS GATES
+     busybox                             1/1     Running   0          18s     172.16.94.72    k8s-docker2   <none>           <none>
+     nginx                               1/1     Running   0          24m     172.16.94.71    k8s-docker2   <none>           <none>
+     ```
+
+     
+
+  2. 容器间连通性ping测试
+
+     ```bash
+     # kubectl exec -it busybox -- /bin/sh
+     / # ping 172.16.94.71 -c 1
+     PING 172.16.94.71 (172.16.94.71): 56 data bytes
+     64 bytes from 172.16.94.71: seq=0 ttl=63 time=0.236 ms
+     
+     --- 172.16.94.71 ping statistics ---
+     1 packets transmitted, 1 packets received, 0% packet loss
+     round-trip min/avg/max = 0.236/0.236/0.236 ms
+     ```
+
+     
+
+  3. 在容器中访问nginx服务
+
+     ```bash
+     / # telnet 172.16.94.71 80
+     Connected to 172.16.94.71
+     get
+     HTTP/1.1 400 Bad Request
+     Server: nginx/1.23.4
+     Date: Tue, 11 Apr 2023 07:03:12 GMT
+     Content-Type: text/html
+     Content-Length: 157
+     Connection: close
+     
+     <html>
+     <head><title>400 Bad Request</title></head>
+     <body>
+     <center><h1>400 Bad Request</h1></center>
+     <hr><center>nginx/1.23.4</center>
+     </body>
+     </html>
+     Connection closed by foreign host
+     ```
+
+     
+
+- 集群外访问实验(NodePort方
+
+  - 查看已运行pod的label
+
+    ```bash
+    # kubectl get pod --show-labels
+    NAME                                READY   STATUS    RESTARTS   AGE     LABELS
+    busybox                             1/1     Running   0          97m     run=busybox
+    nginx                               1/1     Running   0          121m    run=nginx
+    ```
+
+    
+
+  - 创建type为NodePort的Service的yaml文件
+
+    ```yaml
+    # nginx-np.yaml
+    apiVersion: v1
+    kind: Service
+    metadata:
+      name: nginx-access
+    spec:
+      selector:
+        run: nginx
+      ports:
+      - protocol: TCP
+        port: 80
+        targetPort: 80
+        nodePort: 30080
+      type: NodePort
+    ```
+
+    
+
+  - 访问
+
+    ```bash
+    # kubectl create -f nginx-np.yaml 
+    service/nginx-access created
+    
+    ## kubectl get svc nginx-access 
+    NAME           TYPE       CLUSTER-IP       EXTERNAL-IP   PORT(S)        AGE
+    nginx-access   NodePort   10.105.179.221   <none>        80:30080/TCP   13s
+    
+    # kubectl get pod -owide|grep nginx
+    nginx                               1/1     Running   0          153m    172.16.94.71    k8s-docker2   <none>           <none>
+    
+    新版本k8s无法在本地通过netstat或者ss查看nodeport的端口，只能通过iptables看到转发策略
+    kube-proxy: remove port opener 
+    # ss -anp|grep 30080
+    # netstat -tnulp|grep 30080
+    
+    就算先创建docker占用30081端口，然后再次创建nodeport的svc用30081，还是默认走svc的pod，因为iptables中kube-services的优先级高于docker
+     
+    # iptables -t nat -nL|grep nginx-access
+    KUBE-MARK-MASQ  all  --  0.0.0.0/0            0.0.0.0/0            /* masquerade traffic for default/nginx-access external destinations */
+    KUBE-EXT-AELKM437PQO5UQ5T  tcp  --  0.0.0.0/0            0.0.0.0/0            /* default/nginx-access */ tcp dpt:30080
+    KUBE-MARK-MASQ  all  --  172.16.94.71         0.0.0.0/0            /* default/nginx-access */
+    DNAT       tcp  --  0.0.0.0/0            0.0.0.0/0            /* default/nginx-access */ tcp to:172.16.94.71:80
+    KUBE-SVC-AELKM437PQO5UQ5T  tcp  --  0.0.0.0/0            10.105.179.221       /* default/nginx-access cluster IP */ tcp dpt:80
+    KUBE-SEP-M6XJLPRUYO3TGBF3  all  --  0.0.0.0/0            0.0.0.0/0            /* default/nginx-access -> 172.16.94.71:80 */
+    
+    集群内访问：
+    # curl 10.105.179.221
+    <!DOCTYPE html>
+    <html>
+    <head>
+    <title>Welcome to nginx!</title>
+    ...输出省略...
+    
+    
+    集群外访问：
+    # curl k8s-master:30080
+    <!DOCTYPE html>
+    <html>
+    <head>
+    <title>Welcome to nginx!</title>
+    ...输出省略...
+    
+    # curl k8s-docker1:30080
+    <!DOCTYPE html>
+    <html>
+    <head>
+    <title>Welcome to nginx!</title>
+    ...输出省略...
+    
+    # curl k8s-docker2:30080
+    <!DOCTYPE html>
+    <html>
+    <head>
+    <title>Welcome to nginx!</title>
+    ...输出省略...
+    ```
+
+    
+
+#### 13.2.Pod网络实现方式
+
+- Pod网络的实现方式
+
+  - 每个pod对象内的基础架构容器均使用一个独立的网络名称空间
+
+  - 该名称空间会共享给同一pod内其他容器使用
+
+  - 每个网络名称空间均有其专有的独立网络协议栈及其相关的网络接口设备
+
+  - 一个网络接口仅能属于一个网络名称空间
+
+  - 运行多个pod必然要求使用多个网络名称空间，也就需要用到多个网络接口设备
+
+    ```bash
+    工作节点：
+    
+    # kubectl exec -it busybox -- /bin/sh
+    / # 
+    / # ip a
+    1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue qlen 1000
+        link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
+        inet 127.0.0.1/8 scope host lo
+           valid_lft forever preferred_lft forever
+        inet6 ::1/128 scope host 
+           valid_lft forever preferred_lft forever
+    2: tunl0@NONE: <NOARP> mtu 1480 qdisc noop qlen 1000
+        link/ipip 0.0.0.0 brd 0.0.0.0
+    4: eth0@if13: <BROADCAST,MULTICAST,UP,LOWER_UP,M-DOWN> mtu 1480 qdisc noqueue 
+        link/ether fe:48:38:3e:49:c6 brd ff:ff:ff:ff:ff:ff
+        inet 172.16.94.72/32 scope global eth0
+           valid_lft forever preferred_lft forever
+        inet6 fe80::fc48:38ff:fe3e:49c6/64 scope link 
+           valid_lft forever preferred_lft forever
+    / # exit
+    
+    # route -n
+    Kernel IP routing table
+    Destination     Gateway         Genmask         Flags Metric Ref    Use Iface
+    0.0.0.0         192.168.1.1     0.0.0.0         UG    0      0        0 ens160
+    172.16.77.192   192.168.1.235   255.255.255.192 UG    0      0        0 tunl0
+    172.16.94.64    0.0.0.0         255.255.255.192 U     0      0        0 *
+    172.16.94.70    0.0.0.0         255.255.255.255 UH    0      0        0 caliba8c8c1b7f8
+    172.16.94.71    0.0.0.0         255.255.255.255 UH    0      0        0 calic440f455693
+    172.16.94.72    0.0.0.0         255.255.255.255 UH    0      0        0 cali12d4a061371
+    172.16.235.192  192.168.1.234   255.255.255.192 UG    0      0        0 tunl0
+    192.168.1.0     0.0.0.0         255.255.255.0   U     0      0        0 ens160
+    
+    # ip a |grep -A 3 cali12d
+    13: cali12d4a061371@if4: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1480 qdisc noqueue state UP group default 
+        link/ether ee:ee:ee:ee:ee:ee brd ff:ff:ff:ff:ff:ff link-netns cni-e8f23ffb-dae9-7c06-9795-cc0107ea14c8
+        inet6 fe80::ecee:eeff:feee:eeee/64 scope link 
+           valid_lft forever preferred_lft forever
+           
+    # ip netns list
+    cni-e8f23ffb-dae9-7c06-9795-cc0107ea14c8 (id: 0)
+    cni-0e348221-78d3-df2d-3423-6b9b6fbb6d3d (id: 2)
+    cni-6c94c365-8dff-cc09-cffa-8da9670e5c3e (id: 1)
+    ```
+
+#### 13.3.CNI插件及常见的实现   
+
+- 虚拟网络接口的实现方式
+
+  - 用软件实现的虚拟网络接口及虚拟线缆将其连接至物理接口是一种较为流行的方案
+
+  - 虚拟网络接口的实现方案常见的有虚拟网桥、多路复用及硬件交换三种
+
+    ![image-20230411215737137](cka培训截图/image-20230411215737137.png)
+
+- 虚拟网络接口实现原理
+
+  ![image-20230411222311269](cka培训截图/image-20230411222311269.png)
+  
+
+
+
+- 容器网络模型规范CNI
+
+  - kubernetes设计了网络模型
+
+  - CoreOS和Google联合制定了CNI(Container Network Interface)标准，连接了两个组件：容器管理系统和网络插件
+
+  - CNI的设计思想是：
+
+    容器runtime在创建容器时，提前创建好网络的名称空间(netns)，然后调用CNI插件为这个netns配置网络，然后再启动容器内的进程
+
+- CNI drivers
+
+  ![image-20230411223736767](cka培训截图/image-20230411223736767.png)
+
+  CNI的优点是支持多种容器runtime，不仅仅是docker
+
+  CNI的插件模型不同组织和公司开发的第三方插件，可以让我们灵活选择合适的网络方案
+
+- CNI插件类型
+
+  - CNI本身只是规范，付诸生产还需要有特定的实现
+
+  - 插件分为三类：
+
+    ![image-20230411224113419](cka培训截图/image-20230411224113419.png)
+
+  
+
+- 主流CNI插件项目
+
+  - Flannel：
+
+    一个为kubernetes提供叠加网络的网络插件，
+
+    它基于Linux TUN/TAP，用UDP封装IP报文来创建叠加网络，并借助etcd维护网络的分配情况
+
+  - Calico：
+
+    一个基于BGP的三层网络插件，并且也支持网络策略来实现网络的访问控制；
+
+    它在每台机器上运行一个vRouter，利用linux内核来转发网络数据包，并借助iptables实现防火墙的功能
+
+  - Canal：
+
+    由Flannel和caco联合发布的一个统一网络插件，提供CNI网络插件，并支持网络策略
+
+  - Weave Net：
+
+    一个多主机容器的网络方案，支持去中心化的控制平面，在各个host上的vRouter间建立Full mesh的TCP连接，并通过Gossip同步控制信息
+
+  - Contiv：
+
+    思科开源的容器网络方案，主要提供基于policy的网络管理，并与主流容器编排系统集成；Contiv最主要的优势是直接提供了多租户网络，支持L2(VLan)、L3(BGP)、Overlay(VXLAN)等
+
+  - OpenContrail：
+
+    Juniper推出的开源网络虚拟化平台，其商业版本为Contrail。由控制器和vRouter组成，控制器提供虚拟网络的配置、控制和分析功能，vRouter则提供分布式路由，负责虚拟路由器、虚拟网络的建立及数据转发
+    
+  - Romana：
+
+    由Panic Networks于2016年释出的开源项目，旨在借鉴路由汇聚(route aggregation)的思路来解决叠加方案为网络带来的开销
+
+  - NSX-T：
+
+    由VMware提供，用于定义敏捷SDI(Software-Defined Infrastrature)以构建云原生应用环境；其旨在合并异构端点或技术栈的应用框架和架构，如vSphere、KVM、容器和bare metal等
+
+  - kube-router：
+    
+    是kubernetes网络的一体化解决方案，它可取代kube-proxy实现基于ipvs的Service，能为pod提供网络，支持网络策略以及拥有完美兼容BGP的高级特性
+
+
 
 ### 14.K8s存储
 
