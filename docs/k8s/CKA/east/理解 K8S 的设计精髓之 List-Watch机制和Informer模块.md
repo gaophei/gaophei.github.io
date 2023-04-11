@@ -39,7 +39,7 @@
 
 > HTTP 分块传输编码允许服务器为动态生成的内容维持 HTTP 持久链接。通常，持久链接需要服务器在开始发送消息体前发送Content-Length消息头字段，但是对于动态生成的内容来说，在内容创建完之前是不可知的。使用分块传输编码，数据分解成一系列数据块，并以一个或多个块发送，这样服务器可以发送数据而不需要预先知道发送内容的总大小。
 
-当客户端调用`watch API`时，`apiserve`r 在`response`的`HTTP Header`中设置`Transfer-Encoding`的值为`chunked`，表示采用`分块传输`编码，客户端收到该信息后，便和服务端该链接，并等待下一个数据块，即资源的事件信息。例如：
+当客户端调用`watch API`时，`apiserver` 在`response`的`HTTP Header`中设置`Transfer-Encoding`的值为`chunked`，表示采用`分块传输`编码，客户端收到该信息后，便和服务端该链接，并等待下一个数据块，即资源的事件信息。例如：
 
 ```text
 $ curl -i http://{kube-api-server-ip}:8080/api/v1/watch/pods?watch=yes
