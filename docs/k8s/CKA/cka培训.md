@@ -8740,7 +8740,7 @@ index3.html          100% |*****************************************************
   ```
   
   
-     
+  
 
 #### 14.3.PV和PVC
 
@@ -8774,7 +8774,7 @@ index3.html          100% |*****************************************************
 
     - persistentVolumeReclaimPolicy：指定pv的回收策略
 
-      - Retain(保留)：不删除，需要手动回收
+      - Retain(保留)：pvc删除或者更甚者pvc和pv一起删除后，原pv文件夹下的内容不删除，需要手动回收，此时无法被其他pvc申请
       - Recycle(回收)：基本擦除，类似rm -rf，使其可供其他pvc申请
       - Delete(删除)：关联存储将被删除，如Azure disk或OpenStack Cinder卷
 
@@ -8839,8 +8839,7 @@ index3.html          100% |*****************************************************
     - accessModes，保存与pv一致
     - volumeName，使用pv的名字，用于pvc找到正确的pv
     - resources.requests，指定pv的容量，如果不存在满足该容量需求的pv，则pvc无法绑定任何pv
-    - 
-
+  
   ```yaml
   # mypvc.yaml
   apiVersion: v1
@@ -8857,7 +8856,7 @@ index3.html          100% |*****************************************************
       requests:
         storage: 1G
   ```
-
+  
   ```bash
   # kubectl get pv mypv
   NAME   CAPACITY   ACCESS MODES   RECLAIM POLICY   STATUS      CLAIM   STORAGECLASS   REASON   AGE
@@ -8880,9 +8879,9 @@ index3.html          100% |*****************************************************
   mypvc   Bound    mypv     1G         RWO                           9s
   
   ```
-
   
-
+  
+  
 - pv与pvc的状态
 
   - pv状态，创建完成后为Available
@@ -8894,42 +8893,632 @@ index3.html          100% |*****************************************************
 
     - Pending---绑定pv--->Bound---删除pv--->Lost
 
+  
+  
+- pv回收
+
+  - 由于pv创建时选择的回收策略是Recycle，删除pvc的时候kubernetes会删除原有pv中的数据。它采用的方式是创建一个回收专用pod来完成这一操作
+
+    ```bash
+    # kubectl get pv mypv
+    NAME   CAPACITY   ACCESS MODES   RECLAIM POLICY   STATUS   CLAIM           STORAGECLASS   REASON   AGE
+    mypv   1G         RWO            Recycle          Bound    default/mypvc                           36m
+    # kubectl get pvc mypvc
+    NAME    STATUS   VOLUME   CAPACITY   ACCESS MODES   STORAGECLASS   AGE
+    mypvc   Bound    mypv     1G         RWO                           9s
     
+    # kubectl create -f- <<EOF
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      labels:
+        app: busybox-pvc
+      name: busybox-pvc
+    spec:
+      replicas: 1
+      selector:
+        matchLabels:
+          app: busybox-pvc
+      strategy: {}
+      template:
+        metadata:
+          labels:
+            app: busybox-pvc
+        spec:
+          volumes:
+          - name: test
+            persistentVolumeClaim:
+              claimName: mypvc
+          containers:
+          - image: busybox:1.28
+            name: busybox
+            volumeMounts:
+            - name: test
+              mountPath: /data
+            command: 
+            - /bin/sh
+            - -c
+            - "sleep 3600"
+            resources: {}
+    EOF
+    
+    pod busybox-pvc created
+    
+    # kubectl get pod
+    NAME                          READY   STATUS        RESTARTS       AGE
+    busybox-pvc-57b4844b6-gxpt5   1/1     Running       0              92s
+    
+    # kubectl exec -it busybox-pvc-57b4844b6-gxpt5 -- /bin/sh
+    / # ls
+    bin   data  dev   etc   home  proc  root  sys   tmp   usr   var
+    / # cd data/
+    /data # ls
+    /data # echo 111 > abc
+    /data # exit
+    
+    此时如果登陆nfs服务器查看共享文件夹k8s，那么cat /k8s/abc，会显示111
+    
+    # kubectl delete deployment.apps busybox-pvc
+    deployment.apps "busybox-pvc" deleted
+    
+    # kubectl delete pvc mypvc && kubectl get pod 
+    mypvc deleted
+    
+    NAME                READY   STATUS             RESTARTS   AGE
+    recycler-for-mypv   0/1     ContainerCreating   0          2m2s
+    
+    正常情况：
+    # kubectl get pv mypv
+    NAME   CAPACITY   ACCESS MODES   RECLAIM POLICY   STATUS      CLAIM   STORAGECLASS   REASON   AGE
+    mypv   1G         RWO            Recycle          Available                                   71m
+    
+    此时如果再次查看nfs服务器，当ls -l /k8s，会显示没有文件，因为pv的回收策略是Recycle，就是删除了k8s目录下的内容
+    
+    tips：
+    如果recycler-for-mypv拉取镜像失败，那么会报错：
+    # kubectl get pod recycler-for-mypv 
+    NAME                READY   STATUS             RESTARTS   AGE
+    recycler-for-mypv   0/1     ImagePullBackOff   0          2m5s
+    
+    # kubectl get pv mypv
+    NAME   CAPACITY   ACCESS MODES   RECLAIM POLICY   STATUS   CLAIM           STORAGECLASS   REASON   AGE
+    mypv   1G         RWO            Recycle          Failed   default/mypvc                           70m
+    ```
+
+    
+
+  - 如果不希望数据被删除，可以配置pv的回收策略是Retain，这样在删除pvc后，pv的数据仍然存在，但是此时该pv不能再被其他pvc申请。需要先删除pv yaml中的ClaimRef参数，才能接收其它pvc的申请
+
+    ```bash
+    # kubectl create -f- <<EOF
+    apiVersion: v1
+    kind: PersistentVolume
+    metadata:
+      name: mypv01
+    spec:
+      capacity:
+        storage: 1G
+      accessModes:
+        - ReadWriteOnce
+      persistentVolumeReclaimPolicy: Retain
+      nfs:
+        server: 192.168.1.227
+        path: /k8s01
+    EOF
+    
+    persistentvolume/mypv01 created
+    
+    # kubectl get pv mypv
+    NAME   CAPACITY   ACCESS MODES   RECLAIM POLICY   STATUS      CLAIM   STORAGECLASS   REASON   AGE
+    mypv01   1G         RWO            Recycle          Available                                   42s
+    
+    # kubectl create -f- <<EOF
+    apiVersion: v1
+    kind: PersistentVolumeClaim
+    metadata:
+      name: mypvc01
+    spec:
+      accessModes:
+        - ReadWriteOnce
+      volumeName: mypv01
+      storageClassName: ""
+      resources:
+        requests:
+          storage: 1G
+    EOF
+    
+    persistentvolumeclaim/mypvc01 created
+    
+    # kubectl get pvc mypvc01
+    NAME      STATUS   VOLUME   CAPACITY   ACCESS MODES   STORAGECLASS   AGE
+    mypvc01   Bound    mypv01     1G         RWO                         14m
+    
+    # kubectl create -f- <<EOF
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      labels:
+        app: busybox-pvc01
+      name: busybox-pvc01
+    spec:
+      replicas: 1
+      selector:
+        matchLabels:
+          app: busybox-pvc01
+      strategy: {}
+      template:
+        metadata:
+          labels:
+            app: busybox-pvc01
+        spec:
+          volumes:
+          - name: test
+            persistentVolumeClaim:
+              claimName: mypvc01
+          containers:
+          - image: busybox:1.28
+            name: busybox
+            volumeMounts:
+            - name: test
+              mountPath: /data
+            command: 
+            - /bin/sh
+            - -c
+            - "sleep 3600"
+            resources: {}
+    EOF
+    
+    pod busybox-pvc01 created
+    
+    # kubectl get pod
+    NAME                          READY   STATUS        RESTARTS       AGE
+    busybox-pvc01-66b4844b6-gxpt5   1/1     Running       0              92s
+    
+    # kubectl exec -it busybox-pvc-66b4844b6-gxpt5 -- /bin/sh
+    / # ls
+    bin   data  dev   etc   home  proc  root  sys   tmp   usr   var
+    / # cd data/
+    /data # ls
+    /data # echo pvc01 > abc
+    /data # exit
+    
+    此时如果登陆nfs服务器查看共享文件夹k8s01，那么cat /k8s01/abc，会显示pvc01
+    
+    # kubectl delete deployment.apps busybox-pvc01
+    deployment.apps "busybox-pvc01" deleted
+    
+    # kubectl delete pvc mypvc01 && kubectl get pod 
+    mypvc deleted
+    
+    NAME                READY   STATUS             RESTARTS   AGE
+    recycler-for-mypv01   0/1     ContainerCreating   0          2m2s
+    
+    # kubectl get pv mypv01
+    NAME     CAPACITY   ACCESS MODES   RECLAIM POLICY   STATUS     CLAIM             STORAGECLASS   REASON   AGE
+    mypv01   1G         RWO            Retain           Released   default/mypvc01                           44m
+    
+    此时如果登陆nfs服务器查看共享文件夹k8s01，那么cat /k8s01/abc，还会显示pvc01
+    (此时即使kubectl delete pv mypv01，那么cat /k8s01/abc，还会显示pvc01)
+    
+    此时再绑定一个pvc到pv上，新的pvc会一直pending
+    
+    # kubectl create -f- <<EOF
+    apiVersion: v1
+    kind: PersistentVolumeClaim
+    metadata:
+      name: mypvc02
+    spec:
+      accessModes:
+        - ReadWriteOnce
+      volumeName: mypv01
+      storageClassName: ""
+      resources:
+        requests:
+          storage: 1G
+    EOF
+    
+    persistentvolumeclaim/mypvc02 created
+    
+    # kubectl get pv mypv01
+    NAME     CAPACITY   ACCESS MODES   RECLAIM POLICY   STATUS     CLAIM             STORAGECLASS   REASON   AGE
+    mypv01   1G         RWO            Retain           Released   default/mypvc01                           49m
+    
+    # kubectl get pvc mypvc02
+    NAME      STATUS    VOLUME   CAPACITY   ACCESS MODES   STORAGECLASS   AGE
+    mypvc02   Pending   mypv01   0                                        68s
+    
+    # kubectl describe pvc mypvc02
+    Name:          mypvc02
+    Namespace:     default
+    StorageClass:  
+    Status:        Pending
+    Volume:        mypv01
+    Labels:        <none>
+    Annotations:   <none>
+    Finalizers:    [kubernetes.io/pvc-protection]
+    Capacity:      0
+    Access Modes:  
+    VolumeMode:    Filesystem
+    Used By:       <none>
+    Events:
+      Type     Reason         Age                From                         Message
+      ----     ------         ----               ----                         -------
+      Warning  FailedBinding  7s (x9 over 2m5s)  persistentvolume-controller  volume "mypv01" already bound to a different claim.
+      
+    # kubectl get pv mypv01 -o yaml
+    apiVersion: v1
+    kind: PersistentVolume
+    metadata:
+      annotations:
+        pv.kubernetes.io/bound-by-controller: "yes"
+      creationTimestamp: "2023-04-12T13:57:21Z"
+      finalizers:
+      - kubernetes.io/pv-protection
+      name: mypv01
+      resourceVersion: "714559"
+      uid: cee811be-6aa9-48d4-8575-28190902479a
+    spec:
+      accessModes:
+      - ReadWriteOnce
+      capacity:
+        storage: 1G
+      claimRef:
+        apiVersion: v1
+        kind: PersistentVolumeClaim
+        name: mypvc01
+        namespace: default
+        resourceVersion: "713913"
+        uid: 1747b2fc-e492-4910-8125-8d5acd9f5fb1
+      nfs:
+        path: /k8s
+        server: 192.168.1.227
+      persistentVolumeReclaimPolicy: Retain
+      volumeMode: Filesystem
+      
+    将其中的claimRef一项删除掉
+    # kubectl edit pv mypv01
+    persistentvolume/mypv01 edited
+    
+    # kubectl get pv mypv01 -o yaml
+    apiVersion: v1
+    kind: PersistentVolume
+    metadata:
+      annotations:
+        pv.kubernetes.io/bound-by-controller: "yes"
+      creationTimestamp: "2023-04-12T13:57:21Z"
+      finalizers:
+      - kubernetes.io/pv-protection
+      name: mypv01
+      resourceVersion: "720099"
+      uid: cee811be-6aa9-48d4-8575-28190902479a
+    spec:
+      accessModes:
+      - ReadWriteOnce
+      capacity:
+        storage: 1G
+      nfs:
+        path: /k8s
+        server: 192.168.1.227
+      persistentVolumeReclaimPolicy: Retain
+      volumeMode: Filesystem
+    status:
+      phase: Available
+    
+    # kubectl get pv mypv01
+    NAME     CAPACITY   ACCESS MODES   RECLAIM POLICY   STATUS   CLAIM             STORAGECLASS   REASON   AGE
+    mypv01   1G         RWO            Retain           Bound    default/mypvc02                           58m
+    
+    # kubectl get pvc mypvc02
+    NAME      STATUS    VOLUME   CAPACITY   ACCESS MODES   STORAGECLASS   AGE
+    mypvc02   Pending   mypv01   0                                        9m35s
+    ```
+
+    
+
+  - 回收策略：delete
+
+  ```bash
+  # kubectl create -f- <<EOF
+  apiVersion: v1
+  kind: PersistentVolume
+  metadata:
+    name: mypv03
+  spec:
+    capacity:
+      storage: 1G
+    accessModes:
+      - ReadWriteOnce
+    persistentVolumeReclaimPolicy: Delete
+    nfs:
+      server: 192.168.1.227
+      path: /k8s03
+  EOF
+  
+  persistentvolume/mypv03 created
+  
+  # kubectl get pv mypv
+  NAME   CAPACITY   ACCESS MODES   RECLAIM POLICY   STATUS      CLAIM   STORAGECLASS   REASON   AGE
+  mypv03   1G         RWO            Delete          Available                                   42s
+  
+  # kubectl create -f- <<EOF
+  apiVersion: v1
+  kind: PersistentVolumeClaim
+  metadata:
+    name: mypvc03
+  spec:
+    accessModes:
+      - ReadWriteOnce
+    volumeName: mypv03
+    storageClassName: ""
+    resources:
+      requests:
+        storage: 1G
+  EOF
+  
+  persistentvolumeclaim/mypvc03 created
+  
+  # kubectl get pv mypv03 
+  NAME     CAPACITY   ACCESS MODES   RECLAIM POLICY   STATUS   CLAIM             STORAGECLASS   REASON   AGE
+  mypv03   1G         RWO            Delete           Bound    default/mypvc03                           30s
+  # kubectl get pvc mypvc03 
+  NAME      STATUS   VOLUME   CAPACITY   ACCESS MODES   STORAGECLASS   AGE
+  mypvc03   Bound    mypv03   1G         RWO                           8s
+  
+  # kubectl create -f- <<EOF
+  apiVersion: apps/v1
+  kind: Deployment
+  metadata:
+    labels:
+      app: busybox-pvc03
+    name: busybox-pvc03
+  spec:
+    replicas: 1
+    selector:
+      matchLabels:
+        app: busybox-pvc03
+    strategy: {}
+    template:
+      metadata:
+        labels:
+          app: busybox-pvc03
+      spec:
+        volumes:
+        - name: test
+          persistentVolumeClaim:
+            claimName: mypvc03
+        containers:
+        - image: busybox:1.28
+          name: busybox
+          volumeMounts:
+          - name: test
+            mountPath: /data
+          command: 
+          - /bin/sh
+          - -c
+          - "sleep 3600"
+          resources: {}
+  EOF
+  
+  pod busybox-pvc03 created
+  
+  # kubectl get pod
+  NAME                          READY   STATUS        RESTARTS       AGE
+  busybox-pvc03-5ff58d9d48-88zz8   1/1     Running   0               3s
+  
+  # kubectl exec -it busybox-pvc03-5ff58d9d48-88zz8 -- /bin/sh
+  / # ls
+  bin   data  dev   etc   home  proc  root  sys   tmp   usr   var
+  / # cd data/
+  /data # ls
+  /data # echo pvc03 > abc
+  /data # exit
+  
+  此时如果登陆nfs服务器查看共享文件夹k8s03，那么cat /k8s03/abc，会显示pvc03
+  
+  # kubectl delete deployment.apps busybox-pvc03
+  deployment.apps "busybox-pvc03" deleted
+  
+  # kubectl delete pvc mypvc03 && kubectl get pod 
+  mypvc deleted
+  
+  
+  # kubectl get pv mypv03 
+  NAME     CAPACITY   ACCESS MODES   RECLAIM POLICY   STATUS   CLAIM             STORAGECLASS   REASON   AGE
+  mypv03   1G         RWO            Delete           Failed   default/mypvc03                           4m46s
+  
+  
+  # kubectl describe pv mypv03 
+  Name:            mypv03
+  Labels:          <none>
+  Annotations:     pv.kubernetes.io/bound-by-controller: yes
+  Finalizers:      [kubernetes.io/pv-protection]
+  StorageClass:    
+  Status:          Failed
+  Claim:           default/mypvc03
+  Reclaim Policy:  Delete
+  Access Modes:    RWO
+  VolumeMode:      Filesystem
+  Capacity:        1G
+  Node Affinity:   <none>
+  Message:         error getting deleter volume plugin for volume "mypv03": no deletable volume plugin matched
+  Source:
+      Type:      NFS (an NFS mount that lasts the lifetime of a pod)
+      Server:    192.168.1.227
+      Path:      /k8s03
+      ReadOnly:  false
+  Events:
+    Type     Reason              Age    From                         Message
+    ----     ------              ----   ----                         -------
+    Warning  VolumeFailedDelete  2m12s  persistentvolume-controller  error getting deleter volume plugin for volume "mypv03": no deletable volume plugin matched
+    
+  # kubectl get pv mypv03 -o yaml
+  apiVersion: v1
+  kind: PersistentVolume
+  metadata:
+    annotations:
+      pv.kubernetes.io/bound-by-controller: "yes"
+    creationTimestamp: "2023-04-12T15:10:05Z"
+    finalizers:
+    - kubernetes.io/pv-protection
+    name: mypv03
+    resourceVersion: "722119"
+    uid: cc091ae5-3648-45d5-8145-870d12f8714c
+  spec:
+    accessModes:
+    - ReadWriteOnce
+    capacity:
+      storage: 1G
+    claimRef:
+      apiVersion: v1
+      kind: PersistentVolumeClaim
+      name: mypvc03
+      namespace: default
+      resourceVersion: "721736"
+      uid: 05374ae3-c5a6-4e18-9798-2be50bdd779d
+    nfs:
+      path: /k8s03
+      server: 192.168.1.227
+    persistentVolumeReclaimPolicy: Delete
+    volumeMode: Filesystem
+  status:
+    message: 'error getting deleter volume plugin for volume "mypv03": no deletable
+      volume plugin matched'
+    phase: Failed
+  
+  # kubectl edit pv mypv03
+  persistentvolume/mypv03 edited
+  
+  # kubectl get pv mypv03 -o yaml
+  apiVersion: v1
+  kind: PersistentVolume
+  metadata:
+    annotations:
+      pv.kubernetes.io/bound-by-controller: "yes"
+    creationTimestamp: "2023-04-12T15:10:05Z"
+    finalizers:
+    - kubernetes.io/pv-protection
+    name: mypv03
+    resourceVersion: "722438"
+    uid: cc091ae5-3648-45d5-8145-870d12f8714c
+  spec:
+    accessModes:
+    - ReadWriteOnce
+    capacity:
+      storage: 1G
+    nfs:
+      path: /k8s03
+      server: 192.168.1.227
+    persistentVolumeReclaimPolicy: Delete
+    volumeMode: Filesystem
+  status:
+    phase: Available
+    
+  # kubectl get pv mypv03
+  NAME     CAPACITY   ACCESS MODES   RECLAIM POLICY   STATUS      CLAIM   STORAGECLASS   REASON   AGE
+  mypv03   1G         RWO            Delete           Available                                   8m8s
+  
+  此时如果登陆nfs服务器查看共享文件夹k8s03，那么cat /k8s03/abc，还会显示pvc03
+  ```
+
+  
+
+- pv和pvc的绑定
+
+  - 如果我们重复pv和pvc的实验，将pvc中volumeName: mypvc03这一参数删除，可以发现pvc仍能申请到pv
+
+    那么pvc是以什么机制找到匹配的pv呢？
+
+    - pvc首先根据筛选条件，如容量大小和访问模式筛选掉不符合条件的pv
+    - 筛选掉不符合volumeName的pv
+    - 筛选掉不符合storageClass的pv
+    - 根据其它条件筛选符合条件的pv
 
     
 
   ```bash
-  # kubectl delete pvc mypvc && kubectl get pod 
-  mypvc deleted
+  创建pvc时，将volumeName一项去掉，结果还是可以个跟pv绑定到一起：
   
-  NAME                READY   STATUS             RESTARTS   AGE
-  recycler-for-mypv   0/1     ContainerCreating   0          2m2s
+  # kubectl create -f- <<EOF
+  apiVersion: v1
+  kind: PersistentVolumeClaim
+  metadata:
+    name: mypvc04
+  spec:
+    accessModes:
+      - ReadWriteOnce
+    storageClassName: ""
+    resources:
+      requests:
+        storage: 1G
+  EOF
   
-  正常情况：
-  # kubectl get pv mypv
-  NAME   CAPACITY   ACCESS MODES   RECLAIM POLICY   STATUS      CLAIM   STORAGECLASS   REASON   AGE
-  mypv   1G         RWO            Recycle          Available                                   71m
+  persistentvolumeclaim/mypvc04 created
   
+  # kubectl get pv mypv03
+  NAME     CAPACITY   ACCESS MODES   RECLAIM POLICY   STATUS   CLAIM             STORAGECLASS   REASON   AGE
+  mypv03   1G         RWO            Delete           Bound    default/mypvc04                           14m
   
-  如果recycler-for-mypv拉取镜像失败，那么会报错：
-  # kubectl get pod recycler-for-mypv 
-  NAME                READY   STATUS             RESTARTS   AGE
-  recycler-for-mypv   0/1     ImagePullBackOff   0          2m5s
-  
-  # kubectl get pv mypv
-  NAME   CAPACITY   ACCESS MODES   RECLAIM POLICY   STATUS   CLAIM           STORAGECLASS   REASON   AGE
-  mypv   1G         RWO            Recycle          Failed   default/mypvc                           70m
-  
+  # kubectl get pvc mypvc04
+  NAME      STATUS   VOLUME   CAPACITY   ACCESS MODES   STORAGECLASS   AGE
+  mypvc04   Bound    mypv03   1G         RWO                           95s
   
   ```
 
   
 
-  
+- 在创建pv和pvc时使用storageClass
 
-  
+  - 创建pv时指定 storageClassName，可以在pvc中申请该pv
+ ```yaml
+ # mypv05-pvc05.yaml
+ ---
+ apiVersion: v1
+ kind: PersistentVolume
+ metadata:
+   name: mypv05
+ spec:
+   capacity:
+     storage: 1G
+   accessModes:
+     - ReadWriteOnce
+   persistentVolumeReclaimPolicy: Recycle
+   storageClassName: nfs
+   nfs:
+     server: 192.168.1.227
+     path: /k8s05
+ ---
+ apiVersion: v1
+ kind: PersistentVolumeClaim
+ metadata:
+   name: mypvc05
+ spec:
+   accessModes:
+     - ReadWriteOnce
+   storageClassName: nfs
+   resources:
+     requests:
+       storage: 1G
+ ```
+```bash
+# kubectl create -f mypv05-pvc05.yaml 
+persistentvolume/mypv05 created
+persistentvolumeclaim/mypvc05 created
 
-- d
+# kubectl get pv mypv05
+NAME     CAPACITY   ACCESS MODES   RECLAIM POLICY   STATUS   CLAIM             STORAGECLASS   REASON   AGE
+mypv05   1G         RWO            Recycle          Bound    default/mypvc05   nfs                     32s
+# kubectl get pvc mypvc05
+NAME      STATUS   VOLUME   CAPACITY   ACCESS MODES   STORAGECLASS   AGE
+mypvc05   Bound    mypv05   1G         RWO            nfs            37s
+
+```
+
+
+
+- 动态卷供给
+  - storageClass除了
+- dd
+
 
 
 ### 15.ConfigMap与Secret
