@@ -8266,9 +8266,670 @@ index3.html          100% |*****************************************************
 
 #### 14.1.EmptyDir
 
-#### 14.2.hostPath、PV和PVC
+- Volume
 
+  - 在一个pod使用过程中，会进行很多操作，改变一些文件，安装一些程序等等。但当我们重启容器之后，会发现容器往往又回到了初始的状态，所有的修改都丢失了
+  - 除了希望数据不在pod重启后丢失，我们有时候也需要在pod间共享文件，因此kubernetes抽象出了Volume对象来解决这两个问题
 
+- Volume类型
+
+  - kubernetes支持的卷类型非常丰富，包括：
+    - NFS文件系统
+    - Cephfs等分布式存储系统
+    - awsElasticBlockStore，azureDisk等公有云存储服务
+    - emptyDir，configMap，hostPath等kubernetes内置存储类型
+    - ISCSI，FC等等...
+
+- EmptyDir
+
+  - 当pod指定到某个节点上时，首先创建的是一个空emptyDir卷，并且只要pod在该节点上运行，卷就一直存在。就像它的名称表示的那样，卷最初是空的。尽管pod中的容器挂载emptyDir卷的路径可能相同也可能不同，但是这些容器都可以读写emptyDir卷中相同的文件。当pod因为某些原因被从节点上删除时，emptyDir卷中的数据也会被永久删除
+
+    ![image-20230412134516518](cka培训截图\image-20230412134516518.png)
+
+- 创建一个使用emptyDir的pod
+
+  - 创建使用emptyDir时需要配置两个参数：
+
+    - spec.containers.volumeMounts，设置volume的挂载点
+    - spec.volumes，配置volume
+
+  - 如果保持emptyDir的默认配置，可以用emptyDir: {}
+
+    完整yaml
+
+    ```yaml
+    apiVersion: v1
+    kind: Pod
+    metadata:
+      name: em
+    spec:
+      containers:
+      - name: test-container
+        image: ubuntu
+        args:
+        - /bin/sh
+        - -c
+        - sleep 3h
+        volumeMounts:
+        - name: cache-volume
+          mountPath: /cache
+      volumes:
+      - name: cache-volume
+        emptyDir: {}
+    ```
+
+    ```bash
+    # kubectl create -f em.yaml 
+    pod/em created
+    
+    # kubectl get pod em -o wide
+    NAME   READY   STATUS    RESTARTS   AGE     IP              NODE          NOMINATED NODE   READINESS GATES
+    em     1/1     Running   0          4m50s   172.16.77.200   k8s-docker1   <none>           <none>
+    
+    # kubectl describe pod em |grep -A 1 Mounts
+        Mounts:
+          /cache from cache-volume (rw)
+    
+    # kubectl describe pod em |grep -A 4 Volumes
+    Volumes:
+      cache-volume:
+        Type:       EmptyDir (a temporary directory that shares a pod's lifetime)
+        Medium:     
+        SizeLimit:  <unset>
+    
+    # kubectl exec -it em -- /bin/sh
+    # ls -l /cache
+    total 0
+    # echo em | tee -a /cache/em.log
+    em
+    # cat /cache/em.log
+    em
+    # df -h
+    Filesystem                         Size  Used Avail Use% Mounted on
+    overlay                             38G  7.8G   29G  22% /
+    tmpfs                               64M     0   64M   0% /dev
+    tmpfs                              2.0G     0  2.0G   0% /sys/fs/cgroup
+    /dev/mapper/ubuntu--vg-ubuntu--lv   38G  7.8G   29G  22% /cache
+    shm                                 64M     0   64M   0% /dev/shm
+    tmpfs                              3.8G   12K  3.8G   1% /run/secrets/kubernetes.io/serviceaccount
+    tmpfs                              2.0G     0  2.0G   0% /proc/acpi
+    tmpfs                              2.0G     0  2.0G   0% /proc/scsi
+    tmpfs                              2.0G     0  2.0G   0% /sys/firmware
+    
+    ```
+
+    
+
+  - 如果限制emptyDir容量(比如1G)，需配置
+
+    ```yaml
+    volumes:
+    - name: cache-volume
+      emptyDir:
+        sizeLimit: 2G
+    ```
+
+    - 虽然限制容量为2G，但是在pod内查看的话，显示的是Host存储空间大小，并非2G
+
+      /dev/mapper/ubuntu--vg-ubuntu--lv   38G  7.9G   29G  22% /cache
+
+    - 当尝试在容器内写入一个2G的文件时，pod会报错：ContainerStatusUnknown
+
+      
+
+    完整yaml
+
+    ```yaml
+    apiVersion: v1
+    kind: Pod
+    metadata:
+      name: em1
+    spec:
+      containers:
+      - name: test-container
+        image: ubuntu
+        args:
+        - /bin/sh
+        - -c
+        - sleep 3h
+        volumeMounts:
+        - name: cache-volume
+          path: /cache
+      volumes:
+      - name: cache-volume
+        emptyDir: 
+          sizeLimit: 2G
+    ```
+
+    ```bash
+    # kubectl create -f em1.yaml 
+    pod/em1 created
+    
+    # kubectl get pod em1 -o wide
+    NAME   READY   STATUS    RESTARTS   AGE   IP             NODE          NOMINATED NODE   READINESS GATES
+    em1    1/1     Running   0          32s   172.16.94.74   k8s-docker2   <none>           <none>
+    
+    # kubectl describe pod em1 |grep -A 1 Mounts
+        Mounts:
+          /cache from cache-volume (rw)
+    # kubectl describe pod em1 |grep -A 4 Volume
+    Volumes:
+      cache-volume:
+        Type:       EmptyDir (a temporary directory that shares a pod's lifetime)
+        Medium:     
+        SizeLimit:  2G
+    
+    # kubectl exec -it em1 -- /bin/sh
+    # ls -l /cache
+    total 0
+    # df -h
+    Filesystem                         Size  Used Avail Use% Mounted on
+    overlay                             38G  7.9G   29G  22% /
+    tmpfs                               64M     0   64M   0% /dev
+    tmpfs                              2.0G     0  2.0G   0% /sys/fs/cgroup
+    /dev/mapper/ubuntu--vg-ubuntu--lv   38G  7.9G   29G  22% /cache
+    shm                                 64M     0   64M   0% /dev/shm
+    tmpfs                              3.8G   12K  3.8G   1% /run/secrets/kubernetes.io/serviceaccount
+    tmpfs                              2.0G     0  2.0G   0% /proc/acpi
+    tmpfs                              2.0G     0  2.0G   0% /proc/scsi
+    tmpfs                              2.0G     0  2.0G   0% /sys/firmware
+    # dd if=/dev/zero of=/cache/big.file bs=1M count=2048
+    2048+0 records in
+    2048+0 records out
+    2147483648 bytes (2.1 GB, 2.0 GiB) copied, 5.49806 s, 391 MB/s
+    # df -h
+    Filesystem                         Size  Used Avail Use% Mounted on
+    overlay                             38G  9.9G   27G  28% /
+    tmpfs                               64M     0   64M   0% /dev
+    tmpfs                              2.0G     0  2.0G   0% /sys/fs/cgroup
+    /dev/mapper/ubuntu--vg-ubuntu--lv   38G  9.9G   27G  28% /cache
+    shm                                 64M     0   64M   0% /dev/shm
+    tmpfs                              3.8G   12K  3.8G   1% /run/secrets/kubernetes.io/serviceaccount
+    tmpfs                              2.0G     0  2.0G   0% /proc/acpi
+    tmpfs                              2.0G     0  2.0G   0% /proc/scsi
+    tmpfs                              2.0G     0  2.0G   0% /sys/firmware
+    # exit
+    
+    # kubectl get pod em1 
+    NAME   READY   STATUS                   RESTARTS   AGE
+    em1    0/1     ContainerStatusUnknown   1          6m16s
+    
+    # kubectl describe pod em1 |grep -A 12 Events
+    Events:
+      Type     Reason               Age    From               Message
+      ----     ------               ----   ----               -------
+      Normal   Scheduled            7m54s  default-scheduler  Successfully assigned default/em1 to k8s-docker2
+      Normal   Pulling              7m54s  kubelet            Pulling image "ubuntu"
+      Normal   Pulled               7m32s  kubelet            Successfully pulled image "ubuntu" in 22.069036767s (22.069041401s including waiting)
+      Normal   Created              7m31s  kubelet            Created container test-container
+      Normal   Started              7m31s  kubelet            Started container test-container
+      Warning  Evicted              2m20s  kubelet            Usage of EmptyDir volume "cache-volume" exceeds the limit "2G".
+      Normal   Killing              2m20s  kubelet            Stopping container test-container
+      Warning  ExceededGracePeriod  2m10s  kubelet            Container runtime did not kill the pod within specified grace period.
+    
+    # kubectl exec -it em1 -- /bin/sh
+    error: cannot exec into a container in a completed pod; current phase is Failed
+    ```
+
+    
+
+#### 14.2.hostPath
+
+- hostPath
+
+  - hostPath卷能将主机节点文件系统上的文件或目录挂载到pod中
+
+  - 比如希望pod使用一些docker引擎或系统已经包含的内部程序的时候，会使用到这种方式。如 以下为kube-proxy中配置的hostPath
+
+    ```yaml
+    # kubectl -n kube-system get pod -l k8s-app=kube-proxy
+    NAME               READY   STATUS    RESTARTS   AGE
+    kube-proxy-nmhnh   1/1     Running   0          4d21h
+    kube-proxy-p2vws   1/1     Running   0          4d21h
+    kube-proxy-zmzxx   1/1     Running   0          4d21h
+    
+    # kubectl -n kube-system get pod kube-proxy-nmhnh -o yaml | grep -A 4 volumeMounts
+        volumeMounts:
+        - mountPath: /var/lib/kube-proxy
+          name: kube-proxy
+        - mountPath: /run/xtables.lock
+          name: xtables-lock
+          
+    # kubectl -n kube-system get pod kube-proxy-nmhnh -o yaml | grep -A 12 volumes
+      volumes:
+      - configMap:
+          defaultMode: 420
+          name: kube-proxy
+        name: kube-proxy
+      - hostPath:
+          path: /run/xtables.lock
+          type: FileOrCreate
+        name: xtables-lock
+      - hostPath:
+          path: /lib/modules
+          type: ""
+        name: lib-modules
+    
+    # kubectl -n kube-system describe pod kube-proxy-nmhnh |grep -A 4 Mounts
+        Mounts:
+          /lib/modules from lib-modules (ro)
+          /run/xtables.lock from xtables-lock (rw)
+          /var/lib/kube-proxy from kube-proxy (rw)
+          /var/run/secrets/kubernetes.io/serviceaccount from kube-api-access-gztxn (ro)
+    # kubectl -n kube-system describe pod kube-proxy-nmhnh |grep -A 12 Volumes
+    Volumes:
+      kube-proxy:
+        Type:      ConfigMap (a volume populated by a ConfigMap)
+        Name:      kube-proxy
+        Optional:  false
+      xtables-lock:
+        Type:          HostPath (bare host directory volume)
+        Path:          /run/xtables.lock
+        HostPathType:  FileOrCreate
+      lib-modules:
+        Type:          HostPath (bare host directory volume)
+        Path:          /lib/modules
+        HostPathType:  
+    
+    ```
+
+    
+
+- 创建使用hostPath的pod
+
+  - hostPath配置与emptyDir类似，但类型需指定为hostPath，里面有两个参数：
+    - path参数需配置为主机上已存在的目录
+    - type参数指定hostPath的类型
+
+  yaml
+
+  ```yaml
+  apiVersion: v1
+  kind: Pod
+  metadata:
+    name: hppod
+  spec:
+    containers:
+    - name: hp-container
+      image: ubuntu
+      args:
+      - /bin/sh
+      - -c
+      - sleep 3h
+      volumeMounts:
+      - name: hp-volume
+        mountPath: /hp-dir
+    volumes:
+    - name: hp-volume
+      hostPath:
+        path: /mnt/hostpathdir
+        type: DirectoryOrCreate
+  
+  ```
+
+  ```bash
+  两个工作节点，检查/mnt目录
+  # ls -l /mnt
+  total 0
+  
+  # kubectl create -f hppod.yaml 
+  pod/hppod created
+  
+  # kubectl get pod hppod -owide
+  NAME    READY   STATUS    RESTARTS   AGE   IP             NODE          NOMINATED NODE   READINESS GATES
+  hppod   1/1     Running   0          41s   172.16.94.76   k8s-docker2   <none>           <none>
+  
+  前往k8s-docker2节点，发现自动创建了
+  # ls -l /mnt
+  total 4
+  drwxr-xr-x 2 root root 4096 Apr 12 17:15 hostpathdir
+  
+  
+  # kubectl exec -it hppod -- /bin/sh
+  # ls -l /hp-dir
+  total 0
+  # echo 123 > /hp-dir/abc
+  # exit
+  
+  # ls /mnt/hostpathdir
+  abc
+  # cat /mnt/hostpathdir/abc
+  123
+  ```
+
+  
+
+- hostPath的类型
+
+  - 创建hostPath时，需要指定类型(type)
+
+    type的值可能为：
+
+    | Value             | Behavior                                                     |
+    | ----------------- | ------------------------------------------------------------ |
+    |                   | Empty string (default) is for backward compatibility, which means that no checks will be performed before mounting the hostPath volume. |
+    | DirectoryOrCreate | If nothing exists at the given path, an empty directory will be created there as needed with permission set to 0755, having the same group and ownership with Kubelet. |
+    | Directory         | A directory must exist at the given path                     |
+    | FileOrCreate      | If nothing exists at the given path, an empty file will be created there as needed with permission set to 0644, having the same group and ownership with Kubelet. |
+    | File              | A file must exist at the given path                          |
+    | Socket            | A UNIX socket must exist at the given path                   |
+    | CharDevice        | A character device must exist at the given path              |
+    | BlockDevice       | A block device must exist at the given path                  |
+  
+    
+
+     - 如果选择类型不正确，或主机上不存在对应资源(如不存在指定文件夹)，kubernetes将无法继续创建pod，创建步骤终止。pod的状态长时间处于ContainerCreating中
+  
+  ```bash
+  两个工作节点都没有目录 /mnt/hostpathdir01
+  # ls /mnt
+  total 0
+  
+  # kubectl create -f- <<EOF
+  apiVersion: v1
+  kind: Pod
+  metadata:
+    name: hppod01
+  spec:
+    containers:
+    - name: hp-container
+      image: ubuntu
+      args:
+      - /bin/sh
+      - -c
+      - sleep 3h
+      volumeMounts:
+      - name: hp-volume
+        mountPath: /hp-dir
+    volumes:
+    - name: hp-volume
+      hostPath:
+        path: /mnt/hostpathdir01
+        type: Directory
+  EOF
+  
+  pod/hppod01 created
+  
+  # kubectl get pod hppod01 
+  NAME      READY   STATUS              RESTARTS   AGE
+  hppod01   0/1     ContainerCreating   0          50s
+  
+  # kubectl describe pod hppod01 |grep -A 4 Events
+  Events:
+    Type     Reason       Age                From               Message
+    ----     ------       ----               ----               -------
+    Normal   Scheduled    51s                default-scheduler  Successfully assigned default/hppod01 to k8s-docker1
+    Warning  FailedMount  20s (x7 over 51s)  kubelet            MountVolume.SetUp failed for volume "hp-volume" : hostPath type check failed: /mnt/hostpathdir01 is not a directory
+    
+  
+  # kubectl delete pod hppod01 
+  pod "hppod01" deleted
+  
+  
+  # kubectl create -f- <<EOF
+  apiVersion: v1
+  kind: Pod
+  metadata:
+    name: hppod01
+  spec:
+    containers:
+    - name: hp-container
+      image: ubuntu
+      args:
+      - /bin/sh
+      - -c
+      - sleep 3h
+      volumeMounts:
+      - name: hp-volume
+        mountPath: /hp-dir
+    volumes:
+    - name: hp-volume
+      hostPath:
+        path: /mnt/hostpathdir01
+  EOF
+  
+  pod/hppod01 created
+  
+  # kubectl get pod hppod01 
+  NAME      READY   STATUS    RESTARTS   AGE
+  hppod01   1/1     Running   0          56s
+  
+  # kubectl delete pod hppod01 
+  pod "hppod01" deleted
+  
+  
+  # ls /mnt
+  total 0
+  
+  两个工作节点都要建立目录/mnt/hostpathdir01，再次创建含有type: Directory的pod没有问题了
+  
+  # mkdir -p /mnt/hostpathdir01
+  
+  # ls /mnt
+  hostpathdir01
+  
+  # kubectl create -f- <<EOF
+  apiVersion: v1
+  kind: Pod
+  metadata:
+    name: hppod01
+  spec:
+    containers:
+    - name: hp-container
+      image: ubuntu
+      args:
+      - /bin/sh
+      - -c
+      - sleep 3h
+      volumeMounts:
+      - name: hp-volume
+        mountPath: /hp-dir
+    volumes:
+    - name: hp-volume
+      hostPath:
+        path: /mnt/hostpathdir01
+        type: Directory
+  EOF
+  
+  pod/hppod01 created
+  
+  # kubectl get pod hppod01 
+  NAME      READY   STATUS    RESTARTS   AGE
+  hppod01   1/1     Running   0          56s
+  
+  ```
+  
+  
+     
+
+#### 14.3.PV和PVC
+
+- pv和pvc概述
+
+  - pv(persistentvolume)和pvc(persistentvolumeclaim)是k8s提供的两种API资源，用于抽象存储细节。
+
+    管理员关注于如何通过pv提供存储功能而无需关注用户如何使用，同样的用户只需要挂载pvc到容器中而不需要关注存储卷采用何种技术实现
+
+    - pv是集群中由管理员配置的一块存储空间
+
+      它是集群中的资源，就像节点是集群中的资源一样。pv是卷插件，和之前介绍的volumes类似，但它有一个独立于单个pod的生命周期。pv的后端可以是NFS,ISCSI或者云存储等
+
+    - pvc使用户的存储请求
+
+      它类似于Pod：pod消耗节点资源，而pvc消耗pvc资源。pod可以请求特定级别的资源(cpu和内存)，pvc可以请求pv特定的接入模式(读写等)和大小
+
+- 创建pv
+
+  - 基本参数：
+
+    - kind选择PersistentVolume
+
+    - capacity指定pv的容量
+
+    - accessModes指定访问模式
+
+      - ReadWriteOnce：该卷能够以读写模式被加载到一个节点上
+      - ReadOnlyMany：该卷能够以只读模式被加载到多个节点上
+      - ReadWriteMany：该卷能够以读写模式被加多个节点同时加载
+
+    - persistentVolumeReclaimPolicy：指定pv的回收策略
+
+      - Retain(保留)：不删除，需要手动回收
+      - Recycle(回收)：基本擦除，类似rm -rf，使其可供其他pvc申请
+      - Delete(删除)：关联存储将被删除，如Azure disk或OpenStack Cinder卷
+
+    - nfs：配置nfs服务器信息。
+
+      在创建pv前，已搭建完NFS服务器，IP地址是192.168.1.227，共享的文件夹是/k8s
+
+      两个工作节点也都安装了nfs-common，不然无法挂载nfs   # apt install -y nfs-common
+
+      pv支持的挂载选项包括NFS、ISCIS、Cinder卷、CephFS等
+
+  
+
+  ```yaml
+  # mypv.yaml
+  apiVersion: v1
+  kind: PersistentVolume
+  metadata:
+    name: mypv
+  spec:
+    capacity:
+      storage: 1G
+    accessModes:
+      - ReadWriteOnce
+    persistentVolumeReclaimPolicy: Recycle
+    nfs:
+      server: 192.168.1.227
+      path: /k8s
+  ```
+
+  ```bash
+  # kubectl create -f- <<EOF
+  apiVersion: v1
+  kind: PersistentVolume
+  metadata:
+    name: mypv
+  spec:
+    capacity:
+      storage: 1G
+    accessModes:
+      - ReadWriteOnce
+    persistentVolumeReclaimPolicy: Recycle
+    nfs:
+      server: 192.168.1.227
+      path: /k8s
+  EOF
+  
+  persistentvolume/mypv created
+  
+  # kubectl get pv mypv
+  NAME   CAPACITY   ACCESS MODES   RECLAIM POLICY   STATUS      CLAIM   STORAGECLASS   REASON   AGE
+  mypv   1G         RWO            Recycle          Available                                   42s
+  
+  ```
+
+  
+
+- 创建PVC
+
+  - 基本参数
+    - kind，类型指定为PersistentVolumeClaim
+    - accessModes，保存与pv一致
+    - volumeName，使用pv的名字，用于pvc找到正确的pv
+    - resources.requests，指定pv的容量，如果不存在满足该容量需求的pv，则pvc无法绑定任何pv
+    - 
+
+  ```yaml
+  # mypvc.yaml
+  apiVersion: v1
+  kind: PersistentVolumeClaim
+  metadata:
+    name: mypvc
+  spec:
+    accessModes:
+      - ReadWriteOnce
+    volumeName: mypv
+    # 因为我前面默认安装了storageClassName: csi-hostpath-sc，为了冲突，这里名字留空
+    storageClassName: "" 
+    resources:
+      requests:
+        storage: 1G
+  ```
+
+  ```bash
+  # kubectl get pv mypv
+  NAME   CAPACITY   ACCESS MODES   RECLAIM POLICY   STATUS      CLAIM   STORAGECLASS   REASON   AGE
+  mypv   1G         RWO            Recycle          Available                                   35m
+  
+  
+  # kubectl create -f mypvc.yaml 
+  persistentvolumeclaim/mypvc created
+  
+  # kubectl get pvc mypvc 
+  NAME    STATUS    VOLUME   CAPACITY   ACCESS MODES   STORAGECLASS   AGE
+  mypvc   Pending   mypv     0  
+  
+  # kubectl get pv mypv
+  NAME   CAPACITY   ACCESS MODES   RECLAIM POLICY   STATUS   CLAIM           STORAGECLASS   REASON   AGE
+  mypv   1G         RWO            Recycle          Bound    default/mypvc                           36m
+  
+  # kubectl get pvc mypvc
+  NAME    STATUS   VOLUME   CAPACITY   ACCESS MODES   STORAGECLASS   AGE
+  mypvc   Bound    mypv     1G         RWO                           9s
+  
+  ```
+
+  
+
+- pv与pvc的状态
+
+  - pv状态，创建完成后为Available
+
+    - Available---创建pvc--->Bound---删除pvc--->Release
+    - Failed，storage不可用
+
+  - pvc状态，创建完成后为pending
+
+    - Pending---绑定pv--->Bound---删除pv--->Lost
+
+    
+
+    
+
+  ```bash
+  # kubectl delete pvc mypvc && kubectl get pod 
+  mypvc deleted
+  
+  NAME                READY   STATUS             RESTARTS   AGE
+  recycler-for-mypv   0/1     ContainerCreating   0          2m2s
+  
+  正常情况：
+  # kubectl get pv mypv
+  NAME   CAPACITY   ACCESS MODES   RECLAIM POLICY   STATUS      CLAIM   STORAGECLASS   REASON   AGE
+  mypv   1G         RWO            Recycle          Available                                   71m
+  
+  
+  如果recycler-for-mypv拉取镜像失败，那么会报错：
+  # kubectl get pod recycler-for-mypv 
+  NAME                READY   STATUS             RESTARTS   AGE
+  recycler-for-mypv   0/1     ImagePullBackOff   0          2m5s
+  
+  # kubectl get pv mypv
+  NAME   CAPACITY   ACCESS MODES   RECLAIM POLICY   STATUS   CLAIM           STORAGECLASS   REASON   AGE
+  mypv   1G         RWO            Recycle          Failed   default/mypvc                           70m
+  
+  
+  ```
+
+  
+
+  
+
+  
+
+- d
 
 
 ### 15.ConfigMap与Secret
