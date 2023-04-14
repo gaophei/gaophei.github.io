@@ -1,0 +1,48 @@
+
+ingress的github地址： github.com/kubernetes/ingress-nginx
+
+官方文档地址： https://kubernetes.github.io/ingress-nginx/
+
+#kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.7.0/deploy/static/provider/cloud/deploy.yaml
+
+github.com/anjia0532/gcr.io_mirror
+
+#registry.cn-zhangjiakou.aliyuncs.com/breezey/ingress-nginx:v1.7.0
+
+#curl -sL ipinfo.io/ip
+
+#kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.7.0/deploy/static/provider/cloud/deploy.yaml
+
+
+     registry.k8s.io/ingress-nginx/controller:v1.7.0
+
+FROM registry.k8s.io/ingress-nginx/controller:v1.7.0
+
+
+# crictl config runtime-endpoint unix:///var/run/containerd/containerd.sock
+
+拉取ingress-nginx-controller镜像
+
+crictl pull dyrnq/ingress-nginx-controller:v1.7.0
+
+ctr -n k8s.io i tag docker.io/dyrnq/ingress-nginx-controller:v1.7.0 registry.k8s.io/ingress-nginx/controller:v1.7.0
+
+拉取kube-webhook-certgen镜像
+
+crictl pull dyrnq/kube-webhook-certgen:v20230312-helm-chart-4.5.2-28-g66a760794
+
+ctr -n k8s.io i tag docker.io/dyrnq/kube-webhook-certgen:v20230312-helm-chart-4.5.2-28-g66a760794 registry.k8s.io/ingress-nginx/kube-webhook-certgen:v20230312-helm-chart-4.5.2-28-g66a760794
+
+拉取defaultbackend-amd64镜像
+
+crictl pull docker.io/dyrnq/defaultbackend-amd64:1.5
+
+ctr -n k8s.io i tag docker.io/dyrnq/defaultbackend-amd64:1.5 registry.k8s.io/defaultbackend-amd64:1.5
+
+
+拉取opentelemetry镜像
+
+crictl pull anjia0532/google-containers.ingress-nginx.opentelemetry:v20230312-helm-chart-4.5.2-28-g66a760794	
+ctr -n k8s.io i tag  docker.io/anjia0532/google-containers.ingress-nginx.opentelemetry:v20230312-helm-chart-4.5.2-28-g66a760794	   registry.k8s.io/ingress-nginx/opentelemetry:v20230312-helm-chart-4.5.2-28-g66a760794
+
+

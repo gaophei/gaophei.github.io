@@ -8768,22 +8768,31 @@ index3.html          100% |*****************************************************
 
     - accessModes指定访问模式
 
-      - ReadWriteOnce：该卷能够以读写模式被加载到一个节点上
-      - ReadOnlyMany：该卷能够以只读模式被加载到多个节点上
-      - ReadWriteMany：该卷能够以读写模式被加多个节点同时加载
+      ![image-20230413090453535](cka培训截图\image-20230413090453535.png)
+    
+      - ReadWriteOnce(RWO)：该卷能够以读写模式被加载到一个节点上
+      - ReadOnlyMany(ROX)：该卷能够以只读模式被加载到多个节点上
+      - ReadWriteMany(RWX)：该卷能够以读写模式被加多个节点同时加载
 
     - persistentVolumeReclaimPolicy：指定pv的回收策略
+    
+      - Retain(保留)：保留数据，需要手工处理，此时无法被其他pvc申请
 
-      - Retain(保留)：pvc删除或者更甚者pvc和pv一起删除后，原pv文件夹下的内容不删除，需要手动回收，此时无法被其他pvc申请
       - Recycle(回收)：基本擦除，类似rm -rf，使其可供其他pvc申请
-      - Delete(删除)：关联存储将被删除，如Azure disk或OpenStack Cinder卷
 
+      - Delete(删除)：与PV相连的后端存储完成volume的删除操作，如Azure disk或OpenStack Cinder卷
+
+        
+
+        目前NFS和HostPath两种类型的存储支持Recyle策略。
+        NFS存储类、AWS EBS、GCE PD、Azure Disk和Cinder volumes支持Delete策略。
+    
     - nfs：配置nfs服务器信息。
-
+    
       在创建pv前，已搭建完NFS服务器，IP地址是192.168.1.227，共享的文件夹是/k8s
-
+    
       两个工作节点也都安装了nfs-common，不然无法挂载nfs   # apt install -y nfs-common
-
+    
       pv支持的挂载选项包括NFS、ISCIS、Cinder卷、CephFS等
 
   
@@ -8884,15 +8893,16 @@ index3.html          100% |*****************************************************
   
 - pv与pvc的状态
 
+  ![image-20230413090243438](cka培训截图\image-20230413090243438.png)
+
   - pv状态，创建完成后为Available
-
-    - Available---创建pvc--->Bound---删除pvc--->Release
+  
+    - Available---创建pvc--->Bound---删除pvc--->Release---回收存储空间--->Available
     - Failed，storage不可用
-
   - pvc状态，创建完成后为pending
-
+  
     - Pending---绑定pv--->Bound---删除pv--->Lost
-
+  
   
   
 - pv回收
@@ -8983,6 +8993,21 @@ index3.html          100% |*****************************************************
     # kubectl get pv mypv
     NAME   CAPACITY   ACCESS MODES   RECLAIM POLICY   STATUS   CLAIM           STORAGECLASS   REASON   AGE
     mypv   1G         RWO            Recycle          Failed   default/mypvc                           70m
+    
+    # kubectl describe pod recycler-for-mypv  |grep -A 10 Events
+    Events:
+      Type     Reason     Age                  From               Message
+      ----     ------     ----                 ----               -------
+      Normal   Scheduled  2m29s                default-scheduler  Successfully assigned default/recycler-for-mypv1 to k8s-docker2
+      Normal   Pulling    49s (x3 over 2m27s)  kubelet            Pulling image "registry.k8s.io/debian-base:v2.0.0"
+      Warning  Failed     18s (x3 over 117s)   kubelet            Failed to pull image "registry.k8s.io/debian-base:v2.0.0": rpc error: code = DeadlineExceeded desc = failed to pull and unpack image "registry.k8s.io/debian-base:v2.0.0": failed to resolve reference "registry.k8s.io/debian-base:v2.0.0": failed to do request: Head "https://asia-east1-docker.pkg.dev/v2/k8s-artifacts-prod/images/debian-base/manifests/v2.0.0": dial tcp 64.233.188.82:443: i/o timeout
+      Warning  Failed     18s (x3 over 117s)   kubelet            Error: ErrImagePull
+      Normal   BackOff    6s (x3 over 117s)    kubelet            Back-off pulling image "registry.k8s.io/debian-base:v2.0.0"
+      Warning  Failed     6s (x3 over 117s)    kubelet            Error: ImagePullBackOff
+      
+    # crictl  pull anjia0532/google-containers.debian-base-amd64:v2.0.0
+    # ctr -n k8s.io i tag docker.io/anjia0532/google-containers.debian-base-amd64:v2.0.0 registry.k8s.io/debian-base:v2.0.0
+    
     ```
 
     
@@ -9326,6 +9351,8 @@ index3.html          100% |*****************************************************
   NAME     CAPACITY   ACCESS MODES   RECLAIM POLICY   STATUS   CLAIM             STORAGECLASS   REASON   AGE
   mypv03   1G         RWO            Delete           Failed   default/mypvc03                           4m46s
   
+  目前NFS和HostPath两种类型的存储支持Recyle策略。所以设置为delete类型时会报错，无法删除pv
+  NFS存储类、AWS EBS、GCE PD、Azure Disk和Cinder volumes支持Delete策略
   
   # kubectl describe pv mypv03 
   Name:            mypv03
@@ -9469,6 +9496,8 @@ index3.html          100% |*****************************************************
 - 在创建pv和pvc时使用storageClass
 
   - 创建pv时指定 storageClassName，可以在pvc中申请该pv
+  
+    
  ```yaml
  # mypv05-pvc05.yaml
  ---
@@ -9516,24 +9545,1238 @@ mypvc05   Bound    mypv05   1G         RWO            nfs            37s
 
 
 - 动态卷供给
-  - storageClass除了
-- dd
+  - storageClass除了能够用上述用法之外，主要使用场景是动态供给pv
+  
+  - 由于kubernetes集群中有大量的pod，也就意味着很可能有大量的pv和pvc，如果需要一个一个手动创建无疑是一个巨大的工程，也不符合自动化的特点
+  
+  - 以NFS为例，使用动态供给功能需要完成以下几个步骤：
+  
+    - 创建nfs-provisioner，privisioner用于动态创建符合要求的pv
+    - 创建storageClass，在配置时指定使用provisioner
+    - 创建pvc，只需要指定storageClass，容量及访问模式即可
+  
+  - 如果将一个storageClass标注为default，则pv在申请时可以不指定storageClass而默认使用该default storageClass
+  
+- 配置NFS-CSI  
 
+  ```bash
+  首先配置好nfs服务器，IP为192.168.1.234，共享文件夹为/data
+  安装nfs： 
+  # apt install -y nfs-kernel-server
+  
+  # mkdir -p /data
+  # chmod 777 /data -R
+  
+  # echo "/data *(rw,sync,no_root_squash)" >> /etc/exports
+  
+  # systemctl enable nfs-server
+  # systemctl restart nfs-server
+  
+  验证
+  # showmount -e 192.168.1.234
+  
+  安装nfs-csi：
+  # wget https://breezey-public.oss-cn-zhangjiakou.aliyuncs.com/tmp/nfs-csi.tar.gz
+  # tar -zxvf nfs-csi.tar.gz
+  # kubectl apply -f v4.1.0
+  
+  配置storageClass:
+  # kubectl create -f- <<EOF
+  apiVersion: storage.k8s.io/v1
+  kind: StorageClass
+  metadata:
+    annotations:
+      storageclass.kubernetes.io/is-default-class: "true"
+    name: csi-hostpath-sc
+  mountOptions:
+  - hard
+  - nfsvers=4.0
+  parameters:
+    server: 192.168.1.234
+    share: /data
+  provisioner: nfs.csi.k8s.io
+  reclaimPolicy: Delete
+  volumeBindingMode: Immediate
+  EOF
+  
+  
+  # kubectl get sc
+  NAME                        PROVISIONER      RECLAIMPOLICY   VOLUMEBINDINGMODE   ALLOWVOLUMEEXPANSION   AGE
+  csi-hostpath-sc (default)   nfs.csi.k8s.io   Delete          Immediate           false                  2d16h
+  
+  配置基于storageClass的pvc
+  # kubectl create -f- <<EOF
+  apiVersion: v1
+  kind: PersistentVolumeClaim
+  metadata:
+    name: myclaim
+  spec:
+    accessModes:
+      - ReadWriteOnce
+    volumeMode: Filesystem
+    resources:
+      requests:
+        storage: 1Gi
+    storageClassName: csi-hostpath-sc
+  EOF
+  
+  创建测试deployment
+  # kubectl create -f- <<EOF
+  apiVersion: apps/v1
+  kind: Deployment
+  metadata:
+    labels:
+      app: busybox
+    name: busybox
+  spec:
+    replicas: 1
+    selector:
+      matchLabels:
+        app: busybox
+    strategy: {}
+    template:
+      metadata:
+        labels:
+          app: busybox
+      spec:
+        volumes:
+        - name: test
+          persistentVolumeClaim:
+            claimName: myclaim
+        containers:
+        - image: busybox:1.28
+          name: busybox
+          volumeMounts:
+          - name: test
+            mountPath: /data
+          command: 
+          - /bin/sh
+          - -c
+          - "sleep 3600"
+          resources: {}
+  EOF
+  
+  查看pv和pvc
+  # kubectl get pvc
+  NAME      STATUS   VOLUME                                     CAPACITY   ACCESS MODES   STORAGECLASS      AGE
+  myclaim   Bound    pvc-1ac4b0e9-c82c-4c35-acbf-8c639d78aba0   1Gi        RWO            csi-hostpath-sc   5s
+  # kubectl get pv
+  NAME                                       CAPACITY   ACCESS MODES   RECLAIM POLICY   STATUS   CLAIM             STORAGECLASS      REASON   AGE
+  pvc-1ac4b0e9-c82c-4c35-acbf-8c639d78aba0   1Gi        RWO            Delete           Bound    default/myclaim   csi-hostpath-sc            6s
+  
+  # kubectl get pod
+  NAME                       READY   STATUS    RESTARTS   AGE
+  busybox-5546c88bcc-7hx95   1/1     Running   0          3s
+  
+  nfs服务器查看文件目录：
+  # ls -l -R /data
+  /data:
+  total 4
+  drwxrwxrwx 2 root root 4096 Apr 13 02:10 pvc-1ac4b0e9-c82c-4c35-acbf-8c639d78aba0
+  
+  /data/pvc-1ac4b0e9-c82c-4c35-acbf-8c639d78aba0:
+  total 0
+  
+  在容器中生成数据，并在nfs服务器端查看验证
+  # kubectl exec -it busybox-5546c88bcc-7hx95 -- /bin/sh
+  / # echo testsc > /data/mydata
+  / # exit
+  
+  # ls -l -R /data
+  /data:
+  total 4
+  drwxrwxrwx 2 root root 4096 Apr 13 02:14 pvc-1ac4b0e9-c82c-4c35-acbf-8c639d78aba0
+  
+  /data/pvc-1ac4b0e9-c82c-4c35-acbf-8c639d78aba0:
+  total 4
+  -rw-r--r-- 1 root root 7 Apr 13 02:14 mydata
+  
+  # cat /data/pvc-1ac4b0e9-c82c-4c35-acbf-8c639d78aba0/mydata 
+  testsc
+  
+  # kubectl delete deployments.apps busybox 
+  deployment.apps "busybox" deleted
+  # kubectl get pod
+  NAME                       READY   STATUS        RESTARTS   AGE
+  busybox-5546c88bcc-7hx95   1/1     Terminating   0          3m25s
+  # kubectl get pod
+  No resources found in default namespace.
+  
+  再次确认pv和pvc，并删除pvc
+  # kubectl get pv,pvc
+  NAME                                                        CAPACITY   ACCESS MODES   RECLAIM POLICY   STATUS   CLAIM             STORAGECLASS      REASON   AGE
+  persistentvolume/pvc-1ac4b0e9-c82c-4c35-acbf-8c639d78aba0   1Gi        RWO            Delete           Bound    default/myclaim   csi-hostpath-sc            6m51s
+  
+  NAME                            STATUS   VOLUME                                     CAPACITY   ACCESS MODES   STORAGECLASS      AGE
+  persistentvolumeclaim/myclaim   Bound    pvc-1ac4b0e9-c82c-4c35-acbf-8c639d78aba0   1Gi        RWO            csi-hostpath-sc   6m51s
+  
+  # kubectl delete pvc myclaim && kubectl get pod
+  persistentvolumeclaim "myclaim" deleted
+  No resources found in default namespace.
+  
+  # kubectl get pvc
+  No resources found in default namespace.
+  
+  # kubectl get pv
+  No resources found
+  
+  再次查看nfs上的共享目录，pv已经自动删除：
+  # ls -l -R /data
+  /data:
+  total 0
+  
+  ```
 
+  
 
 ### 15.ConfigMap与Secret
 
 #### 15.1.ConfigMap
 
+- 开发中的困难
+
+  ![image-20230413104913848](cka培训截图\image-20230413104913848.png)
+
+  - 当开发人员开发完成一个应用程序，比如一个web程序，在正式上线前需要在各种环境中运行，例如开发时的开发环境，测试环节的测试环境，直到最终的线上环境。web程序在各种不同的环境中都需要对接不同的数据库、中间件等服务，在传统方式中我们通过配置文件来定义这些配置，而kubernetes中如果需要进入一个个pod来配置，那就会是要给巨大的麻烦
+
+- configMap的功能
+
+  ![image-20230413105317529](cka培训截图\image-20230413105317529.png)
+
+  - configMap用于容器的配置文件管理。它作为多个properties文件的应用，类似一个专门存储配置文件的目录，里面存放着各种配置文件
+  - configMap实现了image和应用程序的配置文件、命令行参数和环境变量等信息的解耦
+  - configMap和secrets类似，但configMap用于处理不含敏感信息的配置文档
+
+- 创建configMap - 从目录创建
+
+  - 创建两个配置文件，放在/runfile/configmap文件夹下
+
+  - 使用kubectl可以创建一个configmap。--from-file目录下的所有文件都会被用在configMap中创建一个键值对，键时文件名，值是文件的内容
+
+    ```bash
+    # mkdir -p /runfile/configmap
+    # cd /runfile/configmap/
+    # cat game.properties 
+    lives=3
+    enemies.cheat=true
+    enemies.cheat.level=noGoodRotten
+    # cat ui.properties 
+    color.good=pueple
+    how.nice.to.look=fairlyNice
+    
+    # kubectl create configmap game-config --from-file=runfile/configmap
+    configmap/game-config created
+    
+    # kubectl get configmap game-config
+    NAME               DATA   AGE
+    game-config        2      6s
+    
+    # kubectl describe configmaps game-config 
+    Name:         game-config
+    Namespace:    default
+    Labels:       <none>
+    Annotations:  <none>
+    
+    Data
+    ====
+    game.properties:
+    ----
+    lives=3
+    enemies.cheat=true
+    enemies.cheat.level=noGoodRotten
+    
+    ui.properties:
+    ----
+    color.good=pueple
+    how.nice.to.look=fairlyNice
+    
+    
+    BinaryData
+    ====
+    
+    Events:  <none>
+    ```
+
+    
+
+- 创建configMap - 从文件创建
+
+  - --from-file参数可以多次使用，用于从多个文件创建configMap的场景
+
+  ```bash
+  # kubectl create configmap game-config-01 --from-file=runfile/configmap/game.properties --from-file=runfile/configmap/ui.properties 
+  configmap/game-config-01 created
+  
+  # kubectl get configmaps game-config-01 
+  NAME             DATA   AGE
+  game-config-01   2      15s
+  
+  # kubectl describe  configmaps game-config-01 
+  Name:         game-config-01
+  Namespace:    default
+  Labels:       <none>
+  Annotations:  <none>
+  
+  Data
+  ====
+  game.properties:
+  ----
+  lives=3
+  enemies.cheat=true
+  enemies.cheat.level=noGoodRotten
+  
+  ui.properties:
+  ----
+  color.good=pueple
+  how.nice.to.look=fairlyNice
+  
+  
+  BinaryData
+  ====
+  
+  Events:  <none>
+  
+  ```
+
+  
+
+- 创建configMap - 从literal值创建
+
+  - 之前的方式都需要新建配置文件，然后从文件创建configmap。kubernetes还提供使用实际配置值创建的方式。通过--from-literal参数实现
+
+  ```bash
+  # kubectl create configmap special-config \
+  --from-literal=special.how=very \
+  --from-literal=special.type=charm
+  configmap/special-config created
+  
+  # kubectl get configmaps special-config 
+  NAME             DATA   AGE
+  special-config   2      13s
+  
+  # kubectl describe configmaps special-config 
+  Name:         special-config
+  Namespace:    default
+  Labels:       <none>
+  Annotations:  <none>
+  
+  Data
+  ====
+  special.how:
+  ----
+  very
+  special.type:
+  ----
+  charm
+  
+  BinaryData
+  ====
+  
+  Events:  <none>
+  ```
+
+  
+
+- 创建configMap - 从yaml文件创建
+
+  - 与deployment，pod等资源对象相同，configMap也可以使用yaml文件进行创建
+  - Data字段中，key1的定义方式类似使用--from-literal，pro.property的定义方式类似使用--from-file
+
+  ```yaml
+  # specialconfig-01.yaml
+  apiVersion: v1
+  kind: ConfigMap
+  metadata:
+    name: specialconfig-01
+  data:
+    key1: value1
+    pro.property: |
+      key2: value2
+      key3: value3
+  ```
+
+  ```bash
+  # kubectl create -f specialconfig-01.yaml
+  configmap/specialconfig-01 created
+  
+  # kubectl get configmaps specialconfig-01 
+  NAME               DATA   AGE
+  specialconfig-01   2      15s
+  
+  # kubectl describe configmaps specialconfig-01 
+  Name:         specialconfig-01
+  Namespace:    default
+  Labels:       <none>
+  Annotations:  <none>
+  
+  Data
+  ====
+  pro.property:
+  ----
+  key2: value2
+  key3: value3
+  
+  key1:
+  ----
+  value1
+  
+  BinaryData
+  ====
+  
+  Events:  <none>
+  ```
+
+  
+
+- 使用configMap - 通过环境变量
+
+  ```yaml
+  #envref.yaml 
+  apiVersion: v1
+  kind: Pod
+  metadata:
+    name: cm-test-pod
+  spec:
+    restartPolicy: Never
+    containers:
+    - name: cm-container
+      image: busybox
+      args: ["/bin/sh", "-c", "sleep 3000"]
+      env:
+        - name: special-env
+          valueFrom:
+            configMapKeyRef:
+              name: specialconfig-01
+              key: key1
+      envFrom:
+        - configMapRef:
+            name: game-config
+  ```
+
+  
+
+  - 可以直接将configMap里的参数直接作为容器的环境变量供其中程序调用
+
+  - env可以创建环境变量的键，并且引用configMap里特定参数作为值。envFrom则自动将configMap的所有的键值对自动变成环境变量
+
+  - 创建完成后容器中额外的环境变量如下
+
+    ```bash
+    # kubectl create -f envref.yaml 
+    pod/cm-test-pod created
+    # kubectl get pod cm-test-pod 
+    NAME          READY   STATUS    RESTARTS   AGE
+    cm-test-pod   1/1     Running   0          21s
+    
+    # kubectl exec -it cm-test-pod -- /bin/sh
+    / # env
+    ...输出省略...
+    ui.properties=color.good=pueple
+    how.nice.to.look=fairlyNice
+    
+    game.properties=lives=3
+    enemies.cheat=true
+    enemies.cheat.level=noGoodRotten
+    
+    special-env=value1
+    ```
+
+    
+
+- 使用configMap - 通过volume
+
+  - 使用方式和存储章节中使用emptyDir和hostPath的volume类似，configMap挂载后变成了容器内的一个目录
+  - 下例中在容器/etc/db目录中，我们可以看到两个文件，分别是key1和pro.property，对应configMap中的两个DATA，键就是文件名，值就是文件内容
+
+  ```bash
+  # kubectl create -f- <<EOF
+  apiVersion: v1
+  kind: Pod
+  metadata:
+    name: cmpod2
+  spec:
+    restartPolicy: Never
+    containers:
+    - name: cm-container
+      image: busybox
+      args: ["/bin/sh", "-c", "sleep 3000"]
+      volumeMounts:
+      - name: db
+        mountPath: "/etc/db"
+        readOnly: true
+    volumes:
+    - name: db
+      configMap:
+        name: specialconfig-01
+  EOF
+  
+  pod/cmpod2 created
+  
+  # kubectl get pod
+  NAME          READY   STATUS              RESTARTS   AGE
+  cm-test-pod   1/1     Running             0          32m
+  cmpod2        0/1     ContainerCreating   0          3s
+  # kubectl get pod
+  NAME          READY   STATUS    RESTARTS   AGE
+  cm-test-pod   1/1     Running   0          33m
+  cmpod2        1/1     Running   0          70s
+  
+  # kubectl exec -it cmpod2 -- /bin/sh
+  / # cd /etc/db
+  /etc/db # ls
+  key1          pro.property
+  /etc/db # ls -l
+  total 0
+  lrwxrwxrwx    1 root     root            11 Apr 13 09:21 key1 -> ..data/key1
+  lrwxrwxrwx    1 root     root            19 Apr 13 09:21 pro.property -> ..data/pro.property
+  /etc/db # cat key1 
+  value1/etc/db # 
+  /etc/db # cat pro.property 
+  key2: value2
+  key3: value3
+  /etc/db # exit
+  
+  ```
+
+  
+
+- configMap使用注意事项
+
+  1. configMap必须在创建pod前创建完成
+
+     如果pod调用configMap失败，则无法创建
+
+  2. pd只能使用在同一个namespace中的configMap
+
+  3. configMap创建方式通常使用文件方式
+
+  4. confiMap使用方式通常使用volume方式
+
+  5. 以volume方式挂载configMap，更新configMap或者删除重建configMap，pod内挂载的配置信息会热更新
+
+     rancher中默认不更新，要手动重新部署deployment
+
+  ```bash
+  # kubectl describe cm specialconfig-01 
+  Name:         specialconfig-01
+  Namespace:    default
+  Labels:       <none>
+  Annotations:  <none>
+  
+  Data
+  ====
+  key1:
+  ----
+  value1
+  pro.property:
+  ----
+  key2: value2
+  key3: value3
+  
+  
+  BinaryData
+  ====
+  
+  Events:  <none>
+  
+  # kubectl exec -it cmpod2 -- /bin/sh
+  / # cat /etc/db/key1 
+  value1
+  / # cat /etc/db/pro.property 
+  key2: value2
+  key3: value3
+  
+  
+  # kubectl apply -f- <<EOF
+  apiVersion: v1
+  kind: ConfigMap
+  metadata:
+    name: specialconfig-01
+  data:
+    key1: value10
+    pro.property: |
+      key2: value20
+      key3: value3
+  EOF
+  
+  configmap/specialconfig-01 configured
+  
+  # kubectl describe cm specialconfig-01 
+  Name:         specialconfig-01
+  Namespace:    default
+  Labels:       <none>
+  Annotations:  <none>
+  
+  Data
+  ====
+  key1:
+  ----
+  value10
+  pro.property:
+  ----
+  key2: value20
+  key3: value3
+  
+  
+  BinaryData
+  ====
+  
+  Events:  <none>
+  
+  # kubectl exec -it cmpod2 -- /bin/sh
+  / # cat /etc/db/key1 
+  value10 
+  / # cat /etc/db/pro.property 
+  key2: value20
+  key3: value3
+  / # 
+  
+  ```
+
+  
+
 #### 15.2.Secret
 
-#### 
+- Secret概述
+
+  - secret是一种包含少量敏感信息例如密码、token或key的对象
+
+    这样的信息可能会被放在pod spec中或者镜像中
+
+    将其放在一个secret对象中可以更地控制它的用途，并降低意外暴露的风险
+
+  - configMap主要解决配置文件的存储问题，而secret主要用来解决密码、token、密钥等敏感数据
+
+    - 在创建、查看和编辑pod的流程中secret暴露风险较小
+    - 系统会对secret对象采取额外的预防措施，例如避免将其写入磁盘中可能的位置
+    - 只有pod请求的secret在容器中才是可见的，一个pod不能访问另一个pod的secret
+
+- 创建secret - 使用kubectl命令创建
+
+  - 创建两个文件，写入用户名和密码
+
+    ```bash
+    # echo -n "admin" > username.txt
+    # echo -n "mima" > password.txt
+    ```
+
+  - 使用kubectl命令创建secret。secret的名称为db-user-pass，其中generic参数代表从本地的文件(--from-file)、目录(--from-file)或者实际值(--from-literal)。创建密文后的Type：Opaque表示base64编码格式的secret
+
+    ```bash
+    # kubectl create secret generic db-user-pass --from-file=./username.txt --from-file=./password.txt 
+    secret/db-user-pass created
+    # kubectl get secret
+    NAME           TYPE     DATA   AGE
+    db-user-pass   Opaque   2      6s
+    
+    # kubectl describe secrets db-user-pass 
+    Name:         db-user-pass
+    Namespace:    default
+    Labels:       <none>
+    Annotations:  <none>
+    
+    Type:  Opaque
+    
+    Data
+    ====
+    password.txt:  4 bytes
+    username.txt:  5 bytes
+    
+    # kubectl get secret db-user-pass -o yaml
+    apiVersion: v1
+    data:
+      password.txt: bWltYQ==
+      username.txt: YWRtaW4=
+    kind: Secret
+    metadata:
+      creationTimestamp: "2023-04-13T12:50:23Z"
+      name: db-user-pass
+      namespace: default
+      resourceVersion: "855013"
+      uid: 1e60cec1-2140-485a-8390-7068902b89eb
+    
+    # kubectl get secret db-user-pass -o yaml |grep -E  'password.txt|username.txt'
+      password.txt: bWltYQ==
+      username.txt: YWRtaW4=
+    
+    # kubectl get secret db-user-pass -o yaml |grep -E  'password.txt|username.txt'| awk '{print $2}'|base64 -d
+    mima
+    admin
+    ```
+
+    
+
+- 创建secret - 使用yaml文件创建
+
+  - 为了避免yaml文件中的值被查看到，因此需要先用base64编码后，将值写入yaml
+
+    ```bash
+    # echo -n "admin" | base64
+    YWRtaW4=
+    # echo -n "mima" | base64
+    bWltYQ==
+    ```
+
+  - 创建yaml文件
+
+    ```yaml
+    # mysecret.yaml
+    apiVersion: v1
+    kind: Secret
+    metadata:
+      name: mysecret
+    type: Opaque
+    data:
+      username: YWRtaW4=
+      password: bWltYQ==
+    ```
+
+    ```bash
+    # kubectl create -f mysecret.yaml 
+    secret/mysecret created
+    # kubectl get secrets mysecret 
+    NAME       TYPE     DATA   AGE
+    mysecret   Opaque   2      6s
+    # kubectl describe secrets mysecret 
+    Name:         mysecret
+    Namespace:    default
+    Labels:       <none>
+    Annotations:  <none>
+    
+    Type:  Opaque
+    
+    Data
+    ====
+    password:  4 bytes
+    username:  5 bytes
+    
+    ```
+
+    
+
+- 使用secret - volume方式
+
+  - 使用volume方式挂载secret给pod，和使用configMap类似
+  - 一个secret在容器内体现为一个目录，一个键值对就是一个文件，其中键就是文件名，值就是文件内容
+  - secret内容在挂载给pod是进行解码，因此在pod内部是明文呈现
+
+  ```yaml
+  # spod.yaml
+  apiVersion: v1
+  kind: Pod
+  metadata:
+    name: spod
+  spec:
+    restartPolicy: Never
+    containers:
+    - name: spod
+      image: busybox
+      args: ["/bin/sh","-c","sleep 3000"]
+      volumeMounts:
+      - name: secrets
+        mountPath: "/etc/secret"
+        readOnly: true
+    volumes:
+    - name: secrets
+      secret:
+        secretName: mysecret
+  ```
+
+  ```bash
+  # kubectl create -f spod.yaml 
+  pod/spod created
+  # kubectl get pods spod
+  NAME   READY   STATUS    RESTARTS   AGE
+  spod   1/1     Running   0          78s
+  
+  # kubectl describe pod spod |grep -A 4 Volumes
+  Volumes:
+    secrets:
+      Type:        Secret (a volume populated by a Secret)
+      SecretName:  mysecret
+      Optional:    false
+  
+  # kubectl exec -it spod -- /bin/sh
+  / # ls -lR /etc/secret
+  /etc/secret:
+  total 0
+  lrwxrwxrwx    1 root     root            15 Apr 13 13:34 password -> ..data/password
+  lrwxrwxrwx    1 root     root            15 Apr 13 13:34 username -> ..data/username
+  
+  / # cat /etc/secret/username 
+  admin 
+  / # cat /etc/secret/password 
+  mima
+  / # exit
+  
+  ```
+
+  
+
+- 使用secret - 挂载指定值
+
+  - 在挂载secret的时候可以指定items，并将secret中的某些参数传递到pod中
+    - secret中的password传递到了pod，而username没有
+    - 在pod中/etc/secret/my-group下有一个my-passwd文件，内容为密码
+
+  ```yaml
+  apiVersion: v1
+  kind: Pod
+  metadata:
+    name: spod2
+  spec:
+    restartPolicy: Never
+    containers:
+      - name: spod2
+        image: busybox
+        args: ["/bin/sh","-c","sleep 3000"]
+        volumeMounts:
+        - name: secrets
+          mountPath: "/etc/secret"
+    volumes:
+    - name: secrets
+      secret:
+        secretName: mysecret
+        items:
+        - key: password
+          path: my-group/my-passwd
+  ```
+
+  ```bash
+  # kubectl create -f spod2.yaml 
+  pod/spod2 created
+  # kubectl get pod spod2
+  NAME    READY   STATUS    RESTARTS   AGE
+  spod2   1/1     Running   0          5s
+  # kubectl describe pod spod2|grep -A 4 Volumes
+  Volumes:
+    secrets:
+      Type:        Secret (a volume populated by a Secret)
+      SecretName:  mysecret
+      Optional:    false
+      
+  # kubectl exec -it spod2 -- /bin/sh
+  / # ls -lR /etc/secret
+  /etc/secret:
+  total 0
+  lrwxrwxrwx    1 root     root            15 Apr 13 13:55 my-group -> ..data/my-group
+  / # cd /etc/secret/
+  /etc/secret # ls
+  my-group
+  /etc/secret # cd my-group/
+  /etc/secret/..2023_04_13_13_55_41.2994026753/my-group # ls
+  my-passwd
+  /etc/secret/..2023_04_13_13_55_41.2994026753/my-group # cat my-passwd 
+  mima
+  ```
+
+  
+
+- 其他情况使用类似于configMap
 
 ### 16.StatefulSet
 
-#### 16.1.StatefulSet管理与使用
+#### 16.1.使用StatefulSet
 
-#### 16.2.使用StatefulSet
+- Deployment的特征
+
+  - 回顾deployment，可以发现一些有趣的特征
+
+    比如，所有pod地位都是平等的，当一个pod因故障被替换后，新的容器与其余所有pod依然相同，因此无论请求发送到哪个pod，返回的结果都是一致的
+
+    又或者pod被删除后，里面的数据也随之消失
+
+    这种特性一般被称其为"无状态"
+
+- "有状态"的应用
+
+  - 有些情况下希望运行一些和上述不同的应用，包括使用持久化的存储，稳定的网络标志，pod与pod之间并不是完全平等(即使它们用同一个镜像创建)
+
+    这类服务通常成为"有状态"的服务，它的实现不再依靠replicaset，而是使用statefulSet，它具备以下特征：
+
+    - 稳定的持久化存储，pod重新调度后访问相同的持久化数据，使用pvc来实现
+    - 稳定的网络标识，pod重新调度后podName和hostName不变，基于headless sevice实现
+    - pod都有一个"序号"，可以有序的进行扩展，部署等操作
+
+- 创建有状态应用的三步骤
+
+  ![image-20230414171439781](cka培训截图\image-20230414171439781.png)
+
+- 创建PV和PVC
+
+  - 预先创建好一批pv
+
+  ```bash
+  创建nfs目录及配置：
+  # mkdir /etc/exports.d /nfs{1..3} && \
+  tee /etc/exports.d/s.exports <<EOF
+  /nfs1 *(rw,sync,no_root_squash)
+  /nfs2 *(rw,sync,no_root_squash)
+  /nfs3 *(rw,sync,no_root_squash)
+  EOF
+  
+  # cat /etc/exports.d/s.exports 
+  /nfs1 *(rw,sync,no_root_squash)
+  /nfs2 *(rw,sync,no_root_squash)
+  /nfs3 *(rw,sync,no_root_squash)
+  
+  # apt install -y nfs-kernel-server && \
+  systemctl enable nfs-server && \
+  systemctl restart nfs-server && \
+  showmount -e
+  
+  ...输出省略...
+  Export list for k8s-master:
+  /nfs3 *
+  /nfs2 *
+  /nfs1 *
+  /data *
+  
+  工作节点安装nfs-common
+  # apt install -y nfs-common
+  ```
+  ```bash
+  创建pv
+  # kubectl create -f- <<EOF
+  apiVersion: v1
+  kind: PersistentVolume
+  metadata:
+    name: mypv1
+  spec:
+    storageClassName: my-sc
+    capacity:
+      storage: 1G
+    accessModes:
+      - ReadWriteOnce
+    persistentVolumeReclaimPolicy: Recycle
+    nfs:
+      server: 192.168.1.234
+      path: /nfs1
+  ---
+  apiVersion: v1
+  kind: PersistentVolume
+  metadata:
+    name: mypv2
+  spec:
+    storageClassName: my-sc
+    capacity:
+      storage: 1G
+    accessModes:
+      - ReadWriteOnce
+    persistentVolumeReclaimPolicy: Recycle
+    nfs:
+      server: 192.168.1.234
+      path: /nfs2
+  ---
+  apiVersion: v1
+  kind: PersistentVolume
+  metadata:
+    name: mypv3
+  spec:
+    storageClassName: my-sc
+    capacity:
+      storage: 1G
+    accessModes:
+      - ReadWriteOnce
+    persistentVolumeReclaimPolicy: Recycle
+    nfs:
+      server: 192.168.1.234
+      path: /nfs3
+  EOF
+  
+  persistentvolume/mypv1 created
+  persistentvolume/mypv2 created
+  persistentvolume/mypv3 created
+  
+  ```
+
+  ```bash
+  # kubectl get pv
+  NAME    CAPACITY   ACCESS MODES   RECLAIM POLICY   STATUS      CLAIM   STORAGECLASS   REASON   AGE
+  mypv1   1G         RWO            Recycle          Available           my-sc                   52s
+  mypv2   1G         RWO            Recycle          Available           my-sc                   52s
+  mypv3   1G         RWO            Recycle          Available           my-sc                   52s
+  ```
+
+  
+
+  - 在yaml文件中定义PVC的模板，使系统在创建stateful时自动创建pvc
+
+  ```yaml
+  volumeClaimTemplates:
+  - metadata:
+      name: stor
+    spec:
+      accessModes:
+        - ReadWriteOnce
+      storageClassName: my-sc
+      resources:
+        requests:
+          storage: 1G
+  ```
+
+  
+
+- 创建statefulSet
+
+  - 创建statefulSet时需要注意，serviceName这一项的值必须要和后面创建的headless service的名称一致
+
+  - 另外matchLabels参数和pod的标签一致，这与deployment相同
+
+
+  ```yaml
+  # stf-nginx.yaml
+  apiVersion: apps/v1
+  kind: StatefulSet
+  metadata:
+    name: web
+  spec:
+    replicas: 3
+    selector:
+      matchLabels:
+        app: stf-nginx
+    serviceName: stf-nginx
+    template:
+      metadata:
+        labels:
+          app: stf-nginx
+      spec:
+        terminationGracePeriodSeconds: 10
+        containers:
+        - name: stf-nginx
+          image: nginx
+          ports:
+          - containerPort: 80
+            name: web
+          volumeMounts:
+          - name: stor
+            mountPath: /usr/share/nginx/html
+    volumeClaimTemplates:
+    - metadata:
+        name: stor
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: "my-sc"
+        resources:
+          requests:
+            storage: 1G
+  ```
+
+  ```bash
+  # kubectl create -f stf-nginx.yaml
+  statefulset.apps/web created
+  
+  # watch -n 1 kubectl get pods -l app=stf-nginx
+  Every 1.0s: kubectl get pods -l app=stf-nginx                                                                                                          k8s-master: Fri Apr 14 12:36:17 2023
+  
+  NAME    READY   STATUS              RESTARTS   AGE
+  web-0   0/1     ContainerCreating   0          1s
+  
+  Every 1.0s: kubectl get pods -l app=stf-nginx                                                                                                          k8s-master: Fri Apr 14 12:36:17 2023
+  
+  NAME    READY   STATUS               RESTARTS   AGE
+  web-0   1/1     Running              0          18s
+  web-1   0/1     ContainerCreating    0          1s
+  
+  Every 1.0s: kubectl get pods -l app=stf-nginx                                                                                                          k8s-master: Fri Apr 14 12:36:17 2023
+  
+  NAME    READY   STATUS               RESTARTS   AGE
+  web-0   1/1     Running              0          25s
+  web-1   1/1     Running              0          18s
+  web-2   0/1     ContainerCreating    0          1s
+  
+  Every 1.0s: kubectl get pods -l app=stf-nginx                                                                                                          k8s-master: Fri Apr 14 12:36:17 2023
+  
+  NAME    READY   STATUS    RESTARTS   AGE
+  web-0   1/1     Running   0          53s
+  web-1   1/1     Running   0          36s
+  web-2   1/1     Running   0          19s
+  
+  # kubectl get pv
+  NAME    CAPACITY   ACCESS MODES   RECLAIM POLICY   STATUS   CLAIM                STORAGECLASS   REASON   AGE
+  mypv1   1G         RWO            Recycle          Bound    default/stor-web-0   my-sc                   47m
+  mypv2   1G         RWO            Recycle          Bound    default/stor-web-1   my-sc                   47m
+  mypv3   1G         RWO            Recycle          Bound    default/stor-web-2   my-sc                   47m
+  # kubectl get pvc
+  NAME         STATUS   VOLUME   CAPACITY   ACCESS MODES   STORAGECLASS   AGE
+  stor-web-0   Bound    mypv1    1G         RWO            my-sc          7m49s
+  stor-web-1   Bound    mypv2    1G         RWO            my-sc          7m21s
+  stor-web-2   Bound    mypv3    1G         RWO            my-sc          6m54s
+  ```
+
+  
+
+- 创建结果
+
+  - 创建完成后，可以看到pod名称按序号排列。如果查看创建日志，可以发现pod的创建顺序时第一个创建完成之后再创建第二个，依次完成
+
+    ```bash
+    # kubectl get pods -l app=stf-nginx
+    NAME    READY   STATUS               RESTARTS   AGE
+    web-0   1/1     Running              0          25s
+    web-1   1/1     Running              0          18s
+    web-2   0/1     ContainerCreating    0          1s
+    
+    # kubectl get pods -l app=stf-nginx
+    NAME    READY   STATUS    RESTARTS   AGE
+    web-0   1/1     Running   0          53s
+    web-1   1/1     Running   0          36s
+    web-2   1/1     Running   0          19s
+    ```
+
+  - 创建了三个pvc，名称同样以序号排列，依次和pv做绑定
+
+    ```bash
+    # kubectl get pvc
+    NAME         STATUS   VOLUME   CAPACITY   ACCESS MODES   STORAGECLASS   AGE
+    stor-web-0   Bound    mypv1    1G         RWO            my-sc          7m49s
+    stor-web-1   Bound    mypv2    1G         RWO            my-sc          7m21s
+    stor-web-2   Bound    mypv3    1G         RWO            my-sc          6m54s
+    ```
+
+    
+
+- 创建headless服务
+
+  - 创建headless服务，注意以下几点：
+    - 服务名称和中的定义一致
+    - 选择器要指向正确的pod标签
+    - 指定clusterIP: None
+
+
+  ```yaml
+  # stf-nginx-svc.yaml
+  apiVersion: v1
+  kind: Service
+  metadata:
+    name: stf-nginx
+  spec:
+    ports:
+    - port: 80
+      name: web
+    clusterIP: None
+    selector:
+      app: stf-nginx
+  ```
+
+  ```bash
+  # kubectl create -f stf-nginx-svc.yaml 
+  service/stf-nginx created
+  
+  # kubectl get svc
+  NAME         TYPE        CLUSTER-IP   EXTERNAL-IP   PORT(S)   AGE
+  kubernetes   ClusterIP   10.96.0.1    <none>        443/TCP   7d6h
+  stf-nginx    ClusterIP   None         <none>        80/TCP    21s
+  
+  # kubectl get ep
+  NAME         ENDPOINTS                                           AGE
+  kubernetes   192.168.1.234:6443                                  7d6h
+  stf-nginx    172.16.77.195:80,172.16.77.196:80,172.16.94.68:80   23s
+  
+  
+  # kubectl get pod -l app=stf-nginx -o wide
+  NAME    READY   STATUS    RESTARTS   AGE   IP              NODE          NOMINATED NODE   READINESS GATES
+  web-0   1/1     Running   0          19m   172.16.77.236   k8s-docker1   <none>           <none>
+  web-1   1/1     Running   0          18m   172.16.94.87    k8s-docker2   <none>           <none>
+  web-2   1/1     Running   0          18m   172.16.77.237   k8s-docker1   <none>           <none>
+  
+  # kubectl create -f- <<EOF
+  apiVersion: v1
+  kind: Pod
+  metadata:
+    name: clientpod
+  spec:
+    containers:
+    - name: clientpod
+      image: busybox
+      args:
+      - /bin/sh
+      - -c
+      - sleep 3h
+  EOF
+  
+  pod/clientpod created
+  
+  # kubectl get pods 
+  clientpod                   1/1     Running     0          25s
+  web-0                       1/1     Running     0          23m
+  web-1                       1/1     Running     0          22m
+  web-2                       1/1     Running     0          22m
+  
+  # kubectl exec -it clientpod -- /bin/sh
+  / # nslookup stf-nginx
+  Server:    10.96.0.10
+  Address 1: 10.96.0.10 kube-dns.kube-system.svc.cluster.local
+  
+  Name:      stf-nginx
+  Address 1: 172.16.77.195 web-0.stf-nginx.default.svc.cluster.local
+  Address 2: 172.16.77.196 web-2.stf-nginx.default.svc.cluster.local
+  Address 3: 172.16.94.68 web-1.stf-nginx.default.svc.cluster.local
+  / # nslookup web-0
+  Server:    10.96.0.10
+  Address 1: 10.96.0.10 kube-dns.kube-system.svc.cluster.local
+  
+  nslookup: can't resolve 'web-0'
+  / # nslookup web-1
+  Server:    10.96.0.10
+  Address 1: 10.96.0.10 kube-dns.kube-system.svc.cluster.local
+  
+  nslookup: can't resolve 'web-1'
+  / # nslookup web-2
+  Server:    10.96.0.10
+  Address 1: 10.96.0.10 kube-dns.kube-system.svc.cluster.local
+  
+  nslookup: can't resolve 'web-2'
+  / # nslookup web-0
+  Server:    10.96.0.10
+  Address 1: 10.96.0.10 kube-dns.kube-system.svc.cluster.local
+  
+  nslookup: can't resolve 'web-0'
+  / # nslookup stf-nginx
+  Server:    10.96.0.10
+  Address 1: 10.96.0.10 kube-dns.kube-system.svc.cluster.local
+  
+  Name:      stf-nginx
+  Address 1: 172.16.94.68 web-1.stf-nginx.default.svc.cluster.local
+  Address 2: 172.16.77.196 web-2.stf-nginx.default.svc.cluster.local
+  Address 3: 172.16.77.195 web-0.stf-nginx.default.svc.cluster.local
+  / # 
+  / # nslookup 172.16.77.195 
+  Server:    10.96.0.10
+  Address 1: 10.96.0.10 kube-dns.kube-system.svc.cluster.local
+  
+  Name:      172.16.77.195
+  Address 1: 172.16.77.195 web-0.stf-nginx.default.svc.cluster.local
+  / # nslookup 172.16.94.68
+  Server:    10.96.0.10
+  Address 1: 10.96.0.10 kube-dns.kube-system.svc.cluster.local
+  
+  Name:      172.16.94.68
+  Address 1: 172.16.94.68 web-1.stf-nginx.default.svc.cluster.local
+  / # nslookup 172.16.77.196
+  Server:    10.96.0.10
+  Address 1: 10.96.0.10 kube-dns.kube-system.svc.cluster.local
+  
+  Name:      172.16.77.196
+  Address 1: 172.16.77.196 web-2.stf-nginx.default.svc.cluster.local
+  
+  ```
+
+  
+
+- d
+
+- d
+
+- d
+
+- d
+
+- d
+
+- d
+
+- 
 
 #### 
 

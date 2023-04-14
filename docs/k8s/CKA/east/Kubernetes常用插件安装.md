@@ -1,9 +1,12 @@
 这里统一使用helm安装相关插件，所以需要先安装好helm： 
 
 ```Bash
-wget https://breezey-public.oss-cn-zhangjiakou.aliyuncs.com/softwares/linux/kubernetes/helm-v3.6.3-linux-amd64.tar.gz
-tar xf helm-v3.6.3-linux-amd64.tar.gz
-cd helm-v3.6.3-linux-amd64
+#wget https://breezey-public.oss-cn-zhangjiakou.aliyuncs.com/softwares/linux/kubernetes/helm-v3.6.3-linux-amd64.tar.gz
+#tar xf helm-v3.6.3-linux-amd64.tar.gz
+#cd helm-v3.6.3-linux-amd64
+wget https://rancher-mirror.rancher.cn/helm/v3.11.3/helm-v3.11.3-linux-amd64.tar.gz
+tar -zxvf helm-v3.11.3-linux-amd64.tar.gz
+cd linux-adm64
 cp helm /usr/bin/
 
 ```
@@ -39,6 +42,8 @@ helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
 helm repo update
 # 获取安装包
 helm fetch ingress-nginx/ingress-nginx
+# Error: Get "https://github.com/kubernetes/ingress-nginx/releases/download/helm-chart-4.6.0/ingress-nginx-4.6.0.tgz": unexpected EOF
+
 tar xf ingress-nginx-4.0.6.tgz
 cd ingress-nginx
 ```

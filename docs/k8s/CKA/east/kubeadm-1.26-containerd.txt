@@ -180,6 +180,19 @@ cat > create-k8s.yaml <<'EOF'
         regexp: '            SystemdCgroup = false'
         line: '            SystemdCgroup = true'
         state: present
+    - name: modify /etc/crictl.yaml runtimeendpoint
+      lineinfile:
+        path: /etc/crictl.yaml
+        regexp: 'runtime-endpoint.*'
+        line: 'runtime-endpoint: "unix:///var/run/containerd/containerd.sock"'
+        state: present   
+    #- name: crictl runtimeendpoint
+	  # ps -ef|grep sock
+	  # vim /etc/containerd/config.toml
+	  # [grpc].address = "/run/containerd/containerd.sock"
+	  # systemctl restart containerd
+	  # ps -ef|grep sock
+	  #shell crictl config runtime-endpoint unix:///var/run/containerd/containerd.sock
     - name: restart/enable containerd service 
       systemd:
         state: restarted
@@ -381,7 +394,6 @@ cat > create-k8s.yaml <<'EOF'
     - name: pause 30s after cluster init
       shell: sleep 30s
       when: "'master' in group_names"
-
     - name: set up admin role
       shell: |
         mkdir -p $HOME/.kube
