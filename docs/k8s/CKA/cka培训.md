@@ -10688,7 +10688,7 @@ mypvc05   Bound    mypv05   1G         RWO            nfs            37s
   spec:
     containers:
     - name: clientpod
-      image: busybox
+      image: busybox:1.28.3
       args:
       - /bin/sh
       - -c
@@ -10712,6 +10712,30 @@ mypvc05   Bound    mypv05   1G         RWO            nfs            37s
   Address 1: 172.16.77.195 web-0.stf-nginx.default.svc.cluster.local
   Address 2: 172.16.77.196 web-2.stf-nginx.default.svc.cluster.local
   Address 3: 172.16.94.68 web-1.stf-nginx.default.svc.cluster.local
+  
+  / # nslookup web-0.stf-nginx
+  Server:    10.96.0.10
+  Address 1: 10.96.0.10 kube-dns.kube-system.svc.cluster.local
+  
+  Name:      web-0.stf-nginx
+  Address 1: 172.16.77.195 web-0.stf-nginx.default.svc.cluster.local
+  
+  / # nslookup web-1.stf-nginx
+  Server:    10.96.0.10
+  Address 1: 10.96.0.10 kube-dns.kube-system.svc.cluster.local
+  
+  Name:      web-1.stf-nginx
+  Address 1: 172.16.94.68 web-1.stf-nginx.default.svc.cluster.local
+  
+  / # nslookup web-2.stf-nginx
+  Server:    10.96.0.10
+  Address 1: 10.96.0.10 kube-dns.kube-system.svc.cluster.local
+  
+  Name:      web-2.stf-nginx
+  Address 1: 172.16.77.196 web-2.stf-nginx.default.svc.cluster.local
+  / # exit
+  
+  
   / # nslookup web-0
   Server:    10.96.0.10
   Address 1: 10.96.0.10 kube-dns.kube-system.svc.cluster.local
@@ -10727,20 +10751,7 @@ mypvc05   Bound    mypv05   1G         RWO            nfs            37s
   Address 1: 10.96.0.10 kube-dns.kube-system.svc.cluster.local
   
   nslookup: can't resolve 'web-2'
-  / # nslookup web-0
-  Server:    10.96.0.10
-  Address 1: 10.96.0.10 kube-dns.kube-system.svc.cluster.local
   
-  nslookup: can't resolve 'web-0'
-  / # nslookup stf-nginx
-  Server:    10.96.0.10
-  Address 1: 10.96.0.10 kube-dns.kube-system.svc.cluster.local
-  
-  Name:      stf-nginx
-  Address 1: 172.16.94.68 web-1.stf-nginx.default.svc.cluster.local
-  Address 2: 172.16.77.196 web-2.stf-nginx.default.svc.cluster.local
-  Address 3: 172.16.77.195 web-0.stf-nginx.default.svc.cluster.local
-  / # 
   / # nslookup 172.16.77.195 
   Server:    10.96.0.10
   Address 1: 10.96.0.10 kube-dns.kube-system.svc.cluster.local
@@ -10760,15 +10771,417 @@ mypvc05   Bound    mypv05   1G         RWO            nfs            37s
   Name:      172.16.77.196
   Address 1: 172.16.77.196 web-2.stf-nginx.default.svc.cluster.local
   
+  / # nslookup web-0.stf-nginx
+  Server:    10.96.0.10
+  Address 1: 10.96.0.10 kube-dns.kube-system.svc.cluster.local
+  
+  Name:      web-0.stf-nginx
+  Address 1: 172.16.77.195 web-0.stf-nginx.default.svc.cluster.local
+  / # nslookup web-1.stf-nginx
+  Server:    10.96.0.10
+  Address 1: 10.96.0.10 kube-dns.kube-system.svc.cluster.local
+  
+  Name:      web-1.stf-nginx
+  Address 1: 172.16.94.68 web-1.stf-nginx.default.svc.cluster.local
+  / # nslookup web-2.stf-nginx
+  Server:    10.96.0.10
+  Address 1: 10.96.0.10 kube-dns.kube-system.svc.cluster.local
+  
+  Name:      web-2.stf-nginx
+  Address 1: 172.16.77.196 web-2.stf-nginx.default.svc.cluster.local
+  / # exit
+  
   ```
 
   
 
-- d
+- statefulSet的故障处理
 
-- d
+  - 与无状态服务不同，有状态的statefulSet中一个pod出现故障之后，可以看到：
 
-- d
+    - 虽然pod的IP地址变化了，但是通过不变的域名，仍然可以访问到重建后的pod
+
+      ```bash
+      # kubectl describe pod web-0|grep ClaimName
+          ClaimName:  stor-web-0
+      # kubectl get pv |grep stor-web-0
+      mypv1   1G         RWO            Recycle          Bound    default/stor-web-0   my-sc                   22h
+      # kubectl describe pv mypv1|grep -A 4 Source
+      Source:
+          Type:      NFS (an NFS mount that lasts the lifetime of a pod)
+          Server:    192.168.1.234
+          Path:      /nfs1
+          ReadOnly:  false
+      
+      # touch /nfs1/newfile
+      
+      # kubectl exec -it web-0 -- ls /usr/share/nginx/html
+      newfile
+      
+      # kubectl get pod -owide
+      web-0                       1/1     Running   0              23h     172.16.77.195   k8s-docker1   <none>           <none>
+      web-1                       1/1     Running   0              23h     172.16.94.68    k8s-docker2   <none>           <none>
+      web-2                       1/1     Running   0              23h     172.16.77.196   k8s-docker1   <none>           <none>
+      
+      # kubectl delete pod web-0
+      pod "web-0" deleted
+      
+      # kubectl get pod -owide
+      web-0                       1/1     Running   0              17s     172.16.94.78    k8s-docker2   <none>           <none>
+      web-1                       1/1     Running   0              23h     172.16.94.68    k8s-docker2   <none>           <none>
+      web-2                       1/1     Running   0              23h     172.16.77.196   k8s-docker1   <none>           <none>
+      
+      # kubectl exec -it web-0 -- ls /usr/share/nginx/html
+      newfile
+      
+      # kubectl exec -it clientpod -- /bin/sh
+      / # nslookup stf-nginx
+      Server:    10.96.0.10
+      Address 1: 10.96.0.10 kube-dns.kube-system.svc.cluster.local
+      
+      Name:      stf-nginx
+      Address 1: 172.16.94.68 web-1.stf-nginx.default.svc.cluster.local
+      Address 2: 172.16.94.78 web-0.stf-nginx.default.svc.cluster.local
+      Address 3: 172.16.77.196 web-2.stf-nginx.default.svc.cluster.local
+      / # nslookup web-0.stf-nginx
+      Server:    10.96.0.10
+      Address 1: 10.96.0.10 kube-dns.kube-system.svc.cluster.local
+      
+      Name:      web-0.stf-nginx
+      Address 1: 172.16.94.78 web-0.stf-nginx.default.svc.cluster.local
+      / # exit
+      
+      ```
+
+      
+
+    - 即使经过了故障和重建，pod中保持在持久化存储中的数据依然存在
+
+      
+
+- 扩缩容和升级
+
+  - 当缩容statefulSet时，可以看到pod停止的顺序从序号最高的开始降序停止，并且只有在前一个pod被完全终止后，下一个pod才开始终止
+
+    升级时，也是以相同顺序处理
+
+  ```bash
+  # watch -n 1 kubectl get pod -l app=stf-nginx
+  Every 1.0s: kubectl get pod -l app=stf-nginx                                                                                                           k8s-master: Sat Apr 15 14:24:35 2023
+  
+  NAME    READY   STATUS    RESTARTS   AGE
+  web-0   1/1     Running   0          7m49s
+  web-1   1/1     Running   0          23h
+  web-2   1/1     Running   0          23h
+  ===================================
+  Every 1.0s: kubectl get pod -l app=stf-nginx                                                                                                           k8s-master: Sat Apr 15 14:24:55 2023
+  
+  NAME    READY   STATUS    RESTARTS   AGE
+  web-0   1/1     Running   0          7m49s
+  web-1   1/1     Running   0          23h
+  web-2   1/1     Terminating   0          23h
+  
+  Every 1.0s: kubectl get pod -l app=stf-nginx                                                                                                           k8s-master: Sat Apr 15 14:24:56 2023
+  
+  NAME    READY   STATUS      RESTARTS   AGE
+  web-0   1/1     Running       0          7m49s
+  web-1   1/1     Terminating   0          23h
+  
+  Every 1.0s: kubectl get pod -l app=stf-nginx                                                                                                           k8s-master: Sat Apr 15 14:24:57 2023
+  
+  NAME    READY   STATUS      RESTARTS   AGE
+  web-0   1/1     Running       0          7m49s
+  
+  ===================================
+  Every 1.0s: kubectl get pod -l app=stf-nginx                                                                                                           k8s-master: Sat Apr 15 14:25:35 2023
+  
+  NAME    READY   STATUS      RESTARTS   AGE
+  web-0   1/1     Running       0          7m49s
+  web-1   0/1     ContainerCreating   0          1s
+  
+  Every 1.0s: kubectl get pod -l app=stf-nginx                                                                                                           k8s-master: Sat Apr 15 14:25:39 2023
+  
+  NAME    READY   STATUS    RESTARTS   AGE
+  web-0   1/1     Running   0          7m49s
+  web-1   1/1     Running   0          5s
+  web-2   1/1     ContainerCreating   0      1s
+  
+  Every 1.0s: kubectl get pod -l app=stf-nginx                                                                                                           k8s-master: Sat Apr 15 14:25:45 2023
+  
+  NAME    READY   STATUS    RESTARTS   AGE
+  web-0   1/1     Running   0          7m49s
+  web-1   1/1     Running   0          11s
+  web-2   1/1     Running   0          7s
+  ```
+
+  ```bash
+  # kubectl scale statefulset web --replicas=1
+  statefulset.apps/web scaled
+  
+  # kubectl scale statefulset web --replicas=3
+  statefulset.apps/web scaled
+  ```
+
+  
+
+- Pod管理策略
+
+  - 对于某些分布式系统，statefulSet的顺序性保证是不必要的，或者是不应该出现的。
+
+    为了解决这个问题，在kubernetes1.7中引入了podManagementPolicy
+
+    - OrderedReady Pod管理策略：statefulSet的默认选项，保证顺序性
+    - Parallel Pod管理策略：并行启动、终止、升级、弹性伸缩Pod，在变更一个pod时不必等前一个pod完成
+
+
+  ```yaml
+  # stf-nginx-01.yaml
+  apiVersion: apps/v1
+  kind: StatefulSet
+  metadata:
+    name: stf-nginx-01
+  spec:
+    replicas: 3
+    selector:
+      matchLabels:
+        app: stf-nginx-01
+    serviceName: stf-nginx-01
+    podManagementPolicy: Parallel
+    template:
+      metadata:
+        labels:
+          app: stf-nginx-01
+      spec:
+        terminationGracePeriodSeconds: 10
+        containers:
+        - name: stf-nginx-01
+          image: nginx
+          ports:
+          - containerPort: 80
+            name: web
+          volumeMounts:
+          - name: stor
+            mountPath: /usr/share/nginx/html
+    volumeClaimTemplates:
+    - metadata:
+        name: stor
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: "my-sc"
+        resources:
+          requests:
+            storage: 1G
+  ```
+
+  ```bash
+  # kubectl delete statefulsets.apps web 
+  statefulset.apps "web" deleted
+  
+  # kubectl get pvc
+  NAME         STATUS   VOLUME   CAPACITY   ACCESS MODES   STORAGECLASS   AGE
+  stor-web-0   Bound    mypv1    1G         RWO            my-sc          23h
+  stor-web-1   Bound    mypv2    1G         RWO            my-sc          23h
+  stor-web-2   Bound    mypv3    1G         RWO            my-sc          23h
+  
+  # kubectl delete pvc stor-web-{0..2}
+  persistentvolumeclaim "stor-web-0" deleted
+  persistentvolumeclaim "stor-web-1" deleted
+  persistentvolumeclaim "stor-web-2" deleted
+  
+  # kubectl get pvc
+  No resources found in default namespace.
+  
+  # kubectl get pv
+  NAME    CAPACITY   ACCESS MODES   RECLAIM POLICY   STATUS      CLAIM                STORAGECLASS   REASON   AGE
+  mypv1   1G         RWO            Recycle          Failed      default/stor-web-0   my-sc                   23h
+  mypv2   1G         RWO            Recycle          Available                        my-sc                   23h
+  mypv3   1G         RWO            Recycle          Available                        my-sc                   23h
+  # kubectl get pod
+  NAME                        READY   STATUS      RESTARTS        AGE
+  recycler-for-mypv2          0/1     Completed   0               73s
+  
+  # kubectl describe pod recycler-for-mypv2 
+  Name:             recycler-for-mypv2
+  Namespace:        default
+  Priority:         0
+  Service Account:  default
+  Node:             k8s-docker2/192.168.1.236
+  Start Time:       Sat, 15 Apr 2023 14:44:06 +0000
+  Labels:           <none>
+  Annotations:      cni.projectcalico.org/containerID: 4a38a3ce99989692c2cd31ce3890f24e1a38308efb17a053c8b7b851dc5e22a1
+                    cni.projectcalico.org/podIP: 
+                    cni.projectcalico.org/podIPs: 
+  Status:           Succeeded
+  IP:               172.16.94.82
+  IPs:
+    IP:  172.16.94.82
+  Containers:
+    pv-recycler:
+      Container ID:  containerd://dec928f49077e51c1fb04bba7880ee648b530c1837d83442fc206949cb963b53
+      Image:         registry.k8s.io/debian-base:v2.0.0
+      Image ID:      docker.io/anjia0532/google-containers.debian-base-amd64@sha256:d7be39e143d4e6677a28c81c0a84868b40800fc979dea1848bb19d526668a00c
+      Port:          <none>
+      Host Port:     <none>
+      Command:
+        /bin/sh
+      Args:
+        -c
+        test -e /scrub && rm -rf /scrub/..?* /scrub/.[!.]* /scrub/*  && test -z "$(ls -A /scrub)" || exit 1
+      State:          Terminated
+        Reason:       Completed
+        Exit Code:    0
+        Started:      Sat, 15 Apr 2023 14:44:08 +0000
+        Finished:     Sat, 15 Apr 2023 14:44:08 +0000
+      Ready:          False
+      Restart Count:  0
+      Environment:    <none>
+      Mounts:
+        /scrub from vol (rw)
+        /var/run/secrets/kubernetes.io/serviceaccount from kube-api-access-r8r5g (ro)
+  Conditions:
+    Type              Status
+    Initialized       True 
+    Ready             False 
+    ContainersReady   False 
+    PodScheduled      True 
+  Volumes:
+    vol:
+      Type:      NFS (an NFS mount that lasts the lifetime of a pod)
+      Server:    192.168.1.234
+      Path:      /nfs2
+      ReadOnly:  false
+    kube-api-access-r8r5g:
+      Type:                    Projected (a volume that contains injected data from multiple sources)
+      TokenExpirationSeconds:  3607
+      ConfigMapName:           kube-root-ca.crt
+      ConfigMapOptional:       <nil>
+      DownwardAPI:             true
+  QoS Class:                   BestEffort
+  Node-Selectors:              <none>
+  Tolerations:                 node.kubernetes.io/not-ready:NoExecute op=Exists for 300s
+                               node.kubernetes.io/unreachable:NoExecute op=Exists for 300s
+  Events:
+    Type    Reason     Age    From               Message
+    ----    ------     ----   ----               -------
+    Normal  Scheduled  2m18s  default-scheduler  Successfully assigned default/recycler-for-mypv2 to k8s-docker2
+    Normal  Pulled     2m17s  kubelet            Container image "registry.k8s.io/debian-base:v2.0.0" already present on machine
+    Normal  Created    2m17s  kubelet            Created container pv-recycler
+    Normal  Started    2m16s  kubelet            Started container pv-recycler
+  
+  # kubectl get pv
+  NAME    CAPACITY   ACCESS MODES   RECLAIM POLICY   STATUS      CLAIM   STORAGECLASS   REASON   AGE
+  mypv1   1G         RWO            Recycle          Available           my-sc                   23h
+  mypv2   1G         RWO            Recycle          Available           my-sc                   23h
+  mypv3   1G         RWO            Recycle          Available           my-sc                   23h
+  
+  
+  # kubectl create -f- <<EOF
+  apiVersion: apps/v1
+  kind: StatefulSet
+  metadata:
+    name: stf-nginx-01
+  spec:
+    replicas: 3
+    selector:
+      matchLabels:
+        app: stf-nginx-01
+    serviceName: stf-nginx-01
+    podManagementPolicy: Parallel
+    template:
+      metadata:
+        labels:
+          app: stf-nginx-01
+      spec:
+        terminationGracePeriodSeconds: 10
+        containers:
+        - name: stf-nginx-01
+          image: nginx
+          ports:
+          - containerPort: 80
+            name: web
+          volumeMounts:
+          - name: stor
+            mountPath: /usr/share/nginx/html
+    volumeClaimTemplates:
+    - metadata:
+        name: stor
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: "my-sc"
+        resources:
+          requests:
+            storage: 1G
+  EOF
+  
+  statefulset.apps/stf-nginx-01 created
+  
+  # kubectl get pv
+  NAME    CAPACITY   ACCESS MODES   RECLAIM POLICY   STATUS   CLAIM                         STORAGECLASS   REASON   AGE
+  mypv1   1G         RWO            Recycle          Bound    default/stor-stf-nginx-01-2   my-sc                   23h
+  mypv2   1G         RWO            Recycle          Bound    default/stor-stf-nginx-01-0   my-sc                   23h
+  mypv3   1G         RWO            Recycle          Bound    default/stor-stf-nginx-01-1   my-sc                   23h
+  
+  # kubectl get pvc
+  NAME                  STATUS   VOLUME   CAPACITY   ACCESS MODES   STORAGECLASS   AGE
+  stor-stf-nginx-01-0   Bound    mypv2    1G         RWO            my-sc          12s
+  stor-stf-nginx-01-1   Bound    mypv3    1G         RWO            my-sc          12s
+  stor-stf-nginx-01-2   Bound    mypv1    1G         RWO            my-sc          12s
+  
+  # kubectl get pod
+  NAME                        READY   STATUS      RESTARTS        AGE
+  recycler-for-mypv2          0/1     Completed   0               4m59s
+  stf-nginx-01-0              1/1     Running     0               19s
+  stf-nginx-01-1              1/1     Running     0               19s
+  stf-nginx-01-2              1/1     Running     0               19s
+  
+  # watch -n 10 kubectl get pod -l app=stf-nginx-01
+  Every 1.0s: kubectl get pod -l app=stf-nginx-01                                                                                                        k8s-master: Sat Apr 15 14:50:49 2023
+  
+  NAME             READY   STATUS    RESTARTS   AGE
+  stf-nginx-01-0   1/1     Running   0          2m3s
+  stf-nginx-01-1   1/1     Running   0          2m3s
+  stf-nginx-01-2   1/1     Running   0          2m3s
+  =================================
+  Every 1.0s: kubectl get pod -l app=stf-nginx-01                                                                                                        k8s-master: Sat Apr 15 14:50:49 2023
+  
+  NAME             READY   STATUS    RESTARTS   AGE
+  stf-nginx-01-0   1/1     Running   0          2m3s
+  stf-nginx-01-1   1/1     Terminating   0          2m3s
+  stf-nginx-01-2   1/1     Terminating   0          2m3s
+  
+  
+  Every 1.0s: kubectl get pod -l app=stf-nginx-01                                                                                                        k8s-master: Sat Apr 15 14:50:49 2023
+  
+  NAME             READY   STATUS    RESTARTS   AGE
+  stf-nginx-01-0   1/1     Running   0          2m3s
+  
+  
+  =================================
+  Every 1.0s: kubectl get pod -l app=stf...  k8s-master: Sat Apr 15 14:52:58 2023
+  
+  NAME             READY   STATUS    RESTARTS   AGE
+  stf-nginx-01-0   1/1     Running   0          2m3s
+  stf-nginx-01-1   0/1     ContainerCreating   0          2m3s
+  stf-nginx-01-2   0/1     ContainerCreating   0          2m3s
+  
+  Every 1.0s: kubectl get pod -l app=stf...  k8s-master: Sat Apr 15 14:52:58 2023
+  
+  NAME             READY   STATUS    RESTARTS   AGE
+  stf-nginx-01-0   1/1     Running   0          4m13s
+  stf-nginx-01-1   1/1     Running   0          62s
+  stf-nginx-01-2   1/1     Running   0          62s
+  
+  ```
+
+  ```bash
+  # kubectl scale statefulset stf-nginx-01 --replicas=1
+  statefulset.apps/stf-nginx-01 scaled
+  
+  # kubectl scale statefulset stf-nginx-01 --replicas=3
+  statefulset.apps/stf-nginx-01 scaled
+  ```
+
+  
 
 - d
 
