@@ -1,0 +1,1826 @@
+docker
+   * containerd
+* 容器的基本原理与架构
+   * 容器与虚拟机区别
+   * 主流的容器技术
+       * docker
+	   * containerd
+	   * podman
+   * docker的基本操作
+       * 镜像管理
+	   * 容器管理
+	   * 网络管理
+	   * 存储管理
+   
+   * 容器的单机编排系统
+       * docker-compose
+
+
+kubernetes 1.26
+   * kubernetes的原理与架构
+   * kubernetes的组件
+   * kubernetes的部署
+   * kubernetes的资源对象
+          * namespace   
+          * pod
+          * node
+          * deployment
+          * statefulset
+     kubernetes的网络服务
+          * service
+          * ingress		   
+   * kubernetes的存储服务
+          * pv   
+          * pvc	
+          * storageclass 
+   * kubernetes的认证与授权
+          * role
+          * clusterrole          
+          * rolebinding	
+          * clusterrolebinding		  
+   * kubernetes的安全
+          * networkpolicy	
+   * kubernetes的资源限制
+          * resourcequota
+		  * limitrange
+   * ...		  
+containerd
+
+CKA考试实践
+   * 17道题
+
+讲课：
+ubuntu 22.04 + kubernetes 1.26
+
+考试环境：
+ubuntu 20.04 + kubernetes 1.26 
+
+dpkg/apt
+
+
+Centos7 + kubernetes
+rpm/yum
+
+openshit---rhcos
+
+coreos
+
+
+
+2核4g   ubuntu 20.04/22.04
+
+=========================
+容器的基本架构与原理
+   * 容器
+          * 2013年 docker开源
+		  * google开源的容器技术gvisor
+		  * ali开源的容器技术pouch
+		  
+		  * 容器是为任务而生的
+		  
+		  * 容器与虚拟机的对比
+		       * 启动速度，容器更快
+			   * 资源占用，容器更少
+			        * 计算
+					     * cpu和内存
+						     容器： 共享内核，接近原生性能
+							 虚拟机： 95%
+					* 存储
+					     * 容器更小
+					* 网络
+					     * 都有损耗
+			   * 隔离性，容器不如虚拟机
+			   * 针对对内核有要求的应用，容器无能为力		
+               
+			   
+
+			   
+   * openstack
+           * 虚拟机
+		   
+   * docker镜像
+           * redis容器		
+           * mysql容器	
+           * apache容器		
+           * alpine/distro/busybox		   
+		   
+   * 操作系统的组成
+          * 内核空间
+		  * 用户空间
+	   * windows和linux有什么区别
+       * centos和ubuntu有什么区别	   
+		  
+云计算的模型
+   * Iaas: Infrastructure as as service
+           * 各云主机厂商提供
+   * Paas: Platform as as service   
+           * k8s
+		   * 阿里云提供数据库服务器等
+   * Saas: Software as as service
+           *  金蝶/用友/深信服/钉钉等，只提供网络账户等
+
+
+计算机的基本能力
+   * 计算
+          * cpu
+          * memcache	   
+   * 存储  
+   * 网络
+
+主流的容器技术
+     * 容器引擎
+	      * 计算
+		  * 存储
+		  * 网络
+	 * 容器运行时
+	      * 计算
+		  
+		  
+* docker 
+     * 计算：containerd
+	 * 存储：docker-volume
+	 * 网络：docker-network 
+	 
+	 docker run
+* containerd
+     * 计算
+	 * nerdctl
+	 https://github.com/containerd/nerdctl
+	 
+	 nerdctl run
+* podman
+
+     podman run
+	    podman run -d docker.io/library/httpd:2.4
+		podman search httpd
+* kata-container 
+
+* gvisor
+* pouch
+* cri-o
+* rkt
+
+
+docker run ---> docker-api
+                      --->containerd--->runc---container===>runc执行后结束退出===>containerd--->container计算
+					  --->docker-volume---容器存储
+					  --->docker-network---容器网络
+
+					  
+					  
+					  
+CKA  CNCF certificated kubernetes administrator
+CNCF: Cloud Native Compute Foundation
+* containerd
+* kubernetes
+
+
+cri: container runtime interface
+
+kubectl run --->docker-shim--->docker-api--->containerd---runc--->container
+            --->volome
+			--->network
+k8s1.24:
+kubectl run --->containerd--->container
+
+docker的组件及概念
+* image: docker镜像
+    * 包含了某个任务及其依赖的所有文件的一个包
+	     * 阉割版的操作系统(只包含用户空间)
+		 * 任务服务本身
+         example:
+		    * redis镜像：
+			    * alpine/ubuntu操作系统
+				* redis服务本身
+* container
+    * 将镜像运行起来，就是一个容器
+* registry
+    * 镜像仓库，用于存储镜像的地方
+
+* docker daemon ---server服务端
+* docker  ---client客户端
+
+	
+以容器的方式运行一个apache服务：
+* 从registry当中获取apache镜像
+* 将image运行起来变成一个容器
+
+
+docker 版本
+    * docker.io: 1.13
+	* docker-ee: enterprise edition(moby)
+	* docker-ce: community edition(默认使用20.10)
+
+
+安装docker:
+https://developer.aliyun.com/mirror/
+https://mirrors.aliyun.com/
+
+
+https://developer.aliyun.com/mirror/docker-ce?spm=a2c6h.13651102.0.0.4e861b11qnXQHP
+
+
+tabby
+putty
+finalshell  termius
+
+运行一个容器：
+docker run -d -P httpd:2.4
+
+查看当前主机上运行的容器的状态：
+docker ps -a
+
+# docker rmi httpd:2.4
+Untagged: httpd:2.4
+Untagged: httpd@sha256:0954cc1af252d824860b2c5dc0a10720af2b7a3d3435581ca788dff8480c7b32
+Deleted: sha256:dabbfbe0c57b6e5cd4bc089818d3f664acfad496dc741c9a501e72d15e803b34
+Deleted: sha256:0e16a5a61bcb4e6b2bb2d746c2d6789d6c0b66198208b831f74b52198d744189
+Deleted: sha256:f79670638074ff7fd293e753c11ea2ca0a2d92ab516d2f6b0bac3f4c6fed5d86
+Deleted: sha256:189d55cdd18e4501032bb700a511c2d69c82fd75f1b619b5218ea6870e71e4aa
+Deleted: sha256:cb038ed3e490a8c0f195cf135ac0d27dd8d3872598b1cb858c2666f2dae95a61
+
+# docker run -d -P httpd:2.4
+Unable to find image 'httpd:2.4' locally
+2.4: Pulling from library/httpd
+a2abf6c4d29d: Already exists 
+dcc4698797c8: Pull complete 
+41c22baa66ec: Pull complete 
+67283bbdd4a0: Pull complete 
+d982c879c57e: Pull complete 
+Digest: sha256:0954cc1af252d824860b2c5dc0a10720af2b7a3d3435581ca788dff8480c7b32
+Status: Downloaded newer image for httpd:2.4
+2320cda07ad031a50f4bf33ecb20991822ef848960636c4c5db7ed7b4f92e93c
+
+
+# docker ps -a|grep httpd
+CONTAINER ID        IMAGE          COMMAND                  CREATED              STATUS      PORTS                         NAMES
+b68950598794        httpd:2.4      "httpd-foreground"   3 minutes ago       Up 3 minutes     0.0.0.0:32772->80/tcp         friendly_rubin
+
+
+
+# iptables -t nat -nL|grep 32772
+DNAT       tcp  --  0.0.0.0/0            0.0.0.0/0            tcp dpt:32772 to:169.254.123.4:80
+
+# curl localhost:32772
+<html><body><h1>It works!</h1></body></html>
+
+
+docker的镜像管理
+    * 镜像的命名规范
+		 repository:tag
+		 [http|https://][registry/][library/]<name>[:tag]
+		 
+		 httpd:2.4
+		 https://docker.io/library/httpd:2.4
+		 
+		 docker pull docker.io/library/httpd:2.4
+		 
+		 https://hub.docker.com/
+		 
+         registry.aliyuncs.com/
+         
+		 registry.cn-zhangjiakou.aliyuncs.com/breezey/
+
+
+CKAD
+		 
+		 
+    * 镜像从哪里来
+    * 镜像存储在哪里
+	* 镜像的基本操作: 镜像一旦生成，无法被修改
+		 * 查看本地镜像
+		   docker image ls
+		   # docker image ls
+             REPOSITORY                                                           TAG                            IMAGE ID            CREATED             SIZE
+			 mysql                                                                5.7                            c20987f18b13        15 months ago       448MB
+registry.cn-zhangjiakou.aliyuncs.com/breezey/mysql                                8.0                            3218b38490ce        15 months ago       516MB
+		     httpd                                                                2.4                            dabbfbe0c57b        15 months ago       144MB
+		 	
+	     * 拉取镜像
+		   docker pull
+		   
+		 * 删除镜像
+		   docker rmi httpd:2.4
+		   docker rmi dabbfbe0c57b
+		   docker rmi -f dabbfbe0c57b
+		   
+		   docker ps -a|awk '{print $1}'|xargs docker rm -f
+		   
+		 * 构建镜像
+           docker commit
+		   
+		      docker run -itd  --name centos centos:7 /bin/bash
+			  ---> yum install -y wget
+			       yum install -y vim
+				   wget -O /etc/yum.repos.d/epel.repo https://mirrors.aliyun.com/repo/epel-7.repo
+				   yum install -y redis
+				   /etc/redis.conf   ---> bind 0.0.0.0
+				   
+				   redis-server /etc/redis.conf
+				   
+			  ---> docker commit centos redis:custom-v1
+
+		      docker run -d -p 6379:6379 -e REDIS_PASS="cka123" redis:custom-v1 redis-server /etc/redis.conf
+		      * 优点：可以不懂dockerfile编写，就可以生成docker image
+			  * 缺点：
+			         1. 别人不知道这个镜像是怎么生成的
+					 2. 无法声明监听端口
+					 3. 无法指定默认命令
+					 4. dockerfile高级特性，其都无法支持
+		
+           dockerfile编程：docker build dockerfile	
+		      cat entrypoint.sh <<EOF
+              #/bin/bash
+			  sed -i "s/{{.REDIS_PASS}}/${REDIS_PASS}:-redis123/g" /etc/redis.conf
+			  
+			  exec "$@"
+		      EOF
+			  
+			  cat Dockerfile <<EOF
+		      FROM centos:7
+			  
+			  ADD entrypoint.sh /entrypoint.sh
+			  
+			  RUN yum install -y wget ; \
+			      wget -O /etc/yum.repos.d/epel.repo https://mirrors.aliyun.com/repo/epel-7.repo; \
+				  yum install -y redis; \
+				  chmod a+x /entrypoint.sh
+				  
+			  ADD redis.conf /etc/redis.conf
+			  
+			  EXPOSE 6379
+			  
+			  ENTRYPOINT ["/entrypoint.sh"]
+			  
+			  CMD ["redis-server","/etc/redis.conf"]
+			  
+			  EOF
+			  
+			  docker build -t redis:custom-v2 . -f ./Dockerfile
+			  
+			  docker image ls
+			  
+			  docker run -d -P redis:custom-v2 
+			  docker run -d -P -e REDIS_PASS=cka321 redis:custom-v2 
+			   
+		 * 为镜像打tag
+		   docker tag busybox:1.35 busybox:latest
+		   docker tag busybox:1.35 registry.cn-zhangjiakou.aliyuncs.com/breezey/busybox:1.3
+		   
+		 * 认证镜像仓库
+		   docker login registry.cn-zhangjiakou.aliyuncs.com
+		   --->usera@gmail.com
+		   --->passwd
+		   
+		 * 推送镜像
+		   docker push registry.cn-zhangjiakou.aliyuncs.com/breezey/busybox:1.3
+
+
+    * 镜像分层技术---写时复制
+	  容器： 临时读写层+镜像层
+	  容器---->docker commit--->新的镜像
+      
+      
+[root@docker01 docker]# ls
+Dockerfile  entrypoint.sh  redis.conf
+[root@docker01 docker]# cat redis.conf |grep -v ^$|grep -v ^#
+bind 0.0.0.0
+protected-mode yes
+port 6379
+tcp-backlog 511
+timeout 0
+tcp-keepalive 300
+daemonize no
+supervised no
+pidfile /var/run/redis_6379.pid
+loglevel notice
+logfile /var/log/redis/redis.log
+databases 16
+save 900 1
+save 300 10
+save 60 10000
+stop-writes-on-bgsave-error yes
+rdbcompression yes
+rdbchecksum yes
+dbfilename dump.rdb
+dir /var/lib/redis
+slave-serve-stale-data yes
+slave-read-only yes
+repl-diskless-sync no
+repl-diskless-sync-delay 5
+repl-disable-tcp-nodelay no
+slave-priority 100
+requirepass {{.REDIS_PASS}}
+appendonly no
+appendfilename "appendonly.aof"
+appendfsync everysec
+no-appendfsync-on-rewrite no
+auto-aof-rewrite-percentage 100
+auto-aof-rewrite-min-size 64mb
+aof-load-truncated yes
+lua-time-limit 5000
+slowlog-log-slower-than 10000
+slowlog-max-len 128
+latency-monitor-threshold 0
+notify-keyspace-events ""
+hash-max-ziplist-entries 512
+hash-max-ziplist-value 64
+list-max-ziplist-size -2
+list-compress-depth 0
+set-max-intset-entries 512
+zset-max-ziplist-entries 128
+zset-max-ziplist-value 64
+hll-sparse-max-bytes 3000
+activerehashing yes
+client-output-buffer-limit normal 0 0 0
+client-output-buffer-limit slave 256mb 64mb 60
+client-output-buffer-limit pubsub 32mb 8mb 60
+hz 10
+aof-rewrite-incremental-fsync yes
+[root@docker01 docker]# cat entrypoint.sh 
+#!/bin/bash
+sed -i "s/{{.REDIS_PASS}}/${REDIS_PASS:-redis123}/g" /etc/redis.conf
+
+exec "$@"
+[root@docker01 docker]# cat Dockerfile 
+FROM centos:7
+
+ADD entrypoint.sh /entrypoint.sh
+
+RUN yum install -y wget; \
+    wget -O /etc/yum.repos.d/epel.repo https://mirrors.aliyun.com/repo/epel-7.repo; \
+    yum install -y redis; \
+    chmod a+x /entrypoint.sh
+
+ADD redis.conf /etc/redis.conf
+
+EXPOSE 6379
+
+ENTRYPOINT ["/entrypoint.sh"]
+
+CMD ["redis-server","/etc/redis.conf"]
+
+[root@docker01 docker]# docker build -t redis:custom-v1 . -f ./Dockerfile 
+Sending build context to Docker daemon  50.69kB
+Step 1/7 : FROM centos:7
+ ---> eeb6ee3f44bd
+Step 2/7 : ADD entrypoint.sh /entrypoint.sh
+ ---> d30c2cd03c46
+Step 3/7 : RUN yum install -y wget;     wget -O /etc/yum.repos.d/epel.repo https://mirrors.aliyun.com/repo/epel-7.repo;     yum install -y redis;     chmod a+x /entrypoint.sh
+ ---> Running in 3b5307e497f7
+Loaded plugins: fastestmirror, ovl
+Determining fastest mirrors
+ * base: mirrors.163.com
+ * extras: ftp.sjtu.edu.cn
+ * updates: mirrors.ustc.edu.cn
+Resolving Dependencies
+--> Running transaction check
+---> Package wget.x86_64 0:1.14-18.el7_6.1 will be installed
+--> Finished Dependency Resolution
+
+Dependencies Resolved
+
+================================================================================
+ Package        Arch             Version                   Repository      Size
+================================================================================
+Installing:
+ wget           x86_64           1.14-18.el7_6.1           base           547 k
+
+Transaction Summary
+================================================================================
+Install  1 Package
+
+Total download size: 547 k
+Installed size: 2.0 M
+Downloading packages:
+warning: /var/cache/yum/x86_64/7/base/packages/wget-1.14-18.el7_6.1.x86_64.rpm: Header V3 RSA/SHA256 Signature, key ID f4a80eb5: NOKEY
+Public key for wget-1.14-18.el7_6.1.x86_64.rpm is not installed
+Retrieving key from file:///etc/pki/rpm-gpg/RPM-GPG-KEY-CentOS-7
+Importing GPG key 0xF4A80EB5:
+ Userid     : "CentOS-7 Key (CentOS 7 Official Signing Key) <security@centos.org>"
+ Fingerprint: 6341 ab27 53d7 8a78 a7c2 7bb1 24c6 a8a7 f4a8 0eb5
+ Package    : centos-release-7-9.2009.0.el7.centos.x86_64 (@CentOS)
+ From       : /etc/pki/rpm-gpg/RPM-GPG-KEY-CentOS-7
+Running transaction check
+Running transaction test
+Transaction test succeeded
+Running transaction
+  Installing : wget-1.14-18.el7_6.1.x86_64                                  1/1 
+install-info: No such file or directory for /usr/share/info/wget.info.gz
+  Verifying  : wget-1.14-18.el7_6.1.x86_64                                  1/1 
+
+Installed:
+  wget.x86_64 0:1.14-18.el7_6.1                                                 
+
+Complete!
+--2023-04-09 12:41:14--  https://mirrors.aliyun.com/repo/epel-7.repo
+Resolving mirrors.aliyun.com (mirrors.aliyun.com)... 58.216.14.143, 58.216.14.144, 58.216.14.142, ...
+Connecting to mirrors.aliyun.com (mirrors.aliyun.com)|58.216.14.143|:443... connected.
+HTTP request sent, awaiting response... 200 OK
+Length: 664 [application/octet-stream]
+Saving to: '/etc/yum.repos.d/epel.repo'
+
+     0K                                                       100% 82.5M=0s
+
+2023-04-09 12:41:14 (82.5 MB/s) - '/etc/yum.repos.d/epel.repo' saved [664/664]
+
+Loaded plugins: fastestmirror, ovl
+Loading mirror speeds from cached hostfile
+ * base: mirrors.163.com
+ * extras: ftp.sjtu.edu.cn
+ * updates: mirrors.ustc.edu.cn
+Resolving Dependencies
+--> Running transaction check
+---> Package redis.x86_64 0:3.2.12-2.el7 will be installed
+--> Processing Dependency: logrotate for package: redis-3.2.12-2.el7.x86_64
+--> Processing Dependency: libjemalloc.so.1()(64bit) for package: redis-3.2.12-2.el7.x86_64
+--> Running transaction check
+---> Package jemalloc.x86_64 0:3.6.0-1.el7 will be installed
+---> Package logrotate.x86_64 0:3.8.6-19.el7 will be installed
+--> Finished Dependency Resolution
+
+Dependencies Resolved
+
+================================================================================
+ Package            Arch            Version                 Repository     Size
+================================================================================
+Installing:
+ redis              x86_64          3.2.12-2.el7            epel          544 k
+Installing for dependencies:
+ jemalloc           x86_64          3.6.0-1.el7             epel          105 k
+ logrotate          x86_64          3.8.6-19.el7            base           70 k
+
+Transaction Summary
+================================================================================
+Install  1 Package (+2 Dependent packages)
+
+Total download size: 718 k
+Installed size: 1.8 M
+Downloading packages:
+--------------------------------------------------------------------------------
+Total                                              2.9 MB/s | 718 kB  00:00     
+Running transaction check
+Running transaction test
+Transaction test succeeded
+Running transaction
+  Installing : logrotate-3.8.6-19.el7.x86_64                                1/3 
+  Installing : jemalloc-3.6.0-1.el7.x86_64                                  2/3 
+  Installing : redis-3.2.12-2.el7.x86_64                                    3/3 
+  Verifying  : redis-3.2.12-2.el7.x86_64                                    1/3 
+  Verifying  : jemalloc-3.6.0-1.el7.x86_64                                  2/3 
+  Verifying  : logrotate-3.8.6-19.el7.x86_64                                3/3 
+
+Installed:
+  redis.x86_64 0:3.2.12-2.el7                                                   
+
+Dependency Installed:
+  jemalloc.x86_64 0:3.6.0-1.el7         logrotate.x86_64 0:3.8.6-19.el7        
+
+Complete!
+Removing intermediate container 3b5307e497f7
+ ---> bfaa9f918cfd
+Step 4/7 : ADD redis.conf /etc/redis.conf
+ ---> dcd1d6d3e1bf
+Step 5/7 : EXPOSE 6379
+ ---> Running in 1a7144b9b349
+Removing intermediate container 1a7144b9b349
+ ---> 1b83c239a9af
+Step 6/7 : ENTRYPOINT ["/entrypoint.sh"]
+ ---> Running in 9234525fe28f
+Removing intermediate container 9234525fe28f
+ ---> 654fa9ff6c65
+Step 7/7 : CMD ["redis-server","/etc/redis.conf"]
+ ---> Running in ae85a559fa52
+Removing intermediate container ae85a559fa52
+ ---> b01cc9459ed6
+Successfully built b01cc9459ed6
+Successfully tagged redis:custom-v1
+
+[root@docker01 docker]# docker images |grep centos
+centos       7            eeb6ee3f44bd        19 months ago       204MB
+
+[root@docker01 docker]# docker images |grep redis
+redis       custom-v1         b01cc9459ed6        4 minutes ago       450MB
+
+[root@docker01 docker]# docker history centos:7
+IMAGE               CREATED             CREATED BY                                      SIZE                COMMENT
+eeb6ee3f44bd        19 months ago       /bin/sh -c #(nop)  CMD ["/bin/bash"]            0B                  
+<missing>           19 months ago       /bin/sh -c #(nop)  LABEL org.label-schema.sc…   0B                  
+<missing>           19 months ago       /bin/sh -c #(nop) ADD file:b3ebbe8bd304723d4…   204MB               
+[root@docker01 docker]# docker history redis:custom-v1
+IMAGE               CREATED             CREATED BY                                      SIZE                COMMENT
+b01cc9459ed6        3 minutes ago       /bin/sh -c #(nop)  CMD ["redis-server" "/etc…   0B                  
+654fa9ff6c65        3 minutes ago       /bin/sh -c #(nop)  ENTRYPOINT ["/entrypoint.…   0B                  
+1b83c239a9af        3 minutes ago       /bin/sh -c #(nop)  EXPOSE 6379                  0B                  
+dcd1d6d3e1bf        3 minutes ago       /bin/sh -c #(nop) ADD file:0bd52f3c380966519…   46.7kB              
+bfaa9f918cfd        3 minutes ago       /bin/sh -c yum install -y wget;     wget -O …   246MB               
+d30c2cd03c46        4 minutes ago       /bin/sh -c #(nop) ADD file:b1872f9ca2bef92b4…   89B                 
+eeb6ee3f44bd        19 months ago       /bin/sh -c #(nop)  CMD ["/bin/bash"]            0B                  
+<missing>           19 months ago       /bin/sh -c #(nop)  LABEL org.label-schema.sc…   0B                  
+<missing>           19 months ago       /bin/sh -c #(nop) ADD file:b3ebbe8bd304723d4…   204MB               
+
+[root@docker01 docker]# docker run -d -P -e REDIS_PASS=redis321 redis:custom-v1
+6d2a0fe068447e289793a01516c243337135e340c43fd9a1adcc239e7616aff8
+
+[root@docker01 docker]# docker ps -a|grep redis
+6d2a0fe06844        redis:custom-v1                                                      "/entrypoint.sh redi…"   10 seconds ago      Up 9 seconds               0.0.0.0:32786->6379/tcp   mystifying_volhard
+
+[root@docker01 docker]# docker exec -it 6d2a /bin/bash
+
+[root@6d2a0fe06844 /]# env | grep -i redis_pass
+REDIS_PASS=redis321
+
+[root@6d2a0fe06844 /]# redis-cli 
+127.0.0.1:6379> auth redis321
+OK
+127.0.0.1:6379> info
+# Server
+redis_version:3.2.12
+redis_git_sha1:00000000
+redis_git_dirty:0
+redis_build_id:7897e7d0e13773f
+redis_mode:standalone
+os:Linux 3.10.0-1160.21.1.el7.x86_64 x86_64
+arch_bits:64
+multiplexing_api:epoll
+gcc_version:4.8.5
+...............
+127.0.0.1:6379> exit
+[root@6d2a0fe06844 /]# exit
+exit
+
+
+[root@docker01 docker]# docker run -d -P  redis:custom-v1
+9d81eb85286bc8f3b29e1250ac9861f5f7b45aca1059c8474c5dc02eb291ab60
+[root@docker01 docker]# docker ps -a|grep redis
+9d81eb85286b        redis:custom-v1                                                      "/entrypoint.sh redi…"   4 seconds ago        Up 3 seconds                0.0.0.0:32787->6379/tcp   stoic_germain
+6d2a0fe06844        redis:custom-v1                                                      "/entrypoint.sh redi…"   About a minute ago   Up About a minute           0.0.0.0:32786->6379/tcp   mystifying_volhard
+
+
+[root@docker01 docker]# docker exec -it 9d81 /bin/bash
+
+[root@9d81eb85286b /]# env |grep -i redis_pass
+
+
+[root@9d81eb85286b /]# redis-cli
+127.0.0.1:6379> auth redis123
+OK
+127.0.0.1:6379> exit
+[root@9d81eb85286b /]# redis-cli
+127.0.0.1:6379> auth redis321
+(error) ERR invalid password
+127.0.0.1:6379> auth redis123
+OK
+127.0.0.1:6379> 
+
+
+
+
+报错处理：
+一开始entrypoint.sh第一行写bash时出错，打包出镜像时没有报错，但是docker run时报错：
+[root@docker01 docker]# docker run -d -P -e REDIS_PASS=redis321 redis:custom-v1
+68b948a90a83f7e0151c30925d210e6d09785e3a603b10984ccd791cb62857e8
+[root@docker01 docker]# docker ps -a|more
+CONTAINER ID        IMAGE                                                                COMMAND                  CREATED              STATUS                          PORTS               N
+AMES
+68b948a90a83        redis:custom-v1                                                      "/entrypoint.sh redi…"   5 seconds ago        Exited (1) 4 seconds ago                            l
+aughing_hermann
+
+
+
+
+容器管理
+
+docker run -d -P httpd:2.4
+* -d   将容器以守护进程的方式运行
+       容器是为任务而生的：如果一个容器没有任何任务或任务结束(出现异常退出，也可能时运行完毕)，则容器会自我销毁
+	      * 大多数镜像在启动为容器时，都会自动运行一个任务
+		  * 人为添加，用户添加的任务默认会覆盖镜像自带的任务
+		    docker run -d httpd:2.4 sleep 3600
+	    一个容器建议只运行一个任务，如果有多个任务，可以启动多个容器
+		假如多个任务，必须有一个任务在前台运行：
+		              mysql/httpd
+		              systemctl start mysqld
+					  httpd-foreground
+* -e
+        在容器启动时传递环境变量
+		docker run -d -e MYSQL_ROOT_PASSWORD=cka123456 -p 3306:3306 mysql:8.0
+		mysql -uroot -pcka123456 -h127.0.0.1 -P3306
+		
+		docker run -d -e MYSQL_ROOT_PASSWORD=cka123456 -e MYSQL_DATABASE=cka -e MYSQL_USER=test -e MYSQL_PASSWORD=cka123 -p 3366:3306 mysql:8.0
+		mysql -utest -pcka123 -h127.0.0.1 -P3366
+		
+		docker run -itd -e aa=bb --name busybox busybox:1.35
+		docker exec -it busybox /bin/sh
+		env|grep aa
+		
+
+* -i    interactive
+* -t    tty
+        想要进入一个正在运行的容器:
+		    docker exec -it container_id /bin/sh
+		
+* --name
+        为容器指定名称
+		docker run -d --name webserver httpd:2.4	
+* --rm
+        容器在退出时自动删除，在docker最新版本中，不再与-d参数互斥
+
+* -p
+    * 在bridge网络模式下实现容器的端口映射，需要手动指定
+	* 随意指定容器的映射端口
+
+* -P
+    * 在bridge网络模式下实现容器的自动的端口映射
+	* 只能自动映射被镜像显示声明的端口
+* --dns
+    * 指定容器自己的dns
+	
+
+* --link
+    * wordpress
+	    * php
+		* mysql
+ 
+	  docker run -d --name mysql8.0 -v /data/mysql:/var/lib/mysql -v /etc/localtime:/etc/localtime:ro -e MYSQL_ROOT_PASSWORD=wordpress -e MYSQL_DATABASE=wordpress mysql:8.0
+	  
+	  docker run -d -p 8080:80 --name wordpress --link mysql8.0:mysql8.0 -e WORDPRESS_DB_HOST=mysql8.0 -e WORDPRESS_DB_USER=root -e WORDPRESS_DB_PASSWORD=wordpress -e WORDPRESS_DB_NAME=wordpress wordpress:6.2.0-apache
+
+      # docker exec -it e627 /bin/bash
+      
+      root@e627d894ed88:/var/www/html# cat /etc/hosts
+      127.0.0.1	localhost
+      ::1	localhost ip6-localhost ip6-loopback
+      fe00::0	ip6-localnet
+      ff00::0	ip6-mcastprefix
+      ff02::1	ip6-allnodes
+      ff02::2	ip6-allrouters
+      169.254.123.2	mysql8.0 c88f16bc4211
+      169.254.123.3	e627d894ed88
+	  
+	   * 容器的单机编排系统
+       * docker-compose
+	   #docker-compose.yaml
+	   
+       version: "3"
+       services:
+         mysql8.0: 
+          image: mysql:8.0
+          environment:
+            MYSQL_ROOT_PASSWORD: wordpress
+            MYSQL_DATABASE: wordpress
+          volumes:
+          - /data/mysql:/var/lib/mysql
+          - /etc/localtime:/etc/localtime:ro
+         wordpress: 
+          image: wordpress:6.2.0-apache
+          container_name: wordpress
+          restart: always
+          links:
+          - mysql8.0
+          ports:
+          - "8080:80"
+          depends_on:
+          - mysql8.0
+          environment:
+            WORDPRESS_DB_HOST: mysql8.0
+            WORDPRESS_DB_USER: root
+            WORDPRESS_DB_PASSWORD: wordpress
+            WORDPRESS_DB_NAME: wordpress
+       
+         
+         docker compose -f ./docker-compose.yaml up -d
+		 docker compose  up -d
+	  
+* --net
+
+docker的网络模式：
+* bridge
+    * 是docker的默认网络模式，docker在安装时，会创建一个名为docker0的网桥，这个网桥会分配一个172.17.0.0/16的网段，网桥的IP是这个网段的第一个可用地址；这是一个默认网桥
+	* 默认情况下，我们创建容器时，如果不指定容器的网络模式，就是使用这种模式，并且所有容器的ip都会从这个网络分配
+	
+	# ip a
+	
+    1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN group default qlen 1000
+        link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
+        inet 127.0.0.1/8 scope host lo
+           valid_lft forever preferred_lft forever
+        inet6 ::1/128 scope host 
+           valid_lft forever preferred_lft forever
+    2: ens192: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc mq state UP group default qlen 1000
+        link/ether 00:0c:29:b9:7c:fd brd ff:ff:ff:ff:ff:ff
+        inet 192.168.1.222/24 brd 192.168.1.255 scope global noprefixroute ens192
+           valid_lft forever preferred_lft forever
+        inet6 2001:250:4000:2000::53/64 scope global noprefixroute 
+           valid_lft forever preferred_lft forever
+        inet6 fe80::a66d:c39b:db9e:331/64 scope link tentative noprefixroute dadfailed 
+           valid_lft forever preferred_lft forever
+        inet6 fe80::2e24:90e0:7710:8cfc/64 scope link tentative noprefixroute dadfailed 
+           valid_lft forever preferred_lft forever
+        inet6 fe80::e22c:5544:729c:efbb/64 scope link noprefixroute 
+           valid_lft forever preferred_lft forever
+    5: docker0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue state UP group default 
+        link/ether 02:42:ce:b2:1a:fd brd ff:ff:ff:ff:ff:ff
+        inet 169.254.123.1/24 brd 169.254.123.255 scope global docker0
+           valid_lft forever preferred_lft forever
+        inet6 fe80::42:ceff:feb2:1afd/64 scope link 
+           valid_lft forever preferred_lft forever
+	40: vetha412a1c@if39: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue master docker0 state UP group default 
+    link/ether ee:95:4e:cd:7e:5c brd ff:ff:ff:ff:ff:ff link-netnsid 12
+    inet6 fe80::ec95:4eff:fecd:7e5c/64 scope link 
+       valid_lft forever preferred_lft forever
+	   
+	   
+    # docker ps -a|grep busybox
+    febdb933b9d1        busybox:1.35                                                         "/bin/sh"                2 hours ago         Exited (0) 2 hours ago                                                         boring_snyder
+    c0db8542ebec        busybox:1.35                                                         "sh"                     2 hours ago         Up 2 hours                                                                     infallible_burnell
+    06405862fd33        busybox:1.35                                                         "sh"                     2 hours ago         Exited (0) 2 hours ago                                                         sweet_lichterman
+    # docker exec -it c0db /bin/sh
+    / # ip a
+    1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue qlen 1000
+        link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
+        inet 127.0.0.1/8 scope host lo
+           valid_lft forever preferred_lft forever
+    39: eth0@if40: <BROADCAST,MULTICAST,UP,LOWER_UP,M-DOWN> mtu 1500 qdisc noqueue 
+        link/ether 02:42:a9:fe:7b:05 brd ff:ff:ff:ff:ff:ff
+        inet 169.254.123.5/24 brd 169.254.123.255 scope global eth0
+           valid_lft forever preferred_lft forever
+    / # exit
+    # 
+
+	
+	
+	
+* host
+    * 不为容器分配单独的网卡，直接使用宿主机网络
+	* host模式，是的容器拥有最佳网络性能，一个相同的镜像无法在同一个宿主机上启动多个容器
+	  docker run -d --net host httpd:2.4
+	  docker run -d --net host httpd:2.4  ===>运行失败Exit(1)
+	  
+      
+      # docker run -itd --net host httpd:2.4
+      8575dc6f09f34007ddbff31174faec2df69f3ebdb93c505f20839adcbb0cee54
+      # docker ps -a|grep httpd
+      8575dc6f09f3        httpd:2.4                                                                       "httpd-foreground"       2 seconds ago       Exited (1) 1 second ago                            suspicious_feynman
+
+      # docker logs -f 8575
+      AH00558: httpd: Could not reliably determine the server's fully qualified domain name, using 192.168.1.223. Set the 'ServerName' directive globally to suppress this message
+      (98)Address already in use: AH00073: make_sock: unable to listen for connections on address [::]:80
+      (98)Address already in use: AH00073: make_sock: unable to listen for connections on address 0.0.0.0:80
+      no listening sockets available, shutting down
+      AH00015: Unable to open logs
+	  
+	  
+      # docker run -itd --net host -p 8899:80 httpd:2.4
+      WARNING: Published ports are discarded when using host network mode
+      3137c14aed5d433ee7d62a9b7a4ffe89bcb1f7e01d0a783a14af57e6fd605252
+	  
+      # docker ps -a|grep httpd
+      3137c14aed5d        httpd:2.4                                                                       "httpd-foreground"       6 seconds ago        Exited (1) 6 seconds ago                               eloquent_gauss
+      8575dc6f09f3        httpd:2.4                                                                       "httpd-foreground"       47 seconds ago       Exited (1) 46 seconds ago                              suspicious_feynman
+
+	 
+      # docker logs -f 3137
+      AH00558: httpd: Could not reliably determine the server's fully qualified domain name, using 192.168.1.223. Set the 'ServerName' directive globally to suppress this message
+      (98)Address already in use: AH00073: make_sock: unable to listen for connections on address [::]:80
+      (98)Address already in use: AH00073: make_sock: unable to listen for connections on address 0.0.0.0:80
+      no listening sockets available, shutting down
+      AH00015: Unable to open logs
+      # 
+
+	
+* none
+    * 一般研究病毒等时使用
+
+* 自定义网络模式
+    docker network create mynetwork --driver bridge --subnet 10.10.0.0/24 --gateway 10.10.0.254
+	docker run -itd --network mynetwork --name busyboxtest busybox:1.35
+	
+	# docker inspect mysql8.0 |grep -i ipaddress
+            "SecondaryIPAddresses": null,
+            "IPAddress": "169.254.123.2",
+                    "IPAddress": "169.254.123.2",
+    
+    # docker exec -it busyboxtest /bin/sh
+	
+    / # ip a
+    1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue qlen 1000
+        link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
+        inet 127.0.0.1/8 scope host lo
+           valid_lft forever preferred_lft forever
+    87: eth0@if88: <BROADCAST,MULTICAST,UP,LOWER_UP,M-DOWN> mtu 1500 qdisc noqueue 
+        link/ether 02:42:0a:0a:00:01 brd ff:ff:ff:ff:ff:ff
+        inet 10.10.0.1/24 brd 10.10.0.255 scope global eth0
+           valid_lft forever preferred_lft forever
+    / # ping 169.254.123.2
+    PING 169.254.123.2 (169.254.123.2): 56 data bytes
+    ^C
+    --- 169.254.123.2 ping statistics ---
+    3 packets transmitted, 0 packets received, 100% packet loss
+	# 				
+	
+	
+	docker network connect bridge busyboxtest
+	
+    # docker network connect bridge busyboxtest 
+    # docker exec -it busyboxtest /bin/sh
+    / # ip a
+    1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue qlen 1000
+        link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
+        inet 127.0.0.1/8 scope host lo
+           valid_lft forever preferred_lft forever
+    87: eth0@if88: <BROADCAST,MULTICAST,UP,LOWER_UP,M-DOWN> mtu 1500 qdisc noqueue 
+        link/ether 02:42:0a:0a:00:01 brd ff:ff:ff:ff:ff:ff
+        inet 10.10.0.1/24 brd 10.10.0.255 scope global eth0
+           valid_lft forever preferred_lft forever
+    89: eth1@if90: <BROADCAST,MULTICAST,UP,LOWER_UP,M-DOWN> mtu 1500 qdisc noqueue 
+        link/ether 02:42:a9:fe:7b:04 brd ff:ff:ff:ff:ff:ff
+        inet 169.254.123.4/24 brd 169.254.123.255 scope global eth1
+           valid_lft forever preferred_lft forever
+    / # ping 169.254.123.2
+    PING 169.254.123.2 (169.254.123.2): 56 data bytes
+    64 bytes from 169.254.123.2: seq=0 ttl=64 time=0.188 ms
+    64 bytes from 169.254.123.2: seq=1 ttl=64 time=0.075 ms
+    ^C
+    --- 169.254.123.2 ping statistics ---
+    2 packets transmitted, 2 packets received, 0% packet loss
+    round-trip min/avg/max = 0.075/0.131/0.188 ms
+    / # ping 169.254.123.2 -c 1
+    PING 169.254.123.2 (169.254.123.2): 56 data bytes
+    64 bytes from 169.254.123.2: seq=0 ttl=64 time=0.114 ms
+    
+    --- 169.254.123.2 ping statistics ---
+    1 packets transmitted, 1 packets received, 0% packet loss
+    round-trip min/avg/max = 0.114/0.114/0.114 ms
+    / # 
+	
+	
+	
+
+* -v
+        挂载宿主机目录/卷至容器的指定目录
+		* 可以通过多次-v指定多个挂载点，跟-e参数一样
+		* 不仅仅可以挂载目录/卷，还可以挂载文件
+		* 挂载时还可以控制挂载的权限
+		
+		docker run -d -v /data/html:/usr/usr/local/apache2/htdocs -P httpd:2.4
+		docker run -d -v /data/html:/usr/usr/local/apache2/htdocs -v /etc/localtime:/etc/localtime -P httpd:2.4
+
+		
+		docker run -d -v /data/html:/usr/usr/local/apache2/htdocs:ro  -P httpd:2.4
+		
+		# cat /data/html/index.html 
+        abc
+
+		# docker run -d -v /data/html/:/usr/local/apache2/htdocs/:ro  -P httpd:2.4
+        19cb8d2f1d18d1df68597a57ac0aec883993ec1c2d2c60a4bc2b740d9ea310c3
+		
+        # curl localhost:32778
+        abc
+		
+        # docker exec -it 19cb /bin/bash
+        root@19cb8d2f1d18:/usr/local/apache2# cd htdocs/
+        root@19cb8d2f1d18:/usr/local/apache2/htdocs# ls
+        index.html
+		
+        root@19cb8d2f1d18:/usr/local/apache2/htdocs# echo 345 >> index.html 
+        bash: index.html: Read-only file system
+
+		
+		卷管理：
+		
+		docker volume -h
+		docker run -d -P -v test1:/usr/local/apache2/htdocs httpd:2.4
+		
+		# docker run -d -P -v test1:/usr/local/apache2/htdocs httpd:2.4
+        3d0ef2bc54abdab5f247e045c229f4973410bd157cc41c118d3d6e31c7eb0fc5
+		
+        # docker volume inspect test1
+        [
+            {
+                "CreatedAt": "2023-04-08T15:22:23+08:00",
+                "Driver": "local",
+                "Labels": {},
+                "Mountpoint": "/var/lib/docker/volumes/test1/_data",
+                "Name": "test1",
+                "Options": {},
+                "Scope": "local"
+            }
+        ]
+		
+        # cd /var/lib/docker/volumes/test1/_data
+        # ls
+        index.html
+        # cat index.html 
+        <html><body><h1>It works!</h1></body></html>
+
+		
+		匿名卷：数据位置在/var/lib/docker/volumes/test1/_data
+		docker run -d -P /tmp/test1 httpd:2.4
+		
+		
+
+* --restart
+* --endpoint
+
+
+计算：
+* -d
+* -e
+* -i
+* -t
+* --name
+* --rm
+* --restart
+
+存储：
+* -v
+
+
+网络：
+* -p
+* -P
+* --net
+* --link
+
+
+docker容器的一些管理指令：
+
+docker ps  查看当前正在运行的容器
+docker ps -a   查看当前所有的容器
+docker ps -q   查看当前正在运行的容器ID
+
+docker logs container_id
+docker inspect container_id
+
+
+docker exec -it container_id /bin/sh
+
+docker rm -f container_id  强制删除正在运行的容器
+批量删除：
+   docker ps -qa|xargs docker rm -f
+
+停止正在运行的容器:
+   docker stop container_id   --->Exited(0)
+   docker kill container_id   --->Exited(137)
+
+启动一个已经退出的容器：
+   docker start container_id
+   
+重启：
+   docker restart container_id
+
+暂停一个容器：
+   docker pause container_id
+   
+从暂停中恢复：
+   docker unpause container_id
+
+容器与宿主机互传文件：
+   docker cp  container_id:/etc/redis.conf  /root/redis/  
+   
+   docker cp  /root/redis/redis.conf  container_id:/etc/
+   
+
+docker run -d mysql:8.0
+---->自动结束
+必须指定一个参数：
+-e MYSQL_ROOT_PASSWORD
+-e MYSQL_ALLOW_EMPTY_PASSWORD
+-e MYSQL_RANDOM_ROOT_PASSWORD
+
+docker run -d -e MYSQL_ROOT_PASSWORD=cka123456 mysql:8.0
+
+# docker run -d busybox:1.35
+06405862fd3349f94541db0f1fd6728591cb358ea5dbbce30d3fa25188c9325d
+# docker ps -a|grep busybox
+06405862fd33        busybox:1.35                                                         "sh"                     7 seconds ago       Exited (0) 6 seconds ago                                                        sweet_lichterman
+# docker run -itd busybox:1.35
+c0db8542ebecc31bb79ab52daa6100e9441aae5a6a7c4612d5213de054213940
+# docker ps -a|grep busybox
+c0db8542ebec        busybox:1.35                                                         "sh"                     3 seconds ago       Up 3 seconds                                                                    infallible_burnell
+06405862fd33        busybox:1.35                                                         "sh"                     48 seconds ago      Exited (0) 47 seconds ago                                                       sweet_lichterman
+# docker run -it busybox:1.35  /bin/sh
+/ # 
+/ # ps x
+PID   USER     TIME  COMMAND
+    1 root      0:00 /bin/sh
+    6 root      0:00 ps x
+/ # exit
+# docker ps -a|grep busybox
+febdb933b9d1        busybox:1.35                                                         "/bin/sh"                11 seconds ago       Exited (0) 2 seconds ago                                                            boring_snyder
+c0db8542ebec        busybox:1.35                                                         "sh"                     34 seconds ago       Up 33 seconds                                                                       infallible_burnell
+06405862fd33        busybox:1.35                                                         "sh"                     About a minute ago   Exited (0) About a minute ago                                                       sweet_lichterman
+# 
+
+
+
+
+
+=========================
+kubernetes的基本架构与原理
+
+app1: 3份 通过两个nginx实现高可用
+db1: 3份  通过两个lvs实现高可用
+
+nginx01---vip01---nginx02
+app1 --- app1 --- app1
+
+         lvs01---vip02---lv02
+		 db1------db1-------db1
+
+docker实现方式：
+h1:
+
+#docker-compose.yaml
+version: '3'
+services:
+  nginx: 
+    image: nginx:xxx
+	...
+  app1:
+    image: app1:xxx
+	...
+  keepalived:
+    image: keepalived:xxx
+	...
+
+docker-compose up -d
+
+
+h2:
+
+#docker-compose.yaml
+version: '3'
+services:
+  nginx: 
+    image: nginx:xxx
+	...
+  app1:
+    image: app1:xxx
+	...
+  keepalived:
+    image: keepalived:xxx
+	...
+  db1:
+    image: db1:xxx
+	...
+	
+	
+docker-compose up -d
+
+
+h3:
+
+#docker-compose.yaml
+version: '3'
+services:
+  lvs: 
+    image: lvs:xxx
+	...
+  app1:
+    image: app1:xxx
+	...
+  keepalived:
+    image: keepalived:xxx
+	...
+  db1:
+    image: db1:xxx
+	...
+	
+	
+docker-compose up -d
+
+
+
+h4:
+
+#docker-compose.yaml
+version: '3'
+services:
+  lvs: 
+    image: lvs:xxx
+	...
+  keepalived:
+    image: keepalived:xxx
+	...
+  db1:
+    image: db1:xxx
+	...
+	
+	
+docker-compose up -d
+
+
+----------------------------
+k8s实现方式：
+1. lb和ha的能力能够自动的被提供，业务人员只关注业务本身
+2. 应用的故障自愈
+
+ingress--->service--->app1--->db1
+
+app1:
+  image: app1:xxx
+  replicas: 3
+  
+db1:
+  image: mysql:8.0
+  replicas: 3
+
+
+
+k8s:
+    * 故障自愈
+	* 自动的负载均衡及高可用
+	
+	* 服务注册
+	* 服务发现
+	
+	* 网络能力
+	     * 网络组件
+		 * CNI-container network interface
+		   flannel
+		   calico
+		   canal
+		   cillium
+		   contiv
+		   ...
+	* 存储能力
+	     * 存储设备、存储服务
+		 * CSI-container storage interface
+		   nfs  nfs-csi
+		   ceph ceph-csi
+		   glusterfs
+	* 计算能力
+	     * 容器运行时
+		 * CRI-container runtime interface 容器运行时接口
+
+	
+kubernetes的组件：
+
+* 控制面节点(master|control plan)
+	* etcd: 用于存储集群当中的所有状态数据信息，充当集群数据库
+	* kube-apiserver: 负责接收所有用户及其他组件的请求，并将相关数据存储至数据库中
+	* kube-controller-manager: 负责监控集群当中任务的运行状态，保证任务总是处于预期的状态
+	* kube-scheduler: 集群调度器，当有容器创建需求时，选择最合适的节点
+	
+	* kube-proxy
+	* kubelet
+	
+	* containerd
+	* calico	
+
+* 工作节点(node|worker)
+	* kube-proxy
+	* kubelet: 工作节点，负责调用本机的容器运行时管理容器，并上报当前节点及容器运行状态
+	
+	* containerd: 运行容器
+	* calico
+
+	
+1. kubelet向kube-apiserver注册，包括本机的cpu、内存、主机名、运行的容器等信息
+2. kube-apiserver收到请求，将信息存储至etcd
+3. 管理员向kube-apiserver下达创建容器的请求，包括创建容器的副本数、所使用的镜像、使用什么网络、dns、要创建的容器名称等
+4. kube-apiserver收到请求，将信息存储至etcd
+5. kube-scheduler向kube-apiserver发出请求，咨询是否有任务需要执行
+6. kube-apiserver检索etcd，将管理员的创建容器的需求以及kubelet的相关信息返回给kube-scheduler
+7. kube-scheduler通过计算找出最适合运行当前容器的kubelet，将该kubelet信息与要创建容器的信息进行绑定，并返回给kube-apiserver
+8. kube-apiserver收到请求，将信息存储至etcd
+9. kubelet再次向kube-apiserver发送心跳，kube-apiserver检索数据库，将要创建的容器信息返回给kubelet
+10. kubelet收到要创建的容器信息，调用本地的containerd，创建容器
+11. containerd创建完容器将信息返回给kubelet，kubelet再次向kube-apiserver发起请求，将信息发送给kube-apiserver
+12. kube-apiserver收到请求，将信息存储至etcd
+13. kube-controller-manager向kube-apiserver发出请求，询问是否有任务需要执行
+14. kube-apiserver收到请求，将kubelet返回的创建容器的信息以及管理员要求创建容器的信息发送给kube-controller-manager
+15. kube-controller-manager进行对比之后，向kube-apiserver返回结果
+    * 如果结果正常，则本次任务顺利完成，任务结束
+	* 如果结果不正常，则重复5-14的执行过程
+16. 管理员再次向kube-apiserver发送请求，询问任务是否执行完毕
+17. kube-apiserver收到请求，检索etcd，返回任务执行结果
+
+
+使用kubeadm安装k8s集群：
+
+刚安装完kubeadm init和安装calico后：
+
+root@k8s-master:~# kubectl get nodes
+NAME          STATUS   ROLES           AGE   VERSION
+k8s-master    Ready    control-plane   43h   v1.26.2
+
+
+# kubectl -n kube-system get pods
+NAME                                       READY   STATUS    RESTARTS      AGE
+calico-kube-controllers-6c64d9648d-qq9p2   1/1     Running   0             43h
+calico-node-w5xph                          1/1     Running   0             43h
+coredns-567c556887-6r8tk                   1/1     Running   0             43h
+coredns-567c556887-x7n6f                   1/1     Running   0             43h
+etcd-k8s-master                            1/1     Running   0             43h
+kube-apiserver-k8s-master                  1/1     Running   0             43h
+kube-controller-manager-k8s-master         1/1     Running   1 (43h ago)   43h
+kube-proxy-zmzxx                           1/1     Running   0             43h
+kube-scheduler-k8s-master                  1/1     Running   1 (43h ago)   43h
+
+
+工作节点加入集群的token只有在24小时内有效，如果超过24小时，可以自己创建token：
+kubeadm token create --print-join-command
+
+工作节点加入集群后的信息：
+
+
+root@k8s-master:~# kubectl get nodes
+NAME          STATUS   ROLES           AGE   VERSION
+k8s-docker1   Ready    worker          43h   v1.26.2
+k8s-docker2   Ready    worker          43h   v1.26.2
+k8s-master    Ready    control-plane   43h   v1.26.2
+
+
+# kubectl -n kube-system get pods
+NAME                                       READY   STATUS    RESTARTS      AGE
+calico-kube-controllers-6c64d9648d-qq9p2   1/1     Running   0             43h
+calico-node-kz2xc                          1/1     Running   0             43h
+calico-node-q7kn5                          1/1     Running   0             43h
+calico-node-w5xph                          1/1     Running   0             43h
+coredns-567c556887-6r8tk                   1/1     Running   0             43h
+coredns-567c556887-x7n6f                   1/1     Running   0             43h
+etcd-k8s-master                            1/1     Running   0             43h
+kube-apiserver-k8s-master                  1/1     Running   0             43h
+kube-controller-manager-k8s-master         1/1     Running   1 (43h ago)   43h
+kube-proxy-nmhnh                           1/1     Running   0             43h
+kube-proxy-p2vws                           1/1     Running   0             43h
+kube-proxy-zmzxx                           1/1     Running   0             43h
+kube-scheduler-k8s-master                  1/1     Running   1 (43h ago)   43h
+
+# crictl --runtime-endpoint=unix:///run/containerd/containerd.sock ps 
+CONTAINER           IMAGE               CREATED             STATE               NAME                      ATTEMPT             POD ID              POD
+75779e7a865b8       dafd8ad70b156       44 hours ago        Running             kube-scheduler            1                   f5660af6c097e       kube-scheduler-k8s-master
+50f1cd0ea5b5c       5d7c5dfd3ba18       44 hours ago        Running             kube-controller-manager   1                   8c7853aac9918       kube-controller-manager-k8s-master
+297f014a46a0e       38b76de417d5d       44 hours ago        Running             calico-kube-controllers   0                   ea9fd957e51d7       calico-kube-controllers-6c64d9648d-qq9p2
+3795d3f0676bc       5185b96f0becf       44 hours ago        Running             coredns                   0                   ca60ec3996f54       coredns-567c556887-x7n6f
+6b817705127ac       5185b96f0becf       44 hours ago        Running             coredns                   0                   b6e4d9ec38c56       coredns-567c556887-6r8tk
+b38ccc277c2e1       54637cb36d4a1       44 hours ago        Running             calico-node               0                   f672a92d305f2       calico-node-w5xph
+a8fc64a22b91f       556768f31eb1d       44 hours ago        Running             kube-proxy                0                   aae483169306d       kube-proxy-zmzxx
+842f9c77d3aa4       a31e1d84401e6       44 hours ago        Running             kube-apiserver            0                   41c8008b675d4       kube-apiserver-k8s-master
+bac86f6196a57       fce326961ae2d       44 hours ago        Running             etcd                      0                   026f85c97ba7d       etcd-k8s-master
+
+root@k8s-master:~# ctr -n k8s.io c ls
+CONTAINER                                                           IMAGE                                                                                  RUNTIME                  
+026f85c97ba7d76b0741c01309b9b7205235d7ebcf9b101f98ae68d309bceeff    registry.cn-hangzhou.aliyuncs.com/google_containers/pause:3.9                          io.containerd.runc.v2    
+25b0defeb6445ac6c7c97dbd9c3b8a2087ad514821ed8ca4a01894d5d2cec526    registry.cn-shanghai.aliyuncs.com/cnlxh/cni:v3.24.5                                    io.containerd.runc.v2    
+297f014a46a0e7be2378dff2cda46b35f2d862b9113a4ad503116fe888124532    registry.cn-shanghai.aliyuncs.com/cnlxh/kube-controllers:v3.24.5                       io.containerd.runc.v2    
+3795d3f0676bc5eba888a01b185729e2acbec35f15d86a2653c1f0e231985524    registry.cn-hangzhou.aliyuncs.com/google_containers/coredns:v1.9.3                     io.containerd.runc.v2    
+41c8008b675d4c4af508c7dc4c254dd7607cfc0d4c04017f52a4c385e8067390    registry.cn-hangzhou.aliyuncs.com/google_containers/pause:3.9                          io.containerd.runc.v2    
+50f1cd0ea5b5ca3ecc244565a24a7e9511273d266d3a5fa91cb430f6710aae89    registry.cn-hangzhou.aliyuncs.com/google_containers/kube-controller-manager:v1.26.0    io.containerd.runc.v2    
+6b817705127ac358a4004bf78b53e643142595650f7bfb18d81776a64abfa19d    registry.cn-hangzhou.aliyuncs.com/google_containers/coredns:v1.9.3                     io.containerd.runc.v2    
+75779e7a865b82d86d9d694c3dc76f969a6899b2b2525f509b3572a9140ef0bf    registry.cn-hangzhou.aliyuncs.com/google_containers/kube-scheduler:v1.26.0             io.containerd.runc.v2    
+842f9c77d3aa462ece518abb4cf6e3f44771e65fcf3e96abeff3e90af3e0a3af    registry.cn-hangzhou.aliyuncs.com/google_containers/kube-apiserver:v1.26.0             io.containerd.runc.v2    
+8c7853aac9918b005fabc7e704ea0e6c707cc7512405b15168cdfcedbf45b039    registry.cn-hangzhou.aliyuncs.com/google_containers/pause:3.9                          io.containerd.runc.v2    
+a8fc64a22b91f3c66296fe542fcef035dbbb88d9a94418084169de5ccd9d2149    registry.cn-hangzhou.aliyuncs.com/google_containers/kube-proxy:v1.26.0                 io.containerd.runc.v2    
+aae483169306ddbe11a5d18104e2ce027858be6c7014fec604e6a6bca58f6713    registry.cn-hangzhou.aliyuncs.com/google_containers/pause:3.9                          io.containerd.runc.v2    
+b0414a1be683d117a98b8f3f4d4b98b8b77b343a47e22ea192969ca9fdef6dcd    registry.cn-hangzhou.aliyuncs.com/google_containers/kube-scheduler:v1.26.0             io.containerd.runc.v2    
+b38ccc277c2e11c15776cc6243f4c8a932b917d3aba3363a2e151663de36e69e    registry.cn-shanghai.aliyuncs.com/cnlxh/node:v3.24.5                                   io.containerd.runc.v2    
+b6e4d9ec38c5635e858d304611935a882871bd92611068f62f564f1d51757fac    registry.cn-hangzhou.aliyuncs.com/google_containers/pause:3.9                          io.containerd.runc.v2    
+b8e3071aec363f1a72100bb29519ddf40886f08fb540aefb4c7f55cfcb2669ad    registry.cn-hangzhou.aliyuncs.com/google_containers/kube-controller-manager:v1.26.0    io.containerd.runc.v2    
+bac86f6196a57133616446a99e5db0697ec512f15db9c525b92e3beff1872c9e    registry.cn-hangzhou.aliyuncs.com/google_containers/etcd:3.5.6-0                       io.containerd.runc.v2    
+ca60ec3996f5493b3aae8e053a0df6b0de1fdb522d8cfe801ff40b9e7df55d9b    registry.cn-hangzhou.aliyuncs.com/google_containers/pause:3.9                          io.containerd.runc.v2    
+daf4d3302f5eb8c58128904bffc420a10c20ae7e3ecc3f6e9468e070e69766c9    registry.cn-shanghai.aliyuncs.com/cnlxh/node:v3.24.5                                   io.containerd.runc.v2    
+ea9fd957e51d7ac26b0d62fd0be57a711f3c2ccd9eb89eb100f7b7e9c4972a2d    registry.cn-hangzhou.aliyuncs.com/google_containers/pause:3.9                          io.containerd.runc.v2    
+f5660af6c097e522d2af2a5c06c0890fbf6b79bfa7a025e433d299cb9cdd6603    registry.cn-hangzhou.aliyuncs.com/google_containers/pause:3.9                          io.containerd.runc.v2    
+f672a92d305f292ea6683caa95ed9bf110f42c083325cca77a08b82468f24cea    registry.cn-hangzhou.aliyuncs.com/google_containers/pause:3.9                          io.containerd.runc.v2    
+f8985c0834fbabeba28798215d67c29f7de98cd8ae1b7e883b1ec7d9968737cf    registry.cn-shanghai.aliyuncs.com/cnlxh/cni:v3.24.5                                    io.containerd.runc.v2    
+root@k8s-master:~# ctr -n k8s.io c ls -q
+026f85c97ba7d76b0741c01309b9b7205235d7ebcf9b101f98ae68d309bceeff
+25b0defeb6445ac6c7c97dbd9c3b8a2087ad514821ed8ca4a01894d5d2cec526
+297f014a46a0e7be2378dff2cda46b35f2d862b9113a4ad503116fe888124532
+3795d3f0676bc5eba888a01b185729e2acbec35f15d86a2653c1f0e231985524
+41c8008b675d4c4af508c7dc4c254dd7607cfc0d4c04017f52a4c385e8067390
+50f1cd0ea5b5ca3ecc244565a24a7e9511273d266d3a5fa91cb430f6710aae89
+6b817705127ac358a4004bf78b53e643142595650f7bfb18d81776a64abfa19d
+75779e7a865b82d86d9d694c3dc76f969a6899b2b2525f509b3572a9140ef0bf
+842f9c77d3aa462ece518abb4cf6e3f44771e65fcf3e96abeff3e90af3e0a3af
+8c7853aac9918b005fabc7e704ea0e6c707cc7512405b15168cdfcedbf45b039
+a8fc64a22b91f3c66296fe542fcef035dbbb88d9a94418084169de5ccd9d2149
+aae483169306ddbe11a5d18104e2ce027858be6c7014fec604e6a6bca58f6713
+b0414a1be683d117a98b8f3f4d4b98b8b77b343a47e22ea192969ca9fdef6dcd
+b38ccc277c2e11c15776cc6243f4c8a932b917d3aba3363a2e151663de36e69e
+b6e4d9ec38c5635e858d304611935a882871bd92611068f62f564f1d51757fac
+b8e3071aec363f1a72100bb29519ddf40886f08fb540aefb4c7f55cfcb2669ad
+bac86f6196a57133616446a99e5db0697ec512f15db9c525b92e3beff1872c9e
+ca60ec3996f5493b3aae8e053a0df6b0de1fdb522d8cfe801ff40b9e7df55d9b
+daf4d3302f5eb8c58128904bffc420a10c20ae7e3ecc3f6e9468e070e69766c9
+ea9fd957e51d7ac26b0d62fd0be57a711f3c2ccd9eb89eb100f7b7e9c4972a2d
+f5660af6c097e522d2af2a5c06c0890fbf6b79bfa7a025e433d299cb9cdd6603
+f672a92d305f292ea6683caa95ed9bf110f42c083325cca77a08b82468f24cea
+f8985c0834fbabeba28798215d67c29f7de98cd8ae1b7e883b1ec7d9968737cf
+root@k8s-master:~# 
+
+
+
+
+kubernetes的资源对象：
+
+linux的哲学： 一切皆文件
+kubernetes:   一切皆资源对象
+
+
+* 一个节点是一个对象
+     * nodes    no
+* 一个pod是一个对象
+     * pods     po    pod
+
+* namespace	 
+    namespaced: true/false
+    	
+	 
+	namespaced: false--->全局资源对象
+	namespaced: true--->namespaced级别的资源对象	
+	 
+如何查看kubernetes中有哪些资源对象：
+    kubectl api-resources	 
+	 
+    # kubectl api-resources 
+    NAME                              SHORTNAMES   APIVERSION                             NAMESPACED   KIND
+    bindings                                       v1                                     true         Binding
+    componentstatuses                 cs           v1                                     false        ComponentStatus
+    configmaps                        cm           v1                                     true         ConfigMap
+    endpoints                         ep           v1                                     true         Endpoints
+	 
+	 
+kubectl命令使用：
+
+kubectl
+
+* 增
+    * create
+	* run     只能用于通过命令行的方式创建pod
+	* apply
+	
+* 删
+    * delete
+	
+* 改
+    * edit
+	* apply
+	
+* 查
+    * describe
+	
+* 列出
+    * get
+	
+* 打标签
+    * label
+	    * 查看标签
+		  kubectl get nodes k8s-docker2 --show-labels
+	    * 添加标签
+		  kubectl label nodes k8s-docker2 disk=ssd
+		  kubectl label nodes k8s-docker2 gpu=p100
+		* 删除标签
+		  kubectl label nodes k8s-docker2 gpu-
+		* 修改标签
+		  kubectl label nodes k8s-docker2 disk=hhd --overwrite
+* 加注释	 
+    * annotate
+	
+	    * 添加注释
+		  kubectl annotate nodes k8s-docker2 desc="just a test"
+		* 删除注释
+		  kubectl annotate nodes k8s-docker2 desc-
+		* 修改注释
+		  kubectl annotate nodes k8s-docker2 desc="just two test" --overwrite
+		* 查看注释
+	      
+	 
+命令参数：
+* -A   所有命名空间
+* -n namespace	 指定命名空间
+* -o yaml
+* -o wide	 列出资源对象的所信息
+* --show-labels	 查看指定资源对象的标签
+* -l key=value,key1=value1	 基于标签查找对象
+
+标签：用来识别k8s集群中的资源对象
+    * 负载均衡器可以将一组相同标签的pod识别为一组应用
+    * 标签是以key-value的形式出现的，key和value可完全自定义，但务必做到见名知义	
+	 
+	 
+# kubectl get ns
+NAME              STATUS   AGE
+default           Active   44h
+kube-node-lease   Active   44h
+kube-public       Active   44h
+kube-system       Active   44h
+	 
+# kubectl get pods --all-namespaces
+NAMESPACE     NAME                                       READY   STATUS    RESTARTS      AGE
+kube-system   calico-kube-controllers-6c64d9648d-qq9p2   1/1     Running   0             44h
+kube-system   calico-node-kz2xc                          1/1     Running   0             44h
+kube-system   calico-node-q7kn5                          1/1     Running   0             44h
+kube-system   calico-node-w5xph                          1/1     Running   0             44h
+kube-system   coredns-567c556887-6r8tk                   1/1     Running   0             44h
+kube-system   coredns-567c556887-x7n6f                   1/1     Running   0             44h
+kube-system   etcd-k8s-master                            1/1     Running   0             44h
+kube-system   kube-apiserver-k8s-master                  1/1     Running   0             44h
+kube-system   kube-controller-manager-k8s-master         1/1     Running   1 (44h ago)   44h
+kube-system   kube-proxy-nmhnh                           1/1     Running   0             44h
+kube-system   kube-proxy-p2vws                           1/1     Running   0             44h
+kube-system   kube-proxy-zmzxx                           1/1     Running   0             44h
+kube-system   kube-scheduler-k8s-master                  1/1     Running   1 (44h ago)   44h
+
+# kubectl get pods -A
+NAMESPACE     NAME                                       READY   STATUS    RESTARTS      AGE
+kube-system   calico-kube-controllers-6c64d9648d-qq9p2   1/1     Running   0             44h
+kube-system   calico-node-kz2xc                          1/1     Running   0             44h
+kube-system   calico-node-q7kn5                          1/1     Running   0             44h
+kube-system   calico-node-w5xph                          1/1     Running   0             44h
+kube-system   coredns-567c556887-6r8tk                   1/1     Running   0             44h
+kube-system   coredns-567c556887-x7n6f                   1/1     Running   0             44h
+kube-system   etcd-k8s-master                            1/1     Running   0             44h
+kube-system   kube-apiserver-k8s-master                  1/1     Running   0             44h
+kube-system   kube-controller-manager-k8s-master         1/1     Running   1 (44h ago)   44h
+kube-system   kube-proxy-nmhnh                           1/1     Running   0             44h
+kube-system   kube-proxy-p2vws                           1/1     Running   0             44h
+kube-system   kube-proxy-zmzxx                           1/1     Running   0             44h
+kube-system   kube-scheduler-k8s-master                  1/1     Running   1 (44h ago)   44h
+
+# kubectl get pods
+No resources found in default namespace.
+
+
+
+	 
+# kubectl -n kube-system get pods
+NAME                                       READY   STATUS    RESTARTS      AGE
+calico-kube-controllers-6c64d9648d-qq9p2   1/1     Running   0             44h
+calico-node-kz2xc                          1/1     Running   0             44h
+calico-node-q7kn5                          1/1     Running   0             44h
+calico-node-w5xph                          1/1     Running   0             44h
+coredns-567c556887-6r8tk                   1/1     Running   0             44h
+coredns-567c556887-x7n6f                   1/1     Running   0             44h
+etcd-k8s-master                            1/1     Running   0             44h
+kube-apiserver-k8s-master                  1/1     Running   0             44h
+kube-controller-manager-k8s-master         1/1     Running   1 (44h ago)   44h
+kube-proxy-nmhnh                           1/1     Running   0             44h
+kube-proxy-p2vws                           1/1     Running   0             44h
+kube-proxy-zmzxx                           1/1     Running   0             44h
+kube-scheduler-k8s-master                  1/1     Running   1 (44h ago)   44h
+# kubectl -n kube-system get pods -owide
+NAME                                       READY   STATUS    RESTARTS      AGE   IP               NODE          NOMINATED NODE   READINESS GATES
+calico-kube-controllers-6c64d9648d-qq9p2   1/1     Running   0             44h   172.16.235.195   k8s-master    <none>           <none>
+calico-node-kz2xc                          1/1     Running   0             44h   192.168.1.235    k8s-docker1   <none>           <none>
+calico-node-q7kn5                          1/1     Running   0             44h   192.168.1.236    k8s-docker2   <none>           <none>
+calico-node-w5xph                          1/1     Running   0             44h   192.168.1.234    k8s-master    <none>           <none>
+coredns-567c556887-6r8tk                   1/1     Running   0             44h   172.16.235.193   k8s-master    <none>           <none>
+coredns-567c556887-x7n6f                   1/1     Running   0             44h   172.16.235.194   k8s-master    <none>           <none>
+etcd-k8s-master                            1/1     Running   0             44h   192.168.1.234    k8s-master    <none>           <none>
+kube-apiserver-k8s-master                  1/1     Running   0             44h   192.168.1.234    k8s-master    <none>           <none>
+kube-controller-manager-k8s-master         1/1     Running   1 (44h ago)   44h   192.168.1.234    k8s-master    <none>           <none>
+kube-proxy-nmhnh                           1/1     Running   0             44h   192.168.1.235    k8s-docker1   <none>           <none>
+kube-proxy-p2vws                           1/1     Running   0             44h   192.168.1.236    k8s-docker2   <none>           <none>
+kube-proxy-zmzxx                           1/1     Running   0             44h   192.168.1.234    k8s-master    <none>           <none>
+kube-scheduler-k8s-master                  1/1     Running   1 (44h ago)   44h   192.168.1.234    k8s-master    <none>           <none>
+# kubectl get nodes
+NAME          STATUS   ROLES           AGE   VERSION
+k8s-docker1   Ready    worker          44h   v1.26.2
+k8s-docker2   Ready    worker          44h   v1.26.2
+k8s-master    Ready    control-plane   44h   v1.26.2
+# kubectl get nodes -o wide
+NAME          STATUS   ROLES           AGE   VERSION   INTERNAL-IP     EXTERNAL-IP   OS-IMAGE             KERNEL-VERSION      CONTAINER-RUNTIME
+k8s-docker1   Ready    worker          44h   v1.26.2   192.168.1.235   <none>        Ubuntu 20.04.5 LTS   5.4.0-146-generic   containerd://1.6.20
+k8s-docker2   Ready    worker          44h   v1.26.2   192.168.1.236   <none>        Ubuntu 20.04.5 LTS   5.4.0-146-generic   containerd://1.6.20
+k8s-master    Ready    control-plane   44h   v1.26.2   192.168.1.234   <none>        Ubuntu 20.04.5 LTS   5.4.0-125-generic   containerd://1.6.20
+# 
+	 
+	 
+标签：
+root@k8s-master:~# kubectl get nodes --show-labels
+NAME          STATUS   ROLES           AGE   VERSION   LABELS
+k8s-docker1   Ready    worker          45h   v1.26.2   beta.kubernetes.io/arch=amd64,beta.kubernetes.io/os=linux,kubernetes.io/arch=amd64,kubernetes.io/hostname=k8s-docker1,kubernetes.io/os=linux,node-role.kubernetes.io/worker=
+k8s-docker2   Ready    worker          45h   v1.26.2   beta.kubernetes.io/arch=amd64,beta.kubernetes.io/os=linux,kubernetes.io/arch=amd64,kubernetes.io/hostname=k8s-docker2,kubernetes.io/os=linux,node-role.kubernetes.io/worker=
+k8s-master    Ready    control-plane   45h   v1.26.2   beta.kubernetes.io/arch=amd64,beta.kubernetes.io/os=linux,kubernetes.io/arch=amd64,kubernetes.io/hostname=k8s-master,kubernetes.io/os=linux,node-role.kubernetes.io/control-plane=,node.kubernetes.io/exclude-from-external-load-balancers=
+root@k8s-master:~# kubectl label nodes k8s-docker2 disk=ssd
+node/k8s-docker2 labeled
+root@k8s-master:~# kubectl label nodes k8s-docker2 gpu=p100
+node/k8s-docker2 labeled
+root@k8s-master:~# kubectl get nodes k8s-docker2 --show-labels
+NAME          STATUS   ROLES    AGE   VERSION   LABELS
+k8s-docker2   Ready    worker   45h   v1.26.2   beta.kubernetes.io/arch=amd64,beta.kubernetes.io/os=linux,disk=ssd,gpu=p100,kubernetes.io/arch=amd64,kubernetes.io/hostname=k8s-docker2,kubernetes.io/os=linux,node-role.kubernetes.io/worker=
+root@k8s-master:~# kubectl label nodes k8s-docker2 gpu-
+node/k8s-docker2 unlabeled
+root@k8s-master:~# kubectl get nodes k8s-docker2 --show-labels
+NAME          STATUS   ROLES    AGE   VERSION   LABELS
+k8s-docker2   Ready    worker   45h   v1.26.2   beta.kubernetes.io/arch=amd64,beta.kubernetes.io/os=linux,disk=ssd,kubernetes.io/arch=amd64,kubernetes.io/hostname=k8s-docker2,kubernetes.io/os=linux,node-role.kubernetes.io/worker=
+root@k8s-master:~# kubectl label nodes k8s-docker2 disk=hhd
+error: 'disk' already has a value (ssd), and --overwrite is false
+root@k8s-master:~# kubectl label nodes k8s-docker2 disk=hhd --overwrite 
+node/k8s-docker2 labeled
+root@k8s-master:~# kubectl get nodes k8s-docker2 --show-labels
+NAME          STATUS   ROLES    AGE   VERSION   LABELS
+k8s-docker2   Ready    worker   45h   v1.26.2   beta.kubernetes.io/arch=amd64,beta.kubernetes.io/os=linux,disk=hhd,kubernetes.io/arch=amd64,kubernetes.io/hostname=k8s-docker2,kubernetes.io/os=linux,node-role.kubernetes.io/worker=
+
+
+root@k8s-master:~# kubectl get nodes -l disk=hhd
+NAME          STATUS   ROLES    AGE   VERSION
+k8s-docker2   Ready    worker   45h   v1.26.2
+root@k8s-master:~# kubectl get nodes --show-labels|grep disk=hhd
+k8s-docker2   Ready    worker          45h   v1.26.2   beta.kubernetes.io/arch=amd64,beta.kubernetes.io/os=linux,disk=hhd,kubernetes.io/arch=amd64,kubernetes.io/hostname=k8s-docker2,kubernetes.io/os=linux,node-role.kubernetes.io/worker=
+root@k8s-master:~# 
+
+
+
+	 
+calico.yaml
+
+- name: CALICO_IPV4POOL_BLOCK_SIZE	 
+  value: "26"
+
+
+cronJob -- fail---防止重启太多占用过多IP
+ 1. 最多重启5次；
+ 2. 最多留下10个历史记录，其余的全部删除；
+ 3. 因为，crontJob不用监听端口，所有可以走host网络 
+
+
+ 
+ 
+kubernetes的Pod管理
+
+创建一个容器：
+* 指定容器名称
+* 指定容器的image
+* 指定容器的dns
+* 指定容器的重启策略
+
+
+docker run -d httpd:2.4
+
+
+* 指定pod名称     --name
+* 指定pod所使用的镜像  --image=httpd:2.4
+* 配置镜像拉取策略   --image-pull-policy=Always|Never|IfNotPresent   跟containers平级
+* 配置pod重启策略    --restart-policy=Always
+* 配置pod所执行的任务   "sleep 3600"
+* 配置pod监听的端口    -p|-P
+* 配置pod所需要的环境变量  -e
+* 配置pod的dns策略  --dns
+* 配置pod的网络类型  --net
+* 配置pod的资源限制  
+* 配置pod的健康检查
+* 配置pod的存储卷    -v
+* 静态POD
+* 初始化容器
+* 多容器
+
+
+kubectl run myfirstpod --image=httpd:2.4
+
+# kubectl run myfirstpod --image=httpd:2.4
+pod/myfirstpod created
+
+# kubectl get pods
+NAME         READY   STATUS    RESTARTS   AGE
+myfirstpod   1/1     Running   0          77s
+
+# kubectl describe pod myfirstpod 
+Name:             myfirstpod
+Namespace:        default
+Priority:         0
+Service Account:  default
+Node:             k8s-docker2/192.168.1.236
+Start Time:       Sun, 09 Apr 2023 07:25:24 +0000
+Labels:           run=myfirstpod
+Annotations:      cni.projectcalico.org/containerID: d330f07485b453e48484e7aa01c582a564841590abc2b21940ea89ab30ab52c5
+                  cni.projectcalico.org/podIP: 172.16.94.65/32
+                  cni.projectcalico.org/podIPs: 172.16.94.65/32
+Status:           Running
+IP:               172.16.94.65
+IPs:
+  IP:  172.16.94.65
+Containers:
+  myfirstpod:
+    Container ID:   containerd://d57d3f418e461bc898fa7613d89c3ec203788af31c52a5631b86ed8b80c2dd79
+    Image:          httpd:2.4
+    Image ID:       docker.io/library/httpd@sha256:4055b18d92fd006f74d4a2aac172a371dc9a750eaa78000756dee55a9beb4625
+    Port:           <none>
+    Host Port:      <none>
+    State:          Running
+      Started:      Sun, 09 Apr 2023 07:25:42 +0000
+    Ready:          True
+    Restart Count:  0
+    Environment:    <none>
+    Mounts:
+      /var/run/secrets/kubernetes.io/serviceaccount from kube-api-access-sxxmh (ro)
+Conditions:
+  Type              Status
+  Initialized       True 
+  Ready             True 
+  ContainersReady   True 
+  PodScheduled      True 
+Volumes:
+  kube-api-access-sxxmh:
+    Type:                    Projected (a volume that contains injected data from multiple sources)
+    TokenExpirationSeconds:  3607
+    ConfigMapName:           kube-root-ca.crt
+    ConfigMapOptional:       <nil>
+    DownwardAPI:             true
+QoS Class:                   BestEffort
+Node-Selectors:              <none>
+Tolerations:                 node.kubernetes.io/not-ready:NoExecute op=Exists for 300s
+                             node.kubernetes.io/unreachable:NoExecute op=Exists for 300s
+Events:
+  Type    Reason     Age    From               Message
+  ----    ------     ----   ----               -------
+  Normal  Scheduled  2m16s  default-scheduler  Successfully assigned default/myfirstpod to k8s-docker2
+  Normal  Pulling    2m16s  kubelet            Pulling image "httpd:2.4"
+  Normal  Pulled     119s   kubelet            Successfully pulled image "httpd:2.4" in 16.745474155s (16.745484385s including waiting)
+  Normal  Created    119s   kubelet            Created container myfirstpod
+  Normal  Started    119s   kubelet            Started container myfirstpod
+
+
+
+
+
+
+kubectl run mysecondpod --image=httpd:2.4 --dry-run=client  -o yaml
+
+# kubectl run mysecondpod --image=httpd:2.4 --dry-run=client  -o yaml
+
+# gvk group version kind
+apiVersion: v1    #""/v1
+kind: Pod
+
+# 元数据
+metadata:
+  labels:
+    run: mysecondpod
+  name: mysecondpod
+  
+# 描述
+spec:
+  containers:
+  - image: httpd:2.4
+    name: mysecondpod
+    resources: {}
+  dnsPolicy: ClusterFirst
+  restartPolicy: Always
+status: {}
+
+
+
+
+* 元数据
+     * 名称
+     * 标签
+     * 注解
+     * 命名空间
+metadata:
+  name: test-pod
+  namespace: default
+  labels:
+    name: test-pod
+    type: webserver
+  annotations:
+    desc: "just-a-test"
+
+
+
+* 描述
+spec:
+  containers:
+  - name: firstC
+    image: httpd:2.4
+  - name: secondC   
+    image: nginx:2.5  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 

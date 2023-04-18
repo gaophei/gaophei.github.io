@@ -1,0 +1,88 @@
+1. distro
+2. nerdctl/podman 镜像存储在哪里？是否也有daemon.json文件等？
+   nerdctl: /var/lib/containerd/
+3. podman search httpd
+4. docker exec -it container_id ---> ls -l /   /boot?
+   因为共享内核，所有没有/boot
+5. xshell/moba/tabby/termius
+6. 
+
+
+弹性伸缩 keda
+
+# kubectl explain pods --recursive |grep -A 10 emptyDir
+         emptyDir    <Object>
+            medium    <string>
+            sizeLimit    <string>
+         ephemeral    <Object>
+            volumeClaimTemplate    <Object>
+               metadata    <Object>
+                  annotations    <map[string]string>
+                  creationTimestamp    <string>
+                  deletionGracePeriodSeconds    <integer>
+                  deletionTimestamp    <string>
+                  finalizers    <[]string>
+
+
+ systemctl status kubelet
+ systemctl cat kubelet
+
+
+
+velero
+
+k8s 集群ca证书过期
+证书过期告警
+
+
+kube-router
+
+
+--------
+sts servicename
+    mysql-hs
+
+pod0--->mysql-0
+pod1--->mysql-1	
+pod2--->mysql-2
+pod3--->mysql-3
+pod4--->mysql-4
+
+	
+有头 mysql.default.svc.cluster.local    10.96.10.100
+
+mysql-0  master
+mysql-1  slave
+mysql-2  slave
+mysql-3  slave
+mysql-4  slave
+
+
+app: mysql
+
+
+headless service: msql-hs
+
+写操作：只有mysql0:    mysql-0.mysql-hs.default.svc.cluster.local
+
+读操作：全体节点：     mysql.default.svc.cluster.local
+
+------------
+echo xxxx| base64 -w0 ab.log
+
+echo xxx|base64 -d
+
+
+
+装两套ingress-controller
+
+
+
+
+
+wordPress 通过k8s部署出来
+
+
+
+
+

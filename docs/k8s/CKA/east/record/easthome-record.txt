@@ -1,0 +1,3840 @@
+docker
+   * containerd
+* 容器的基本原理与架构
+   * 容器与虚拟机区别
+   * 主流的容器技术
+       * docker
+       * containerd
+       * podman
+   * docker的基本操作
+       * 镜像管理
+       * 容器管理
+       * 网络管理
+       * 存储管理
+   
+   * 容器的单机编排系统
+       * docker-compose
+
+
+kubernetes 1.26
+   * kubernetes的原理与架构
+   * kubernetes的
+   * kubernetes的   
+   * kubernetes的
+          *    
+          *     
+          * 
+          * 
+          *           
+   * kubernetes的
+          * 
+          * 
+   * kubernetes的存储服务
+          * pv   
+          * pvc    
+          * storageclass 
+   * kubernetes的
+          *    
+          *     
+          * 
+          *
+   * kubernetes的
+          *             
+   * kubernetes的安全
+          * networkpolicy    
+   * kubernetes的资源限制
+          * resourcequota
+          * limitrange
+   * ...          
+containerd
+
+CKA考试实践
+   * 17道题
+   * 
+
+ubuntu 22.04 + kubernetes 1.26
+ubuntu 20.04 
+dpkg/apt
+
+
+Centos7 + kubernetes
+rpm/yum
+
+openshit---rhcos
+
+coreos
+
+
+
+2核4g   ubuntu 20.04/22.04
+
+=========================
+容器的基本架构与原理
+   * 容器
+          * 2013年 docker开源
+          * google开源的容器技术gvisor
+          * ali开源的容器技术pouch
+          
+          * 容器是为任务而生的
+          
+          * 容器与虚拟机的对比
+               * 启动速度，容器更快
+               * 资源占用，容器更少
+                    * 计算
+                         * cpu和内存
+                             容器： 共享内核，接近原生性能
+                             虚拟机： 95%
+                    * 存储
+                         * 容器更小
+                    * 网络
+                         * 都有损耗
+               * 隔离性，容器不如虚拟机
+               * 针对对内核有要求的应用，容器无能为力        
+               
+               
+
+               
+   * openstack
+           * 虚拟机
+           
+   * docker镜像
+           * redis容器        
+           * mysql容器    
+           * apache容器        
+           * alpine/distro/busybox           
+           
+   * 操作系统的组成
+          * 内核空间
+          * 用户空间
+       * windows和linux有什么区别
+       * centos和ubuntu有什么区别       
+          
+云计算的模型
+   * Iaas: Infrastructure as as service
+           * 各云主机厂商提供
+   * Paas: Platform as as service   
+           * k8s
+           * 阿里云提供数据库服务器等
+   * Saas: Software as as service
+           *  金蝶/用友/深信服/钉钉等，只提供网络账户等
+
+
+计算机的基本能力
+   * 计算
+          * cpu
+          * memcache       
+   * 存储  
+   * 网络
+
+主流的容器技术
+     * 容器引擎
+          * 计算
+          * 存储
+          * 网络
+     * 容器运行时
+          * 计算
+          
+          
+* docker 
+     * 计算：containerd
+     * 存储：docker-volume
+     * 网络：docker-network 
+     
+     docker run
+* containerd
+     * 计算
+     * nerdctl
+     https://github.com/containerd/nerdctl
+     
+     nerdctl run
+* podman
+
+     podman run
+        podman run -d docker.io/library/httpd:2.4
+        podman search httpd
+* kala-container 
+
+* gvisor
+* pouch
+* cri-o
+* rkt
+
+
+docker run ---> docker-api
+                      --->containerd--->runc---container===>runc执行后结束退出===>containerd--->container计算
+                      --->docker-volume---容器存储
+                      --->docker-network---容器网络
+
+                      
+                      
+                      
+CKA  CNCF certificated kubernetes administrator
+CNCF: Cloud Native Compute Foundation
+* containerd
+* kubernetes
+
+
+cri: container runtime interface
+
+kubectl run --->docker-shim--->docker-api--->containerd---runc--->container
+            --->volome
+            --->network
+k8s1.24:
+kubectl run --->containerd--->container
+
+docker的组件及概念
+* image: docker镜像
+    * 包含了某个任务及其依赖的所有文件的一个包
+         * 阉割版的操作系统(只包含用户空间)
+         * 任务服务本身
+         example:
+            * redis镜像：
+                * alpine/ubuntu操作系统
+                * redis服务本身
+* container
+    * 将镜像运行起来，就是一个容器
+* registry
+    * 镜像仓库，用于存储镜像的地方
+
+* docker daemon ---server服务端
+* docker  ---client客户端
+
+    
+以容器的方式运行一个apache服务：
+* 从registry当中获取apache镜像
+* 将image运行起来变成一个容器
+
+
+docker 版本
+    * docker.io: 1.13
+    * docker-ee: enterprise edition(moby)
+    * docker-ce: community edition(默认使用20.10)
+
+
+安装docker:
+https://developer.aliyun.com/mirror/
+https://mirrors.aliyun.com/
+
+
+https://developer.aliyun.com/mirror/docker-ce?spm=a2c6h.13651102.0.0.4e861b11qnXQHP
+
+
+tabby
+putty
+
+fina  termius
+
+运行一个容器：
+docker run -d -P httpd:2.4
+
+查看当前主机上运行的容器的状态：
+docker ps -a
+
+# docker ps -a|grep httpd
+CONTAINER ID        IMAGE          COMMAND                  CREATED              STATUS      PORTS                         NAMES
+b68950598794        httpd:2.4      "httpd-foreground"   3 minutes ago       Up 3 minutes     0.0.0.0:32772->80/tcp         friendly_rubin
+
+
+
+# iptables -t nat -nL|grep 32772
+DNAT       tcp  --  0.0.0.0/0            0.0.0.0/0            tcp dpt:32772 to:169.254.123.4:80
+
+# curl localhost:32772
+<html><body><h1>It works!</h1></body></html>
+
+
+docker的镜像管理
+    * 镜像的命名规范
+         repository:tag
+         [http|https://][registry/][library/]<name>[:tag]
+         
+         httpd:2.4
+         https://docker.io/library/httpd:2.4
+         
+         docker pull docker.io/library/httpd:2.4
+         
+         https://hub.docker.com/
+         
+         registry.cn-zhangjiakou.aliyuncs.com/breezey/
+
+
+CKAD
+         
+         
+    * 镜像从哪里来
+    * 镜像存储在哪里
+    * 镜像的基本操作: 镜像一旦生成，无法被修改
+         * 查看本地镜像
+           docker image ls
+           # docker image ls
+             REPOSITORY                                                           TAG                            IMAGE ID            CREATED             SIZE
+             mysql                                                                5.7                            c20987f18b13        15 months ago       448MB
+registry.cn-zhangjiakou.aliyuncs.com/breezey/mysql                                8.0                            3218b38490ce        15 months ago       516MB
+             httpd                                                                2.4                            dabbfbe0c57b        15 months ago       144MB
+             
+         * 拉取镜像
+           docker pull
+           
+         * 删除镜像
+           docker rmi httpd:2.4
+           docker rmi dabbfbe0c57b
+           docker rmi -f dabbfbe0c57b
+           
+           docker ps -a|awk '{print $1}'|xargs docker rm -f
+           
+         * 构建镜像
+           docker commit
+           
+              docker run -itd  --name centos centos:7 /bin/bash
+              ---> yum install -y wget
+                   yum install -y vim
+                   wget -O /etc/yum.repos.d/epel.repo https://mirrors.aliyun.com/repo/epel-7.repo
+                   yum install -y redis
+                   /etc/redis.conf   ---> bind 0.0.0.0
+                   
+                   redis-server /etc/redis.conf
+                   
+              ---> docker commit centos redis:custom-v1
+
+              docker run -d -p 6379:6379 -e REDIS_PASS="cka123" redis:custom-v1 redis-server /etc/redis.conf
+              * 优点：可以不懂dockerfile编写，就可以生成docker image
+              * 缺点：
+                     1. 别人不知道这个镜像是怎么生成的
+                     2. 无法声明监听端口
+                     3. 无法指定默认命令
+                     4. dockerfile高级特性，其都无法支持
+        
+           dockerfile编程：docker build dockerfile    
+              cat entrypoint.sh <<EOF
+              #/bin/bash
+              sed -i "s/{{.REDIS_PASS}}/$REDIS_PASS:-redis123/g" /etc/redis.conf
+              
+              exec "$@"
+              EOF
+              
+              cat Dockerfile <<EOF
+              FROM centos:7
+              
+              ADD entrypoint.sh /entrypoint.sh
+              
+              RUN yum install -y wget ; \
+                  wget -O /etc/yum.repos.d/epel.repo https://mirrors.aliyun.com/repo/epel-7.repo; \
+                  yum install -y redis; \
+                  chmod a+x /entrypoint.sh
+                  
+              ADD redis.conf /etc/redis.conf
+              
+              EXPOSE 6379
+              
+              ENTRYPOINT ["/entrypoint.sh"]
+              
+              CMD ["redis-server","/etc/redis.conf"]
+              
+              EOF
+              
+              docker build -t redis:custom-v2 . -f ./Dockerfile
+              
+              docker image ls
+              
+              docker run -d -P redis:custom-v2 
+              docker run -d -P -e REDIS_PASS=cka321 redis:custom-v2 
+               
+         * 为镜像打tag
+           docker tag busybox:1.35 busybox:latest
+           docker tag busybox:1.35 registry.cn-zhangjiakou.aliyuncs.com/breezey/busybox:1.3
+           
+         * 认证镜像仓库
+           docker login registry.cn-zhangjiakou.aliyuncs.com
+           --->usera@gmail.com
+           --->passwd
+           
+         * 推送镜像
+           docker push registry.cn-zhangjiakou.aliyuncs.com/breezey/busybox:1.3
+
+
+    * 镜像分层技术---写时复制
+      容器： 临时读写层+镜像层
+      容器---->docker commit--->新的镜像
+      
+
+容器管理
+
+docker run -d -P httpd:2.4
+* -d   将容器以守护进程的方式运行
+       容器是为任务而生的：如果一个容器没有任何任务或任务结束(出现异常退出，也可能时运行完毕)，则容器会自我销毁
+          * 大多数镜像在启动为容器时，都会自动运行一个任务
+          * 人为添加，用户添加的任务默认会覆盖镜像自带的任务
+            docker run -d httpd:2.4 sleep 3600
+        一个容器建议只运行一个任务，如果有多个任务，可以启动多个容器
+        假如多个任务，必须有一个任务在前台运行：
+                      mysql/httpd
+                      systemctl start mysqld
+                      httpd-foreground
+* -e
+        在容器启动时传递环境变量
+        docker run -d -e MYSQL_ROOT_PASSWORD=cka123456 -p 3306:3306 mysql:8.0
+        mysql -uroot -pcka123456 -h127.0.0.1 -P3306
+        
+        docker run -d -e MYSQL_ROOT_PASSWORD=cka123456 -e MYSQL_DATABASE=cka -e MYSQL_USER=test -e MYSQL_PASSWORD=cka123 -p 3366:3306 mysql:8.0
+        mysql -utest -pcka123 -h127.0.0.1 -P3366
+        
+        docker run -itd -e aa=bb --name busybox busybox:1.35
+        docker exec -it busybox /bin/sh
+        env|grep aa
+        
+
+* -i    interactive
+* -t    tty
+        想要进入一个正在运行的容器:
+            docker exec -it container_id /bin/sh
+        
+* --name
+        为容器指定名称
+        docker run -d --name webserver httpd:2.4    
+* --rm
+        容器在退出时自动删除，在docker最新版本中，不再与-d参数互斥
+
+* -p
+    * 在bridge网络模式下实现容器的端口映射，需要手动指定
+    * 随意指定容器的映射端口
+
+* -P
+    * 在bridge网络模式下实现容器的自动的端口映射
+    * 只能自动映射被镜像显示声明的端口
+* --dns
+    * 指定容器自己的dns
+    
+
+* --link
+    * wordpress
+        * php
+        * mysql
+ 
+      docker run -d --name mysql8.0 -v /data/mysql:/var/lib/mysql -v /etc/localtime:/etc/localtime:ro -e MYSQL_ROOT_PASSWORD=wordpress -e MYSQL_DATABASE=wordpress mysql:8.0
+      
+      docker run -d -p 8080:80 --name wordpress --link mysql8.0:mysql8.0 -e WORDPRESS_DB_HOST=mysql8.0 -e WORDPRESS_DB_USER=root -e WORDPRESS_DB_PASSWORD=wordpress -e WORDPRESS_DB_NAME=wordpress wordpress:6.2.0-apache
+
+      # docker exec -it e627 /bin/bash
+      
+      root@e627d894ed88:/var/www/html# cat /etc/hosts
+      127.0.0.1    localhost
+      ::1    localhost ip6-localhost ip6-loopback
+      fe00::0    ip6-localnet
+      ff00::0    ip6-mcastprefix
+      ff02::1    ip6-allnodes
+      ff02::2    ip6-allrouters
+      169.254.123.2    mysql8.0 c88f16bc4211
+      169.254.123.3    e627d894ed88
+      
+       * 容器的单机编排系统
+       * docker-compose
+       #docker-compose.yaml
+       
+       version: "3"
+       services:
+         mysql8.0: 
+          image: mysql:8.0
+          environment:
+            MYSQL_ROOT_PASSWORD: wordpress
+            MYSQL_DATABASE: wordpress
+          volumes:
+          - /data/mysql:/var/lib/mysql
+          - /etc/localtime:/etc/localtime:ro
+         wordpress: 
+          image: wordpress:6.2.0-apache
+          container_name: wordpress
+          restart: always
+          links:
+          - mysql8.0
+          ports:
+          - "8080:80"
+          depends_on:
+          - mysql8.0
+          environment:
+            WORDPRESS_DB_HOST: mysql8.0
+            WORDPRESS_DB_USER: root
+            WORDPRESS_DB_PASSWORD: wordpress
+            WORDPRESS_DB_NAME: wordpress
+       
+         
+         docker compose -f ./docker-compose.yaml up -d
+         docker compose  up -d
+      
+* --net
+
+docker的网络模式：
+* bridge
+    * 是docker的默认网络模式，docker在安装时，会创建一个名为docker0的网桥，这个网桥会分配一个172.17.0.0/16的网段，网桥的IP是这个网段的第一个可用地址；这是一个默认网桥
+    * 默认情况下，我们创建容器时，如果不指定容器的网络模式，就是使用这种模式，并且所有容器的ip都会从这个网络分配
+    
+    # ip a
+    
+    1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN group default qlen 1000
+        link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
+        inet 127.0.0.1/8 scope host lo
+           valid_lft forever preferred_lft forever
+        inet6 ::1/128 scope host 
+           valid_lft forever preferred_lft forever
+    2: ens192: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc mq state UP group default qlen 1000
+        link/ether 00:0c:29:b9:7c:fd brd ff:ff:ff:ff:ff:ff
+        inet 192.168.1.222/24 brd 192.168.1.255 scope global noprefixroute ens192
+           valid_lft forever preferred_lft forever
+        inet6 2001:250:4000:2000::53/64 scope global noprefixroute 
+           valid_lft forever preferred_lft forever
+        inet6 fe80::a66d:c39b:db9e:331/64 scope link tentative noprefixroute dadfailed 
+           valid_lft forever preferred_lft forever
+        inet6 fe80::2e24:90e0:7710:8cfc/64 scope link tentative noprefixroute dadfailed 
+           valid_lft forever preferred_lft forever
+        inet6 fe80::e22c:5544:729c:efbb/64 scope link noprefixroute 
+           valid_lft forever preferred_lft forever
+    5: docker0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue state UP group default 
+        link/ether 02:42:ce:b2:1a:fd brd ff:ff:ff:ff:ff:ff
+        inet 169.254.123.1/24 brd 169.254.123.255 scope global docker0
+           valid_lft forever preferred_lft forever
+        inet6 fe80::42:ceff:feb2:1afd/64 scope link 
+           valid_lft forever preferred_lft forever
+    40: vetha412a1c@if39: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue master docker0 state UP group default 
+    link/ether ee:95:4e:cd:7e:5c brd ff:ff:ff:ff:ff:ff link-netnsid 12
+    inet6 fe80::ec95:4eff:fecd:7e5c/64 scope link 
+       valid_lft forever preferred_lft forever
+       
+       
+    # docker ps -a|grep busybox
+    febdb933b9d1        busybox:1.35                                                         "/bin/sh"                2 hours ago         Exited (0) 2 hours ago                                                         boring_snyder
+    c0db8542ebec        busybox:1.35                                                         "sh"                     2 hours ago         Up 2 hours                                                                     infallible_burnell
+    06405862fd33        busybox:1.35                                                         "sh"                     2 hours ago         Exited (0) 2 hours ago                                                         sweet_lichterman
+    # docker exec -it c0db /bin/sh
+    / # ip a
+    1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue qlen 1000
+        link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
+        inet 127.0.0.1/8 scope host lo
+           valid_lft forever preferred_lft forever
+    39: eth0@if40: <BROADCAST,MULTICAST,UP,LOWER_UP,M-DOWN> mtu 1500 qdisc noqueue 
+        link/ether 02:42:a9:fe:7b:05 brd ff:ff:ff:ff:ff:ff
+        inet 169.254.123.5/24 brd 169.254.123.255 scope global eth0
+           valid_lft forever preferred_lft forever
+    / # exit
+    # 
+
+    
+    
+    
+* host
+    * 不为容器分配单独的网卡，直接使用宿主机网络
+    * host模式，是的容器拥有最佳网络性能，一个相同的镜像无法在同一个宿主机上启动多个容器
+      docker run -d --net host httpd:2.4
+      docker run -d --net host httpd:2.4  ===>运行失败Exit(1)
+      
+      
+      # docker run -itd --net host httpd:2.4
+      8575dc6f09f34007ddbff31174faec2df69f3ebdb93c505f20839adcbb0cee54
+      # docker ps -a|grep httpd
+      8575dc6f09f3        httpd:2.4                                                                       "httpd-foreground"       2 seconds ago       Exited (1) 1 second ago                            suspicious_feynman
+
+      # docker logs -f 8575
+      AH00558: httpd: Could not reliably determine the server's fully qualified domain name, using 192.168.1.223. Set the 'ServerName' directive globally to suppress this message
+      (98)Address already in use: AH00073: make_sock: unable to listen for connections on address [::]:80
+      (98)Address already in use: AH00073: make_sock: unable to listen for connections on address 0.0.0.0:80
+      no listening sockets available, shutting down
+      AH00015: Unable to open logs
+      
+      
+      # docker run -itd --net host -p 8899:80 httpd:2.4
+      WARNING: Published ports are discarded when using host network mode
+      3137c14aed5d433ee7d62a9b7a4ffe89bcb1f7e01d0a783a14af57e6fd605252
+      
+      # docker ps -a|grep httpd
+      3137c14aed5d        httpd:2.4                                                                       "httpd-foreground"       6 seconds ago        Exited (1) 6 seconds ago                               eloquent_gauss
+      8575dc6f09f3        httpd:2.4                                                                       "httpd-foreground"       47 seconds ago       Exited (1) 46 seconds ago                              suspicious_feynman
+
+     
+      # docker logs -f 3137
+      AH00558: httpd: Could not reliably determine the server's fully qualified domain name, using 192.168.1.223. Set the 'ServerName' directive globally to suppress this message
+      (98)Address already in use: AH00073: make_sock: unable to listen for connections on address [::]:80
+      (98)Address already in use: AH00073: make_sock: unable to listen for connections on address 0.0.0.0:80
+      no listening sockets available, shutting down
+      AH00015: Unable to open logs
+      # 
+
+    
+* none
+    * 一般研究病毒等时使用
+
+* 自定义网络模式
+    docker network create mynetwork --driver bridge --subnet 10.10.0.0/24 --gateway 10.10.0.254
+    docker run -itd --network mynetwork --name busyboxtest busybox:1.35
+    
+    # docker inspect mysql8.0 |grep -i ipaddress
+            "SecondaryIPAddresses": null,
+            "IPAddress": "169.254.123.2",
+                    "IPAddress": "169.254.123.2",
+    
+    # docker exec -it busyboxtest /bin/sh
+    
+    / # ip a
+    1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue qlen 1000
+        link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
+        inet 127.0.0.1/8 scope host lo
+           valid_lft forever preferred_lft forever
+    87: eth0@if88: <BROADCAST,MULTICAST,UP,LOWER_UP,M-DOWN> mtu 1500 qdisc noqueue 
+        link/ether 02:42:0a:0a:00:01 brd ff:ff:ff:ff:ff:ff
+        inet 10.10.0.1/24 brd 10.10.0.255 scope global eth0
+           valid_lft forever preferred_lft forever
+    / # ping 169.254.123.2
+    PING 169.254.123.2 (169.254.123.2): 56 data bytes
+    ^C
+    --- 169.254.123.2 ping statistics ---
+    3 packets transmitted, 0 packets received, 100% packet loss
+    #                 
+    
+    
+    docker network connect bridge busyboxtest
+    
+    # docker network connect bridge busyboxtest 
+    # docker exec -it busyboxtest /bin/sh
+    / # ip a
+    1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue qlen 1000
+        link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
+        inet 127.0.0.1/8 scope host lo
+           valid_lft forever preferred_lft forever
+    87: eth0@if88: <BROADCAST,MULTICAST,UP,LOWER_UP,M-DOWN> mtu 1500 qdisc noqueue 
+        link/ether 02:42:0a:0a:00:01 brd ff:ff:ff:ff:ff:ff
+        inet 10.10.0.1/24 brd 10.10.0.255 scope global eth0
+           valid_lft forever preferred_lft forever
+    89: eth1@if90: <BROADCAST,MULTICAST,UP,LOWER_UP,M-DOWN> mtu 1500 qdisc noqueue 
+        link/ether 02:42:a9:fe:7b:04 brd ff:ff:ff:ff:ff:ff
+        inet 169.254.123.4/24 brd 169.254.123.255 scope global eth1
+           valid_lft forever preferred_lft forever
+    / # ping 169.254.123.2
+    PING 169.254.123.2 (169.254.123.2): 56 data bytes
+    64 bytes from 169.254.123.2: seq=0 ttl=64 time=0.188 ms
+    64 bytes from 169.254.123.2: seq=1 ttl=64 time=0.075 ms
+    ^C
+    --- 169.254.123.2 ping statistics ---
+    2 packets transmitted, 2 packets received, 0% packet loss
+    round-trip min/avg/max = 0.075/0.131/0.188 ms
+    / # ping 169.254.123.2 -c 1
+    PING 169.254.123.2 (169.254.123.2): 56 data bytes
+    64 bytes from 169.254.123.2: seq=0 ttl=64 time=0.114 ms
+    
+    --- 169.254.123.2 ping statistics ---
+    1 packets transmitted, 1 packets received, 0% packet loss
+    round-trip min/avg/max = 0.114/0.114/0.114 ms
+    / # 
+    
+    
+    
+
+* -v
+        挂载宿主机目录/卷至容器的指定目录
+        * 可以通过多次-v指定多个挂载点，跟-e参数一样
+        * 不仅仅可以挂载目录/卷，还可以挂载文件
+        * 挂载时还可以控制挂载的权限
+        
+        docker run -d -v /data/html:/usr/usr/local/apache2/htdocs -P httpd:2.4
+        docker run -d -v /data/html:/usr/usr/local/apache2/htdocs -v /etc/localtime:/etc/localtime -P httpd:2.4
+
+        
+        docker run -d -v /data/html:/usr/usr/local/apache2/htdocs:ro  -P httpd:2.4
+        
+        # cat /data/html/index.html 
+        abc
+
+        # docker run -d -v /data/html/:/usr/local/apache2/htdocs/:ro  -P httpd:2.4
+        19cb8d2f1d18d1df68597a57ac0aec883993ec1c2d2c60a4bc2b740d9ea310c3
+        
+        # curl localhost:32778
+        abc
+        
+        # docker exec -it 19cb /bin/bash
+        root@19cb8d2f1d18:/usr/local/apache2# cd htdocs/
+        root@19cb8d2f1d18:/usr/local/apache2/htdocs# ls
+        index.html
+        
+        root@19cb8d2f1d18:/usr/local/apache2/htdocs# echo 345 >> index.html 
+        bash: index.html: Read-only file system
+
+        
+        卷管理：
+        
+        docker volume -h
+        docker run -d -P -v test1:/usr/local/apache2/htdocs httpd:2.4
+        
+        # docker run -d -P -v test1:/usr/local/apache2/htdocs httpd:2.4
+        3d0ef2bc54abdab5f247e045c229f4973410bd157cc41c118d3d6e31c7eb0fc5
+        
+        # docker volume inspect test1
+        [
+            {
+                "CreatedAt": "2023-04-08T15:22:23+08:00",
+                "Driver": "local",
+                "Labels": {},
+                "Mountpoint": "/var/lib/docker/volumes/test1/_data",
+                "Name": "test1",
+                "Options": {},
+                "Scope": "local"
+            }
+        ]
+        
+        # cd /var/lib/docker/volumes/test1/_data
+        # ls
+        index.html
+        # cat index.html 
+        <html><body><h1>It works!</h1></body></html>
+
+        
+        匿名卷：数据位置在/var/lib/docker/volumes/test1/_data
+        docker run -d -P /tmp/test1 httpd:2.4
+        
+        
+
+* --restart
+* --endpoint
+
+
+计算：
+* -d
+* -e
+* -i
+* -t
+* --name
+* --rm
+* --restart
+
+存储：
+* -v
+
+
+网络：
+* -p
+* -P
+* --net
+* --link
+
+
+docker容器的一些管理指令：
+
+docker ps  查看当前正在运行的容器
+docker ps -a   查看当前所有的容器
+docker ps -q   查看当前正在运行的容器ID
+
+docker logs container_id
+docker inspect container_id
+
+
+docker exec -it container_id /bin/sh
+
+docker rm -f container_id  强制删除正在运行的容器
+批量删除：
+   docker ps -qa|xargs docker rm -f
+
+停止正在运行的容器:
+   docker stop container_id   --->Exited(0)
+   docker kill container_id   --->Exited(137)
+
+启动一个已经退出的容器：
+   docker start container_id
+   
+重启：
+   docker restart container_id
+
+暂停一个容器：
+   docker pause container_id
+   
+从暂停中恢复：
+   docker unpause container_id
+
+容器与宿主机互传文件：
+   docker cp  container_id:/etc/redis.conf  /root/redis/  
+   
+   docker cp  /root/redis/redis.conf  container_id:/etc/
+   
+
+docker run -d mysql:8.0
+---->自动结束
+必须指定一个参数：
+-e MYSQL_ROOT_PASSWORD
+-e MYSQL_ALLOW_EMPTY_PASSWORD
+-e MYSQL_RANDOM_ROOT_PASSWORD
+
+docker run -d -e MYSQL_ROOT_PASSWORD=cka123456 mysql:8.0
+
+# docker run -d busybox:1.35
+06405862fd3349f94541db0f1fd6728591cb358ea5dbbce30d3fa25188c9325d
+# docker ps -a|grep busybox
+06405862fd33        busybox:1.35                                                         "sh"                     7 seconds ago       Exited (0) 6 seconds ago                                                        sweet_lichterman
+# docker run -itd busybox:1.35
+c0db8542ebecc31bb79ab52daa6100e9441aae5a6a7c4612d5213de054213940
+# docker ps -a|grep busybox
+c0db8542ebec        busybox:1.35                                                         "sh"                     3 seconds ago       Up 3 seconds                                                                    infallible_burnell
+06405862fd33        busybox:1.35                                                         "sh"                     48 seconds ago      Exited (0) 47 seconds ago                                                       sweet_lichterman
+# docker run -it busybox:1.35  /bin/sh
+/ # 
+/ # ps x
+PID   USER     TIME  COMMAND
+    1 root      0:00 /bin/sh
+    6 root      0:00 ps x
+/ # exit
+# docker ps -a|grep busybox
+febdb933b9d1        busybox:1.35                                                         "/bin/sh"                11 seconds ago       Exited (0) 2 seconds ago                                                            boring_snyder
+c0db8542ebec        busybox:1.35                                                         "sh"                     34 seconds ago       Up 33 seconds                                                                       infallible_burnell
+06405862fd33        busybox:1.35                                                         "sh"                     About a minute ago   Exited (0) About a minute ago                                                       sweet_lichterman
+# 
+
+
+
+
+
+=========================
+kubernetes的基本架构与原理
+
+app1: 3份 通过两个nginx实现高可用
+db1: 3份  通过两个lvs实现高可用
+
+nginx01---vip01---nginx02
+app1 --- app1 --- app1
+
+         lvs01---vip02---lv02
+         db1------db1-------db1
+
+docker实现方式：
+h1:
+
+#docker-compose.yaml
+version: '3'
+services:
+  nginx: 
+    image: nginx:xxx
+    ...
+  app1:
+    image: app1:xxx
+    ...
+  keepalived:
+    image: keepalived:xxx
+    ...
+
+docker-compose up -d
+
+
+h2:
+
+#docker-compose.yaml
+version: '3'
+services:
+  nginx: 
+    image: nginx:xxx
+    ...
+  app1:
+    image: app1:xxx
+    ...
+  keepalived:
+    image: keepalived:xxx
+    ...
+  db1:
+    image: db1:xxx
+    ...
+    
+    
+docker-compose up -d
+
+
+h3:
+
+#docker-compose.yaml
+version: '3'
+services:
+  lvs: 
+    image: lvs:xxx
+    ...
+  app1:
+    image: app1:xxx
+    ...
+  keepalived:
+    image: keepalived:xxx
+    ...
+  db1:
+    image: db1:xxx
+    ...
+    
+    
+docker-compose up -d
+
+
+
+h4:
+
+#docker-compose.yaml
+version: '3'
+services:
+  lvs: 
+    image: lvs:xxx
+    ...
+  keepalived:
+    image: keepalived:xxx
+    ...
+  db1:
+    image: db1:xxx
+    ...
+    
+    
+docker-compose up -d
+
+
+----------------------------
+k8s实现方式：
+1. lb和ha的能力能够自动的被提供，业务人员只关注业务本身
+2. 应用的故障自愈
+
+ingress--->service--->app1--->db1
+
+app1:
+  image: app1:xxx
+  replicas: 3
+  
+db1:
+  image: mysql:8.0
+  replicas: 3
+
+
+
+k8s:
+    * 故障自愈
+    * 自动的负载均衡及高可用
+    
+    * 服务注册
+    * 服务发现
+    
+    * 网络能力
+         * 网络组件
+         * CNI-container network interface
+           flannel
+           calico
+           canal
+           cillium
+           contiv
+           ...
+    * 存储能力
+         * 存储设备、存储服务
+         * CSI-container storage interface
+           nfs  nfs-csi
+           ceph ceph-csi
+           glusterfs
+    * 计算能力
+         * 容器运行时
+         * CRI-container runtime interface 容器运行时接口
+
+    
+kubernetes的组件：
+
+* 控制面节点(master|control plan)
+    * etcd: 用于存储集群当中的所有状态数据信息，充当集群数据库
+    * kube-apiserver: 负责接收所有用户及其他组件的请求，并将相关数据存储至数据库中
+    * kube-controller-manager: 负责监控集群当中任务的运行状态，保证任务总是处于预期的状态
+    * kube-scheduler: 集群调度器，当有容器创建需求时，选择最合适的节点
+    
+    * kube-proxy
+    * kubelet
+    
+    * containerd
+    * calico    
+
+* 工作节点(node|worker)
+    * kube-proxy
+    * kubelet: 工作节点，负责调用本机的容器运行时管理容器，并上报当前节点及容器运行状态
+    
+    * containerd: 运行容器
+    * calico
+
+    
+1. kubelet向kube-apiserver注册，包括本机的cpu、内存、主机名、运行的容器等信息
+2. kube-apiserver收到请求，将信息存储至etcd
+3. 管理员向kube-apiserver下达创建容器的请求，包括创建容器的副本数、所使用的镜像、使用什么网络、dns、要创建的容器名称等
+4. kube-apiserver收到请求，将信息存储至etcd
+5. kube-scheduler向kube-apiserver发出请求，咨询是否有任务需要执行
+6. kube-apiserver检索etcd，将管理员的创建容器的需求以及kubelet的相关信息返回给kube-scheduler
+7. kube-scheduler通过计算找出最适合运行当前容器的kubelet，将该kubelet信息与要创建容器的信息进行绑定，并返回给kube-apiserver
+8. kube-apiserver收到请求，将信息存储至etcd
+9. kubelet再次向kube-apiserver发送心跳，kube-apiserver检索数据库，将要创建的容器信息返回给kubelet
+10. kubelet收到要创建的容器信息，调用本地的containerd，创建容器
+11. containerd创建完容器将信息返回给kubelet，kubelet再次向kube-apiserver发起请求，将信息发送给kube-apiserver
+12. kube-apiserver收到请求，将信息存储至etcd
+13. kube-controller-manager向kube-apiserver发出请求，询问是否有任务需要执行
+14. kube-apiserver收到请求，将kubelet返回的创建容器的信息以及管理员要求创建容器的信息发送给kube-controller-manager
+15. kube-controller-manager进行对比之后，向kube-apiserver返回结果
+    * 如果结果正常，则本次任务顺利完成，任务结束
+    * 如果结果不正常，则重复5-14的执行过程
+16. 管理员再次向kube-apiserver发送请求，询问任务是否执行完毕
+17. kube-apiserver收到请求，检索etcd，返回任务执行结果
+
+
+使用kubeadm安装k8s集群：
+
+刚安装完kubeadm init和安装calico后：
+
+root@k8s-master:~# kubectl get nodes
+NAME          STATUS   ROLES           AGE   VERSION
+k8s-master    Ready    control-plane   43h   v1.26.2
+
+
+# kubectl -n kube-system get pods
+NAME                                       READY   STATUS    RESTARTS      AGE
+calico-kube-controllers-6c64d9648d-qq9p2   1/1     Running   0             43h
+calico-node-w5xph                          1/1     Running   0             43h
+coredns-567c556887-6r8tk                   1/1     Running   0             43h
+coredns-567c556887-x7n6f                   1/1     Running   0             43h
+etcd-k8s-master                            1/1     Running   0             43h
+kube-apiserver-k8s-master                  1/1     Running   0             43h
+kube-controller-manager-k8s-master         1/1     Running   1 (43h ago)   43h
+kube-proxy-zmzxx                           1/1     Running   0             43h
+kube-scheduler-k8s-master                  1/1     Running   1 (43h ago)   43h
+
+
+工作节点加入集群的token只有在24小时内有效，如果超过24小时，可以自己创建token：
+kubeadm token create --print-join-command
+
+工作节点加入集群后的信息：
+
+
+root@k8s-master:~# kubectl get nodes
+NAME          STATUS   ROLES           AGE   VERSION
+k8s-docker1   Ready    worker          43h   v1.26.2
+k8s-docker2   Ready    worker          43h   v1.26.2
+k8s-master    Ready    control-plane   43h   v1.26.2
+
+
+# kubectl -n kube-system get pods
+NAME                                       READY   STATUS    RESTARTS      AGE
+calico-kube-controllers-6c64d9648d-qq9p2   1/1     Running   0             43h
+calico-node-kz2xc                          1/1     Running   0             43h
+calico-node-q7kn5                          1/1     Running   0             43h
+calico-node-w5xph                          1/1     Running   0             43h
+coredns-567c556887-6r8tk                   1/1     Running   0             43h
+coredns-567c556887-x7n6f                   1/1     Running   0             43h
+etcd-k8s-master                            1/1     Running   0             43h
+kube-apiserver-k8s-master                  1/1     Running   0             43h
+kube-controller-manager-k8s-master         1/1     Running   1 (43h ago)   43h
+kube-proxy-nmhnh                           1/1     Running   0             43h
+kube-proxy-p2vws                           1/1     Running   0             43h
+kube-proxy-zmzxx                           1/1     Running   0             43h
+kube-scheduler-k8s-master                  1/1     Running   1 (43h ago)   43h
+
+# crictl --runtime-endpoint=unix:///run/containerd/containerd.sock ps 
+CONTAINER           IMAGE               CREATED             STATE               NAME                      ATTEMPT             POD ID              POD
+75779e7a865b8       dafd8ad70b156       44 hours ago        Running             kube-scheduler            1                   f5660af6c097e       kube-scheduler-k8s-master
+50f1cd0ea5b5c       5d7c5dfd3ba18       44 hours ago        Running             kube-controller-manager   1                   8c7853aac9918       kube-controller-manager-k8s-master
+297f014a46a0e       38b76de417d5d       44 hours ago        Running             calico-kube-controllers   0                   ea9fd957e51d7       calico-kube-controllers-6c64d9648d-qq9p2
+3795d3f0676bc       5185b96f0becf       44 hours ago        Running             coredns                   0                   ca60ec3996f54       coredns-567c556887-x7n6f
+6b817705127ac       5185b96f0becf       44 hours ago        Running             coredns                   0                   b6e4d9ec38c56       coredns-567c556887-6r8tk
+b38ccc277c2e1       54637cb36d4a1       44 hours ago        Running             calico-node               0                   f672a92d305f2       calico-node-w5xph
+a8fc64a22b91f       556768f31eb1d       44 hours ago        Running             kube-proxy                0                   aae483169306d       kube-proxy-zmzxx
+842f9c77d3aa4       a31e1d84401e6       44 hours ago        Running             kube-apiserver            0                   41c8008b675d4       kube-apiserver-k8s-master
+bac86f6196a57       fce326961ae2d       44 hours ago        Running             etcd                      0                   026f85c97ba7d       etcd-k8s-master
+
+root@k8s-master:~# ctr -n k8s.io c ls
+CONTAINER                                                           IMAGE                                                                                  RUNTIME                  
+026f85c97ba7d76b0741c01309b9b7205235d7ebcf9b101f98ae68d309bceeff    registry.cn-hangzhou.aliyuncs.com/google_containers/pause:3.9                          io.containerd.runc.v2    
+25b0defeb6445ac6c7c97dbd9c3b8a2087ad514821ed8ca4a01894d5d2cec526    registry.cn-shanghai.aliyuncs.com/cnlxh/cni:v3.24.5                                    io.containerd.runc.v2    
+297f014a46a0e7be2378dff2cda46b35f2d862b9113a4ad503116fe888124532    registry.cn-shanghai.aliyuncs.com/cnlxh/kube-controllers:v3.24.5                       io.containerd.runc.v2    
+3795d3f0676bc5eba888a01b185729e2acbec35f15d86a2653c1f0e231985524    registry.cn-hangzhou.aliyuncs.com/google_containers/coredns:v1.9.3                     io.containerd.runc.v2    
+41c8008b675d4c4af508c7dc4c254dd7607cfc0d4c04017f52a4c385e8067390    registry.cn-hangzhou.aliyuncs.com/google_containers/pause:3.9                          io.containerd.runc.v2    
+50f1cd0ea5b5ca3ecc244565a24a7e9511273d266d3a5fa91cb430f6710aae89    registry.cn-hangzhou.aliyuncs.com/google_containers/kube-controller-manager:v1.26.0    io.containerd.runc.v2    
+6b817705127ac358a4004bf78b53e643142595650f7bfb18d81776a64abfa19d    registry.cn-hangzhou.aliyuncs.com/google_containers/coredns:v1.9.3                     io.containerd.runc.v2    
+75779e7a865b82d86d9d694c3dc76f969a6899b2b2525f509b3572a9140ef0bf    registry.cn-hangzhou.aliyuncs.com/google_containers/kube-scheduler:v1.26.0             io.containerd.runc.v2    
+842f9c77d3aa462ece518abb4cf6e3f44771e65fcf3e96abeff3e90af3e0a3af    registry.cn-hangzhou.aliyuncs.com/google_containers/kube-apiserver:v1.26.0             io.containerd.runc.v2    
+8c7853aac9918b005fabc7e704ea0e6c707cc7512405b15168cdfcedbf45b039    registry.cn-hangzhou.aliyuncs.com/google_containers/pause:3.9                          io.containerd.runc.v2    
+a8fc64a22b91f3c66296fe542fcef035dbbb88d9a94418084169de5ccd9d2149    registry.cn-hangzhou.aliyuncs.com/google_containers/kube-proxy:v1.26.0                 io.containerd.runc.v2    
+aae483169306ddbe11a5d18104e2ce027858be6c7014fec604e6a6bca58f6713    registry.cn-hangzhou.aliyuncs.com/google_containers/pause:3.9                          io.containerd.runc.v2    
+b0414a1be683d117a98b8f3f4d4b98b8b77b343a47e22ea192969ca9fdef6dcd    registry.cn-hangzhou.aliyuncs.com/google_containers/kube-scheduler:v1.26.0             io.containerd.runc.v2    
+b38ccc277c2e11c15776cc6243f4c8a932b917d3aba3363a2e151663de36e69e    registry.cn-shanghai.aliyuncs.com/cnlxh/node:v3.24.5                                   io.containerd.runc.v2    
+b6e4d9ec38c5635e858d304611935a882871bd92611068f62f564f1d51757fac    registry.cn-hangzhou.aliyuncs.com/google_containers/pause:3.9                          io.containerd.runc.v2    
+b8e3071aec363f1a72100bb29519ddf40886f08fb540aefb4c7f55cfcb2669ad    registry.cn-hangzhou.aliyuncs.com/google_containers/kube-controller-manager:v1.26.0    io.containerd.runc.v2    
+bac86f6196a57133616446a99e5db0697ec512f15db9c525b92e3beff1872c9e    registry.cn-hangzhou.aliyuncs.com/google_containers/etcd:3.5.6-0                       io.containerd.runc.v2    
+ca60ec3996f5493b3aae8e053a0df6b0de1fdb522d8cfe801ff40b9e7df55d9b    registry.cn-hangzhou.aliyuncs.com/google_containers/pause:3.9                          io.containerd.runc.v2    
+daf4d3302f5eb8c58128904bffc420a10c20ae7e3ecc3f6e9468e070e69766c9    registry.cn-shanghai.aliyuncs.com/cnlxh/node:v3.24.5                                   io.containerd.runc.v2    
+ea9fd957e51d7ac26b0d62fd0be57a711f3c2ccd9eb89eb100f7b7e9c4972a2d    registry.cn-hangzhou.aliyuncs.com/google_containers/pause:3.9                          io.containerd.runc.v2    
+f5660af6c097e522d2af2a5c06c0890fbf6b79bfa7a025e433d299cb9cdd6603    registry.cn-hangzhou.aliyuncs.com/google_containers/pause:3.9                          io.containerd.runc.v2    
+f672a92d305f292ea6683caa95ed9bf110f42c083325cca77a08b82468f24cea    registry.cn-hangzhou.aliyuncs.com/google_containers/pause:3.9                          io.containerd.runc.v2    
+f8985c0834fbabeba28798215d67c29f7de98cd8ae1b7e883b1ec7d9968737cf    registry.cn-shanghai.aliyuncs.com/cnlxh/cni:v3.24.5                                    io.containerd.runc.v2    
+root@k8s-master:~# ctr -n k8s.io c ls -q
+026f85c97ba7d76b0741c01309b9b7205235d7ebcf9b101f98ae68d309bceeff
+25b0defeb6445ac6c7c97dbd9c3b8a2087ad514821ed8ca4a01894d5d2cec526
+297f014a46a0e7be2378dff2cda46b35f2d862b9113a4ad503116fe888124532
+3795d3f0676bc5eba888a01b185729e2acbec35f15d86a2653c1f0e231985524
+41c8008b675d4c4af508c7dc4c254dd7607cfc0d4c04017f52a4c385e8067390
+50f1cd0ea5b5ca3ecc244565a24a7e9511273d266d3a5fa91cb430f6710aae89
+6b817705127ac358a4004bf78b53e643142595650f7bfb18d81776a64abfa19d
+75779e7a865b82d86d9d694c3dc76f969a6899b2b2525f509b3572a9140ef0bf
+842f9c77d3aa462ece518abb4cf6e3f44771e65fcf3e96abeff3e90af3e0a3af
+8c7853aac9918b005fabc7e704ea0e6c707cc7512405b15168cdfcedbf45b039
+a8fc64a22b91f3c66296fe542fcef035dbbb88d9a94418084169de5ccd9d2149
+aae483169306ddbe11a5d18104e2ce027858be6c7014fec604e6a6bca58f6713
+b0414a1be683d117a98b8f3f4d4b98b8b77b343a47e22ea192969ca9fdef6dcd
+b38ccc277c2e11c15776cc6243f4c8a932b917d3aba3363a2e151663de36e69e
+b6e4d9ec38c5635e858d304611935a882871bd92611068f62f564f1d51757fac
+b8e3071aec363f1a72100bb29519ddf40886f08fb540aefb4c7f55cfcb2669ad
+bac86f6196a57133616446a99e5db0697ec512f15db9c525b92e3beff1872c9e
+ca60ec3996f5493b3aae8e053a0df6b0de1fdb522d8cfe801ff40b9e7df55d9b
+daf4d3302f5eb8c58128904bffc420a10c20ae7e3ecc3f6e9468e070e69766c9
+ea9fd957e51d7ac26b0d62fd0be57a711f3c2ccd9eb89eb100f7b7e9c4972a2d
+f5660af6c097e522d2af2a5c06c0890fbf6b79bfa7a025e433d299cb9cdd6603
+f672a92d305f292ea6683caa95ed9bf110f42c083325cca77a08b82468f24cea
+f8985c0834fbabeba28798215d67c29f7de98cd8ae1b7e883b1ec7d9968737cf
+root@k8s-master:~# 
+
+
+
+
+kubernetes的资源对象：
+
+linux的哲学： 一切皆文件
+kubernetes:   一切皆资源对象
+
+
+* 一个节点是一个对象
+     * nodes    no
+* 一个pod是一个对象
+     * pods     po    pod
+
+* namespace     
+    namespaced: true/false
+        
+     
+    namespaced: false--->全局资源对象
+    namespaced: true--->namespaced级别的资源对象    
+     
+如何查看kubernetes中有哪些资源对象：
+    kubectl api-resources     
+     
+    # kubectl api-resources 
+    NAME                              SHORTNAMES   APIVERSION                             NAMESPACED   KIND
+    bindings                                       v1                                     true         Binding
+    componentstatuses                 cs           v1                                     false        ComponentStatus
+    configmaps                        cm           v1                                     true         ConfigMap
+    endpoints                         ep           v1                                     true         Endpoints
+     
+     
+kubectl命令使用：
+
+kubectl
+
+* 增
+    * create
+    * run     只能用于通过命令行的方式创建pod
+    * apply
+    
+* 删
+    * delete
+    
+* 改
+    * edit
+    * apply
+    
+* 查
+    * describe
+    
+* 列出
+    * get
+    
+* 打标签
+    * label
+        * 查看标签
+          kubectl get nodes k8s-docker2 --show-labels
+        * 添加标签
+          kubectl label nodes k8s-docker2 disk=ssd
+          kubectl label nodes k8s-docker2 gpu=p100
+        * 删除标签
+          kubectl label nodes k8s-docker2 gpu-
+        * 修改标签
+          kubectl label nodes k8s-docker2 disk=hhd --overwrite
+* 加注释     
+    * annotate
+    
+        * 添加注释
+          kubectl annotate nodes k8s-docker2 desc="just a test"
+        * 删除注释
+          kubectl annotate nodes k8s-docker2 desc-
+        * 修改注释
+          kubectl annotate nodes k8s-docker2 desc="just two test" --overwrite
+        * 查看注释
+          
+     
+命令参数：
+* -A   所有命名空间
+* -n namespace     指定命名空间
+* -o yaml
+* -o wide     列出资源对象的所信息
+* --show-labels     查看指定资源对象的标签
+* -l key=value,key1=value1     基于标签查找对象
+
+标签：用来识别k8s集群中的资源对象
+    * 负载均衡器可以将一组相同标签的pod识别为一组应用
+    * 标签是以key-value的形式出现的，key和value可完全自定义，但务必做到见名知义    
+     
+     
+# kubectl get ns
+NAME              STATUS   AGE
+default           Active   44h
+kube-node-lease   Active   44h
+kube-public       Active   44h
+kube-system       Active   44h
+     
+# kubectl get pods --all-namespaces
+NAMESPACE     NAME                                       READY   STATUS    RESTARTS      AGE
+kube-system   calico-kube-controllers-6c64d9648d-qq9p2   1/1     Running   0             44h
+kube-system   calico-node-kz2xc                          1/1     Running   0             44h
+kube-system   calico-node-q7kn5                          1/1     Running   0             44h
+kube-system   calico-node-w5xph                          1/1     Running   0             44h
+kube-system   coredns-567c556887-6r8tk                   1/1     Running   0             44h
+kube-system   coredns-567c556887-x7n6f                   1/1     Running   0             44h
+kube-system   etcd-k8s-master                            1/1     Running   0             44h
+kube-system   kube-apiserver-k8s-master                  1/1     Running   0             44h
+kube-system   kube-controller-manager-k8s-master         1/1     Running   1 (44h ago)   44h
+kube-system   kube-proxy-nmhnh                           1/1     Running   0             44h
+kube-system   kube-proxy-p2vws                           1/1     Running   0             44h
+kube-system   kube-proxy-zmzxx                           1/1     Running   0             44h
+kube-system   kube-scheduler-k8s-master                  1/1     Running   1 (44h ago)   44h
+
+# kubectl get pods -A
+NAMESPACE     NAME                                       READY   STATUS    RESTARTS      AGE
+kube-system   calico-kube-controllers-6c64d9648d-qq9p2   1/1     Running   0             44h
+kube-system   calico-node-kz2xc                          1/1     Running   0             44h
+kube-system   calico-node-q7kn5                          1/1     Running   0             44h
+kube-system   calico-node-w5xph                          1/1     Running   0             44h
+kube-system   coredns-567c556887-6r8tk                   1/1     Running   0             44h
+kube-system   coredns-567c556887-x7n6f                   1/1     Running   0             44h
+kube-system   etcd-k8s-master                            1/1     Running   0             44h
+kube-system   kube-apiserver-k8s-master                  1/1     Running   0             44h
+kube-system   kube-controller-manager-k8s-master         1/1     Running   1 (44h ago)   44h
+kube-system   kube-proxy-nmhnh                           1/1     Running   0             44h
+kube-system   kube-proxy-p2vws                           1/1     Running   0             44h
+kube-system   kube-proxy-zmzxx                           1/1     Running   0             44h
+kube-system   kube-scheduler-k8s-master                  1/1     Running   1 (44h ago)   44h
+
+# kubectl get pods
+No resources found in default namespace.
+
+
+
+     
+# kubectl -n kube-system get pods
+NAME                                       READY   STATUS    RESTARTS      AGE
+calico-kube-controllers-6c64d9648d-qq9p2   1/1     Running   0             44h
+calico-node-kz2xc                          1/1     Running   0             44h
+calico-node-q7kn5                          1/1     Running   0             44h
+calico-node-w5xph                          1/1     Running   0             44h
+coredns-567c556887-6r8tk                   1/1     Running   0             44h
+coredns-567c556887-x7n6f                   1/1     Running   0             44h
+etcd-k8s-master                            1/1     Running   0             44h
+kube-apiserver-k8s-master                  1/1     Running   0             44h
+kube-controller-manager-k8s-master         1/1     Running   1 (44h ago)   44h
+kube-proxy-nmhnh                           1/1     Running   0             44h
+kube-proxy-p2vws                           1/1     Running   0             44h
+kube-proxy-zmzxx                           1/1     Running   0             44h
+kube-scheduler-k8s-master                  1/1     Running   1 (44h ago)   44h
+# kubectl -n kube-system get pods -owide
+NAME                                       READY   STATUS    RESTARTS      AGE   IP               NODE          NOMINATED NODE   READINESS GATES
+calico-kube-controllers-6c64d9648d-qq9p2   1/1     Running   0             44h   172.16.235.195   k8s-master    <none>           <none>
+calico-node-kz2xc                          1/1     Running   0             44h   192.168.1.235    k8s-docker1   <none>           <none>
+calico-node-q7kn5                          1/1     Running   0             44h   192.168.1.236    k8s-docker2   <none>           <none>
+calico-node-w5xph                          1/1     Running   0             44h   192.168.1.234    k8s-master    <none>           <none>
+coredns-567c556887-6r8tk                   1/1     Running   0             44h   172.16.235.193   k8s-master    <none>           <none>
+coredns-567c556887-x7n6f                   1/1     Running   0             44h   172.16.235.194   k8s-master    <none>           <none>
+etcd-k8s-master                            1/1     Running   0             44h   192.168.1.234    k8s-master    <none>           <none>
+kube-apiserver-k8s-master                  1/1     Running   0             44h   192.168.1.234    k8s-master    <none>           <none>
+kube-controller-manager-k8s-master         1/1     Running   1 (44h ago)   44h   192.168.1.234    k8s-master    <none>           <none>
+kube-proxy-nmhnh                           1/1     Running   0             44h   192.168.1.235    k8s-docker1   <none>           <none>
+kube-proxy-p2vws                           1/1     Running   0             44h   192.168.1.236    k8s-docker2   <none>           <none>
+kube-proxy-zmzxx                           1/1     Running   0             44h   192.168.1.234    k8s-master    <none>           <none>
+kube-scheduler-k8s-master                  1/1     Running   1 (44h ago)   44h   192.168.1.234    k8s-master    <none>           <none>
+# kubectl get nodes
+NAME          STATUS   ROLES           AGE   VERSION
+k8s-docker1   Ready    worker          44h   v1.26.2
+k8s-docker2   Ready    worker          44h   v1.26.2
+k8s-master    Ready    control-plane   44h   v1.26.2
+# kubectl get nodes -o wide
+NAME          STATUS   ROLES           AGE   VERSION   INTERNAL-IP     EXTERNAL-IP   OS-IMAGE             KERNEL-VERSION      CONTAINER-RUNTIME
+k8s-docker1   Ready    worker          44h   v1.26.2   192.168.1.235   <none>        Ubuntu 20.04.5 LTS   5.4.0-146-generic   containerd://1.6.20
+k8s-docker2   Ready    worker          44h   v1.26.2   192.168.1.236   <none>        Ubuntu 20.04.5 LTS   5.4.0-146-generic   containerd://1.6.20
+k8s-master    Ready    control-plane   44h   v1.26.2   192.168.1.234   <none>        Ubuntu 20.04.5 LTS   5.4.0-125-generic   containerd://1.6.20
+# 
+     
+     
+标签：
+root@k8s-master:~# kubectl get nodes --show-labels
+NAME          STATUS   ROLES           AGE   VERSION   LABELS
+k8s-docker1   Ready    worker          45h   v1.26.2   beta.kubernetes.io/arch=amd64,beta.kubernetes.io/os=linux,kubernetes.io/arch=amd64,kubernetes.io/hostname=k8s-docker1,kubernetes.io/os=linux,node-role.kubernetes.io/worker=
+k8s-docker2   Ready    worker          45h   v1.26.2   beta.kubernetes.io/arch=amd64,beta.kubernetes.io/os=linux,kubernetes.io/arch=amd64,kubernetes.io/hostname=k8s-docker2,kubernetes.io/os=linux,node-role.kubernetes.io/worker=
+k8s-master    Ready    control-plane   45h   v1.26.2   beta.kubernetes.io/arch=amd64,beta.kubernetes.io/os=linux,kubernetes.io/arch=amd64,kubernetes.io/hostname=k8s-master,kubernetes.io/os=linux,node-role.kubernetes.io/control-plane=,node.kubernetes.io/exclude-from-external-load-balancers=
+root@k8s-master:~# kubectl label nodes k8s-docker2 disk=ssd
+node/k8s-docker2 labeled
+root@k8s-master:~# kubectl label nodes k8s-docker2 gpu=p100
+node/k8s-docker2 labeled
+root@k8s-master:~# kubectl get nodes k8s-docker2 --show-labels
+NAME          STATUS   ROLES    AGE   VERSION   LABELS
+k8s-docker2   Ready    worker   45h   v1.26.2   beta.kubernetes.io/arch=amd64,beta.kubernetes.io/os=linux,disk=ssd,gpu=p100,kubernetes.io/arch=amd64,kubernetes.io/hostname=k8s-docker2,kubernetes.io/os=linux,node-role.kubernetes.io/worker=
+root@k8s-master:~# kubectl label nodes k8s-docker2 gpu-
+node/k8s-docker2 unlabeled
+root@k8s-master:~# kubectl get nodes k8s-docker2 --show-labels
+NAME          STATUS   ROLES    AGE   VERSION   LABELS
+k8s-docker2   Ready    worker   45h   v1.26.2   beta.kubernetes.io/arch=amd64,beta.kubernetes.io/os=linux,disk=ssd,kubernetes.io/arch=amd64,kubernetes.io/hostname=k8s-docker2,kubernetes.io/os=linux,node-role.kubernetes.io/worker=
+root@k8s-master:~# kubectl label nodes k8s-docker2 disk=hhd
+error: 'disk' already has a value (ssd), and --overwrite is false
+root@k8s-master:~# kubectl label nodes k8s-docker2 disk=hhd --overwrite 
+node/k8s-docker2 labeled
+root@k8s-master:~# kubectl get nodes k8s-docker2 --show-labels
+NAME          STATUS   ROLES    AGE   VERSION   LABELS
+k8s-docker2   Ready    worker   45h   v1.26.2   beta.kubernetes.io/arch=amd64,beta.kubernetes.io/os=linux,disk=hhd,kubernetes.io/arch=amd64,kubernetes.io/hostname=k8s-docker2,kubernetes.io/os=linux,node-role.kubernetes.io/worker=
+
+
+root@k8s-master:~# kubectl get nodes -l disk=hhd
+NAME          STATUS   ROLES    AGE   VERSION
+k8s-docker2   Ready    worker   45h   v1.26.2
+root@k8s-master:~# kubectl get nodes --show-labels|grep disk=hhd
+k8s-docker2   Ready    worker          45h   v1.26.2   beta.kubernetes.io/arch=amd64,beta.kubernetes.io/os=linux,disk=hhd,kubernetes.io/arch=amd64,kubernetes.io/hostname=k8s-docker2,kubernetes.io/os=linux,node-role.kubernetes.io/worker=
+root@k8s-master:~# 
+
+
+
+     
+calico.yaml
+
+- name: CALICO_IPV4POOL_BLOCK_SIZE     
+  value: "26"
+
+
+cronJob -- fail---防止重启太多占用过多IP
+ 1. 最多重启5次；
+ 2. 最多留下10个历史记录，其余的全部删除；
+ 3. 因为，crontJob不用监听端口，所有可以走host网络 
+
+
+ 
+ 
+kubernetes的Pod管理
+
+
+
+
+docker run -d httpd:2.4
+
+
+* 指定pod名称     --name  myhttpd
+docker run --name=myfirstpod httpd:2.4
+
+containers:
+- name: myfirstpod
+
+* 指定pod所使用的镜像  --image httpd:2.4
+docker run myfirstpod httpd:2.4
+
+containers:
+- name: myfirstpod
+  image: httpd:2.4
+
+
+* 配置镜像拉取策略   --image-pull-policy=Always|Never|IfNotPresent
+docker run myfirstpod  httpd:2.4
+
+yaml:
+containers:
+- name: myfirstpod
+  image: httpd:2.4 
+  imagePullPolicy: Always|Never|IfNotPresent
+
+* 配置pod重启策略    --restart-policy=Always|Never|Onfailure
+docker run myfirstpod --restart-policy Always   httpd:2.4
+
+
+yaml:
+restartPolicy: Always|Never|Onfailure
+containers:
+- name: myfirstpod
+  image: httpd:2.4 
+  imagePullPolicy: Always|Never|IfNotPresent
+
+
+* 配置pod所执行的任务   "sleep 3600"
+docker run --name=myfirstpod --restart Always httpd:2.4  '/bin/sh -c "sleep 3000"'
+
+command:
+- /bin/sh -c "sleep 3000"
+
+command:
+- /bin/sh
+- -c
+- "sleep 3000"
+
+command:
+- /bin/sh
+- -c
+args:
+- "sleep 3000"
+
+
+yaml:
+restartPolicy: Always|Never|Onfailure
+containers:
+- name: myfirstpod
+  image: httpd:2.4 
+  imagePullPolicy: Always|Never|IfNotPresent
+  command:
+  - /bin/sh
+  - -c
+  args:
+  - "sleep 3000"
+
+* 配置pod监听的端口    
+docker run --name=myfirstpod --restart=Always -P  httpd:2.4  '/bin/sh -c "sleep 3000"'
+docker run --name=myfirstpod --restart=Always -p 8080:80  httpd:2.4  '/bin/sh -c "sleep 3000"'
+
+  ports:
+  - name: http
+    protocol: TCP
+    containerPort: 80
+    hostPort: 20080
+  - name: http-8081   #名称是字符串类型，也可以加引号"http-8081"
+    containerPort: 8081
+    protocol: UDP
+
+curl http://k8s-docker1:20080
+
+
+    
+    
+yaml:
+restartPolicy: Always|Never|Onfailure
+containers:
+- name: myfirstpod
+  image: httpd:2.4 
+  imagePullPolicy: Always|Never|IfNotPresent
+  command:
+  - /bin/sh
+  - -c
+  args:
+  - "sleep 3000"
+  ports:
+  - name: http
+    protocol: TCP
+    containerPort: 80
+    #hostPort: 20080 #单个pod时可以直接映射出来
+  - name: 8081-8081
+    containerPort: 8081
+    protocol: UDP
+
+
+* 配置pod所需要的环境变量  
+docker run  --restart=Always -p 3366:3306 -e MYSQL_ROOT_PASSWORD="cka123" -e MYSQL_USER=wordpress -e MYSQL_PASSWORD=wordpress -e MYSQL_DATABASE=wordpress --name=mysql mysql:5.7
+
+env:
+- name: MYSQL_ROOT_PASSWORD
+  value: cka123
+- name: MYSQL_USER
+  value: wordpress
+
+yaml:
+restartPolicy: Always|Never|Onfailure
+containers:
+- name: myfirstpod
+  image: httpd:2.4 
+  imagePullPolicy: Always|Never|IfNotPresent
+  ports:
+  - name: http
+    protocol: TCP
+    containerPort: 3306
+    hostPort: 20306
+  env:
+  - name: MYSQL_ROOT_PASSWORD
+    value: cka123
+  - name: MYSQL_USER
+    value: wordpress
+  - name: MYSQL_DATABASE
+    value: wordpress
+  - name: MYSQL_PASSWORD
+    value: wordpress    
+  
+
+* 配置pod的dns策略  
+docker run  --restart=Always -p 3366:3306 -e MYSQL_ROOT_PASSWORD="cka123" --dns 223.5.5.5 -e MYSQL_USER=wordpress -e MYSQL_PASSWORD=wordpress -e MYSQL_DATABASE=wordpress --name=mysql mysql:5.7
+
+dnsPolicy:
+  * ClusterFirst: 使用kubernetes集群内部部署的dns作为pod的dns地址
+  * Default: 使用宿主机的dns地址
+  * ClusterFirstWithHostNet: 当pod使用的是宿主机网络时，指定该pod使用kubernetes内部的dns地址
+
+dnsConfig:
+  nameservers: ["223.5.5.5","8.8.8.8]
+  searches:
+  - default.svc.cluster.local
+  - svc.cluster.local
+  - cluster.local
+  options:
+  - name: ndots
+    value: "2"
+  
+  
+* 配置pod的网络类型  
+docker run  --restart=Always --net host -e MYSQL_ROOT_PASSWORD="cka123" --dns 223.5.5.5 -e MYSQL_USER=wordpress -e MYSQL_PASSWORD=wordpress -e MYSQL_DATABASE=wordpress --name=mysql mysql:5.7
+
+
+hostNetwork: true|false
+当时使用hostNetwork: true时，如果dnsPolicy没有指定时，那么由默认的ClusterFirst转为Default，使用主机dns
+
+
+#使用集群内的dns
+hostNetwork: true
+dnsPolicy: ClusterFirstWithHostNet
+
+
+* 多容器
+
+servicemesh
+  * istio
+
+sidecar
+
+containers:
+- name: mysql
+  image: mysql:8.0
+  ports:
+  - name: mysql-3306
+    containerPort: 3306
+  env:
+  - name: MYSQL_ROOT_PASSWORD
+    value: cka123
+- name: busybox
+  image: busybox:1.28
+  imagePullPolicy: IfNotPresent
+  command:
+  - /bin/sh
+  - -c
+  - sleep 3000
+
+  
+containers:
+- name: php
+  image: php:7.0
+- name: nginx
+  image: nginx:1.26.0
+  imagePullPolicy: IfNotPresent
+
+* 静态POD
+
+# kubectl -n kube-system get pod |grep k8s-master
+etcd-k8s-master                            1/1     Running   1 (12h ago)   7d18h
+kube-apiserver-k8s-master                  1/1     Running   1 (12h ago)   7d18h
+kube-controller-manager-k8s-master         1/1     Running   4 (11h ago)   7d18h
+kube-scheduler-k8s-master                  1/1     Running   4 (11h ago)   7d18h
+
+cp xxx.yaml /etc/kubernetes/manifests
+
+* 配置pod的存储卷    
+docker run  --restart=Always --net host -e MYSQL_ROOT_PASSWORD="cka123" -v /etc/localtime:/etc/localtime -v /data/mysql:/var/lib/mysql --dns 223.5.5.5 -e MYSQL_USER=wordpress -e MYSQL_PASSWORD=wordpress -e MYSQL_DATABASE=wordpress --name=mysql mysql:5.7
+
+volumes:
+- name: datadir
+  hostPath:
+    path: /data/mysql
+    type: DirectoryOrCreate
+- name: localtime
+  hostPath:
+    path: /etc/localtime
+    type: File
+- name: sharedir
+  emptyDir: {}
+- name: cachedir
+  emptyDir: 
+    medium: Memory
+    sizeLimit: 32Mi
+containers:
+- name: mysql
+  image: mysql:8.0
+  volumeMounts:
+  - name: datadir
+    mountPath: /var/lib/mysql
+  - name: localtime
+    mountPath: /etc/localtime
+    readOnly: true
+  - name: sharedir
+    mountPath: /temp/sharedir
+  - name: cachedir
+    mountPath: /cache
+- name: busybox
+  image: busybox:1.28
+  volumeMounts:
+  - name: localtime
+    mountPath: /etc/localtime
+    readOnly: true
+  - name: sharedir
+    mountPath: /temp/xxx
+    
+
+volumes:
+- name: datadir
+  emptyDir: {}
+
+volumes:
+- name: datadir
+  emptyDir: 
+    sizeLimit: 1G
+    
+在k8s当中支持多种类型的存储卷：
+    * hostPath: 主机目录，可以将容器数据持久化到宿主机目录，但由于pod的动态调度特性，当pod被重调度时，如果运行到到其他节点，则无法读取到之前节点上的目录中的数据
+      
+    * emptyDir: 主机目录/内存，无法实现数据的持久化。一旦pod被重调度，之前宿主机的挂载目录会被同步删除
+                用途： 多容器数据共享
+                       缓存
+
+* 初始化容器
+  * 初始化容器是一个短时任务容器，不能像主容器一样运行长时任务 
+  * 初始化容器会先于主容器启动，运行完任务并正常退出之后，主容器才会开始启动
+  * 初始化容器和主容器一样，可以有多个，按顺序依次启动并执行任务，任务执行完成退出，然后启动下一个
+  * 初始化容器不能配置端口监听
+
+initContainers
+
+pod中：初始化容器A+主容器B
+       A负责去监听数据库是否可以连接，数据库就绪后退出；如果数据库不正常，那么一直等待
+       B等A正常退出后，再开始启动运行
+
+kubectl create -f- <<EOF
+apiVersion: v1
+kind: Pod
+metadata: 
+  name: testvolume
+spec:
+  volumes:
+  - name: datadir
+    hostPath:
+      path: /data/mysql
+      type: DirectoryOrCreate
+  - name: localtime
+    hostPath:
+      path: /etc/localtime
+      type: File
+  - name: sharedir
+    emptyDir: {}
+  - name: cachedir
+    emptyDir: 
+      medium: Memory
+      sizeLimit: 32Mi
+
+  containers:
+  - name: mysql
+    image: mysql:8.0
+    command:
+    - /bin/sh
+    - -c
+    - sleep 3000
+    volumeMounts:
+    - name: datadir
+      mountPath: /var/lib/mysql
+    - name: localtime
+      mountPath: /etc/localtime
+      readOnly: true
+    - name: sharedir
+      mountPath: /temp/sharedir
+    - name: cachedir
+      mountPath: /cache
+  - name: busybox
+    image: busybox:1.28
+    command:
+    - /bin/sh
+    - -c
+    - sleep 3000
+    volumeMounts:
+    - name: localtime
+      mountPath: /etc/localtime
+      readOnly: true
+    - name: sharedir
+      mountPath: /temp/xxx
+EOF
+
+
+root@k8s-master:~# kubectl get pods
+NAME         READY   STATUS    RESTARTS      AGE
+clientpod    1/1     Running   5 (38m ago)   16h
+testvolume   2/2     Running   2 (10m ago)   60m
+web-0        1/1     Running   0             15h
+web-1        1/1     Running   0             15h
+web-2        1/1     Running   0             15h
+
+
+root@k8s-master:~# kubectl exec -it testvolume -- /bin/sh
+Defaulted container "mysql" out of: mysql, busybox
+# df -h
+Filesystem                         Size  Used Avail Use% Mounted on
+overlay                             38G  7.9G   28G  22% /
+tmpfs                               64M     0   64M   0% /dev
+tmpfs                              2.0G     0  2.0G   0% /sys/fs/cgroup
+tmpfs                               32M     0   32M   0% /cache
+/dev/mapper/ubuntu--vg-ubuntu--lv   38G  7.9G   28G  22% /var/lib/mysql
+shm                                 64M     0   64M   0% /dev/shm
+tmpfs                              3.8G   12K  3.8G   1% /run/secrets/kubernetes.io/serviceaccount
+tmpfs                              2.0G     0  2.0G   0% /proc/acpi
+tmpfs                              2.0G     0  2.0G   0% /proc/scsi
+tmpfs                              2.0G     0  2.0G   0% /sys/firmware
+# exit
+root@k8s-master:~# kubectl exec -it testvolume -c busybox -- /bin/sh
+/ # df -h
+Filesystem                Size      Used Available Use% Mounted on
+overlay                  37.5G      7.9G     28.0G  22% /
+tmpfs                    64.0M         0     64.0M   0% /dev
+tmpfs                     1.9G         0      1.9G   0% /sys/fs/cgroup
+/dev/mapper/ubuntu--vg-ubuntu--lv
+                         37.5G      7.9G     28.0G  22% /etc/localtime
+/dev/mapper/ubuntu--vg-ubuntu--lv
+                         37.5G      7.9G     28.0G  22% /temp/xxx
+/dev/mapper/ubuntu--vg-ubuntu--lv
+                         37.5G      7.9G     28.0G  22% /etc/hosts
+/dev/mapper/ubuntu--vg-ubuntu--lv
+                         37.5G      7.9G     28.0G  22% /dev/termination-log
+/dev/mapper/ubuntu--vg-ubuntu--lv
+                         37.5G      7.9G     28.0G  22% /etc/hostname
+/dev/mapper/ubuntu--vg-ubuntu--lv
+                         37.5G      7.9G     28.0G  22% /etc/resolv.conf
+shm                      64.0M         0     64.0M   0% /dev/shm
+tmpfs                     3.7G     12.0K      3.7G   0% /var/run/secrets/kubernetes.io/serviceaccount
+tmpfs                     1.9G         0      1.9G   0% /proc/acpi
+tmpfs                    64.0M         0     64.0M   0% /proc/kcore
+tmpfs                    64.0M         0     64.0M   0% /proc/keys
+tmpfs                    64.0M         0     64.0M   0% /proc/timer_list
+tmpfs                    64.0M         0     64.0M   0% /proc/sched_debug
+tmpfs                     1.9G         0      1.9G   0% /proc/scsi
+tmpfs                     1.9G         0      1.9G   0% /sys/firmware
+/ # 
+       
+
+* 配置pod的资源限制  
+
+cpu利用率
+
+   运行  有任务一直在执行
+   空闲  空跑
+
+   cpu运行时间： 从开机到当前的时刻 ： 1m
+      任务跑了 30s
+   那么利用率: 30s/1m=50%
+
+    1核 1s 500ms  50%
+    10核  1核 2000ms 1000ms
+    9核
+    
+    宿主机有空闲cpu时： 会为其分配超过限制的cpu时间片，但同时会去做cpu限流
+    宿主机无空闲cpu时： 响应变慢    
+
+
+
+resources:
+  requests:
+    cpu: "0.1" | 100m
+    memory: 512Mi
+  limits:
+    cpu: "0.2"
+    memory: 1Gi
+    
+limits:   pod的最高资源限制
+          如果只配置limits，则requests等于limits
+         
+
+requests: 当创建一个pod的时候，调度器将一个pod运行在一个节点上时，要求的pod的最低运行资源
+          调度器认为的空闲资源
+          如果requests设置不合理，将会导致大量的资源浪费
+          如果只配置requests，则limits无限制
+
+1核2G
+
+3个pod
+requests:
+  cpu: "0.3"
+  memory: 512Mi
+  
+实际使用：
+  0.1c 100Mi
+
+  共消耗0.3c，300Mi
+
+  但是调度器认为消耗了0.3*3=0.9c, 512Mi*3=1.5Gi
+
+  此时再有个pod: 0.1c,300Mi 不再调度到该节点  
+    
+
+    
+pod的资源的服务等级(QoS Class)    
+* BestEffort: 没有设置任何resource参数，尽力而为的服务，在资源充足的情况下，无论申请多少资源都可以
+* Burstable: 设置了requests/limits，但是request和limits不相等
+* Guaranted : 设置了requests及limits，而且request和limits相等，拥有对资源的最高优先级
+     如果pod里有多个容器，那么每个容器都必须设置requests和limits,而且必须相等
+
+
+    
+    
+* 配置pod的健康检查
+
+三种健康检查的机制：
+  * http探活：针对http类型的服务，请求http地址，检查返回的状态码(200< <400)
+  * tcp探活：对tcp端口，通过类telnet的方式，检查端口是否能正常连接
+  * exec探活：通过命令的方式检测服务状态
+  
+  探活周期：
+  * 启动探活：pod启动阶段，执行探活：它预期的结果是失败。如果返回成功，则探活结束，探针退出；启动周期完成
+    *   startupProbe:
+  * 生命周期探活：在启动探活结束之后才会启动，在整个pod的生命周期当中一直执行周期性的探活
+    *   livenessProbe: 如果检测失败，则杀掉pod，让pod重启
+                       10s一次，连续3次，30s后 killed
+    *   readinessProbe: 如果探活失败，则将pod标识为未就绪         mypod 0/1  Running
+                       2s一次，3次后，6s 0/1
+                       2s后 1/1
+
+startupProbe:
+  exec:
+    command:
+    - cat
+    - /tmp/healty    
+  initiaDelaySeconds: 20s
+  periodSeconds: 10
+  timeoutSeconds: 1
+  successThrehold: 1
+  failureThreshold: 18
+  terminationGracePeriodSeconds: 10        
+  
+livenessProbe:
+  tcpSocket:
+    port: 80
+  initiaDelaySeconds: 20s
+  periodSeconds: 10
+  timeoutSeconds: 1
+  successThrehold: 1
+  failureThreshold: 3
+  terminationGracePeriodSeconds: 10
+
+readinessProbe:
+  httpGet:
+    schema: http
+    path: "/"
+    port: 80
+    httpHeaders:
+    - name: Host
+      value: www.example.com
+  initiaDelaySeconds: 20s
+  periodSeconds: 2
+  timeoutSeconds: 1
+  successThrehold: 1
+  failureThreshold: 3
+  terminationGracePeriodSeconds: 10
+     
+curl -H "Host: www.example.com" http://192.168.1.100:80"
+
+  
+kubectl create -f- <<EOF
+apiVersion: v1
+kind: Pod
+metadata: 
+  name: testvolume-probe
+spec:
+  volumes:
+  - name: datadir
+    hostPath:
+      path: /data/mysql
+      type: DirectoryOrCreate
+  - name: localtime
+    hostPath:
+      path: /etc/localtime
+      type: File
+  - name: sharedir
+    emptyDir: {}
+  - name: cachedir
+    emptyDir: 
+      medium: Memory
+      sizeLimit: 32Mi
+  terminationGracePeriodSeconds: 10
+  containers:
+  - name: nginx
+    image: nginx:1.23
+    volumeMounts:
+    - name: datadir
+      mountPath: /var/lib/mysql
+    - name: localtime
+      mountPath: /etc/localtime
+      readOnly: true
+    - name: sharedir
+      mountPath: /temp/sharedir
+    - name: cachedir
+      mountPath: /cache
+    startupProbe:
+      tcpSocket:
+        port: 80    
+      initialDelaySeconds: 20
+      periodSeconds: 10
+      timeoutSeconds: 1
+      successThreshold: 1
+      failureThreshold: 18
+    livenessProbe:
+      tcpSocket:
+        port: 80
+      initialDelaySeconds: 20
+      periodSeconds: 10
+      timeoutSeconds: 1
+      successThreshold: 1
+      failureThreshold: 3
+    readinessProbe:
+      httpGet:
+        scheme: HTTP
+        path: "/"
+        port: 80
+        httpHeaders:
+        - name: Host
+          value: www.baidu.com
+      initialDelaySeconds: 20
+      periodSeconds: 2
+      timeoutSeconds: 1
+      successThreshold: 1
+      failureThreshold: 3
+  - name: busybox
+    image: busybox:1.28
+    command:
+    - /bin/sh
+    - -c
+    - sleep 3000
+    volumeMounts:
+    - name: localtime
+      mountPath: /etc/localtime
+      readOnly: true
+    - name: sharedir
+      mountPath: /temp/xxx
+EOF                       
+                       
+Pod状态：
+   * Running
+   * Pending
+   * Error
+   * PodInitializing
+   * Init:0/1
+   * ErrImagePull
+   * Completed
+
+     
+
+
+---#gvk
+
+apiVersion: v1
+kind: Pod
+
+#元数据
+
+metadata:
+  name: myfirstpod
+  namespace: default
+  labels:
+    name: myfirstpod
+    app: webserver
+  annotations:
+    name: myfirstpod  
+          
+#描述
+
+spec:
+  restartPolicy:
+  containers:
+  - name:
+    image:
+    imagePullPolicy:
+    
+
+
+---
+
+kubectl run myfirstpod --image=httpd:2.4
+
+# kubectl run myfirstpod --image=httpd:2.4
+pod/myfirstpod created
+
+# kubectl get pods
+NAME         READY   STATUS    RESTARTS   AGE
+myfirstpod   1/1     Running   0          77s
+
+# kubectl describe pod myfirstpod 
+Name:             myfirstpod
+Namespace:        default
+Priority:         0
+Service Account:  default
+Node:             k8s-docker2/192.168.1.236
+Start Time:       Sun, 09 Apr 2023 07:25:24 +0000
+Labels:           run=myfirstpod
+Annotations:      cni.projectcalico.org/containerID: d330f07485b453e48484e7aa01c582a564841590abc2b21940ea89ab30ab52c5
+                  cni.projectcalico.org/podIP: 172.16.94.65/32
+                  cni.projectcalico.org/podIPs: 172.16.94.65/32
+Status:           Running
+IP:               172.16.94.65
+IPs:
+  IP:  172.16.94.65
+Containers:
+  myfirstpod:
+    Container ID:   containerd://d57d3f418e461bc898fa7613d89c3ec203788af31c52a5631b86ed8b80c2dd79
+    Image:          httpd:2.4
+    Image ID:       docker.io/library/httpd@sha256:4055b18d92fd006f74d4a2aac172a371dc9a750eaa78000756dee55a9beb4625
+    Port:           <none>
+    Host Port:      <none>
+    State:          Running
+      Started:      Sun, 09 Apr 2023 07:25:42 +0000
+    Ready:          True
+    Restart Count:  0
+    Environment:    <none>
+    Mounts:
+      /var/run/secrets/kubernetes.io/serviceaccount from kube-api-access-sxxmh (ro)
+Conditions:
+  Type              Status
+  Initialized       True 
+  Ready             True 
+  ContainersReady   True 
+  PodScheduled      True 
+Volumes:
+  kube-api-access-sxxmh:
+    Type:                    Projected (a volume that contains injected data from multiple sources)
+    TokenExpirationSeconds:  3607
+    ConfigMapName:           kube-root-ca.crt
+    ConfigMapOptional:       <nil>
+    DownwardAPI:             true
+QoS Class:                   BestEffort
+Node-Selectors:              <none>
+Tolerations:                 node.kubernetes.io/not-ready:NoExecute op=Exists for 300s
+                             node.kubernetes.io/unreachable:NoExecute op=Exists for 300s
+Events:
+  Type    Reason     Age    From               Message
+  ----    ------     ----   ----               -------
+  Normal  Scheduled  2m16s  default-scheduler  Successfully assigned default/myfirstpod to k8s-docker2
+  Normal  Pulling    2m16s  kubelet            Pulling image "httpd:2.4"
+  Normal  Pulled     119s   kubelet            Successfully pulled image "httpd:2.4" in 16.745474155s (16.745484385s including waiting)
+  Normal  Created    119s   kubelet            Created container myfirstpod
+  Normal  Started    119s   kubelet            Started container myfirstpod
+
+
+
+=================
+课程回顾：
+
+容器
+* 容器的基本原理与架构
+* 容器与虚拟机的区别
+     * 性能更好
+     * 镜像更小，占用磁盘空间更少
+     * 省掉了系统启动时间，比虚拟机启动快
+     * 进程级隔离，隔离性不如虚拟机
+     
+* docker
+    * 容器运行时containerd
+    * 存储管理 docker-volume
+    * 网络管理 docker-network
+    * docker-api
+
+* docker部署
+    * 安装依赖包
+    * 配置odcker的apt仓库
+    * apt/yum install -y docker-ce
+
+    mkdir -p /etc/docker
+    /etc/docker/daemon.json
+    http仓库或者https非授信的仓库
+    
+    {
+       "data-root": "/var/lib/docker",
+       "insecure-registries":  ["http://hub01.example.com","https://hub02.example.com"],
+       "registry-mirrors": ["https://7bezldxe.mirror.aliyuncs.com"],
+       "live-restore": true,
+       ...
+    }    
+    systemctl restart docker
+    docker pull hub01.example.com/test/mysql:5.7
+    docker pull hub02.example.com/test/mysql:5.7
+    
+    登陆过仓库的账户密码：
+    ~/.docker/config.json
+    
+    docker login registry.cn-zhangjiakou.aliyuncs.com
+    dcoker login tecent
+    https://registry.aliyuncs.com/
+    
+    echo -n "user1:passwd1" |base64
+    echo "user1:passwd1" |base64 -w 0
+    
+* docker的基本操作
+    * 容器的管理
+         * 创建容器
+             docker run
+                 * -i  交互式运行容器
+                 * -t  为容器分配一个tty
+                 * -d  将容器放入后台
+                 * --name  为容器指定一个名字
+                 * -e    为容器传入环境变量
+                 * --restart  是否自动重启
+                 * 指定镜像
+                 * 指定容器的运行任务
+            * 网络管理
+                 * -p  指定映射端口
+                 * -P  随机映射端口
+                 * --link  创建hosts绑定
+                 * --dns   指定dns
+                 * --net   指定网络类型
+                     * bridge
+                     * host
+                     * none
+                     * 自定义
+
+            * 存储管理        
+                 * -v    创建容器时指定挂载目录(卷)或文件        
+         * 删除容器
+            docker rm
+                * -f
+         * 停止容器
+            docker kill 非正常停止
+            docker stop
+         * 暂停容器
+            docker pause
+         * 重启容器
+            docker restart
+         * 启动容器
+            docker start
+         * 从暂停中恢复
+            docker unpause
+         * 查看容器日志
+            docker logs
+         * 查看容器状态
+            docker ps
+                * -a
+                * -q
+         * 进入容器
+            docker exec
+                * -i
+                * -t
+         * 查看容器详情
+            docker  inspect
+    * 镜像的管理
+         * 镜像的命名规范
+             * [http://|https://]|[registry/][namespace/]<imagename>[:tag]
+             busybox:
+               * https://docker.io/library/busybox:1.28
+               * http://hub.example.com/test/mysql:5.7
+               
+             docker pull hub.example.com/test/mysql:5.7
+         * 镜像的基本操作
+             * 拉取镜像
+                 docker pull
+             * 查看镜像
+                 docker image list
+                 docker image inspect <imageRepository>
+             * 删除镜像
+                 docker rmi
+                     * -f
+             * 为镜像打tag
+                 docker tag <srcImage> <dstImage>
+             * 推送镜像
+                 docker push
+         * 生成镜像
+             * docker commit
+             * Dockerfile
+    * 容器编排
+        * docker-compose
+    * 容器部署实战
+        * wordpress
+        
+        
+        
+kubernetes
+    * 所提供的能力
+    * 构架原理
+    * 组件
+      * control plan
+       * etcd
+       * kube-apiserver
+       * kube-controller-manager
+       * kube-scheduler
+      * worker
+          * kubelet
+          * kube-proxy
+          * containerd
+          * calico
+    *kubernetes的部署
+       * kubeadm
+       * 部署完成后的基本检查
+          * 查看所有组件的运行状态
+               * kubectl get pods -n kube-system
+          * 查看节点状态
+               * kubectl get nodes
+          * 查看控制面组件状态
+               * kubectl get cs
+     * Kubernetes的哲学： 一切皆对象
+        *
+     * kubernetes命令行工具的使用
+        * kubectl
+          * 增
+            * 
+          * 删
+          * 改
+          * 查
+          * 列出
+          * 进入容器
+            * exec
+              * -i
+              * -t
+          * 查看容器日志
+            * logs
+          * 打标签
+          * 加注释
+
+        参数:
+          * -A        
+          * -n namespace
+          * --show-labels          
+          * -l key=value[,key=value]          
+          *    -o wide      
+          * -o yaml
+          * 
+          
+        资源对象
+          * namespaces:
+              * default
+              * kube-system              
+          * nodes
+          * pods        
+              kubectl run myfirstpod --image=busybox:1.28 --dry-run=client -o yaml
+            
+          * 全局资源对象          
+          *    namespaced=true的资源对象  
+          
+kubernetes的资源对象的描述语法
+kubectl api-resources
+
+#gvk
+
+apiVersion: v1
+kind: Pod
+
+#元数据
+
+metadata:
+  name: myfirstpod
+  namespace: default
+  labels:
+    name: myfirstpod
+    app: webserver
+  annotations:
+    name: myfirstpod  
+          
+#描述
+
+spec:
+  restartPolicy:
+  containers:
+  - name:
+    image:
+    imagePullPolicy:
+    
+          
+=====================
+kubernetes的高级资源对象
+
+kube-controller-manager: 集群控制器管理器
+     一推控制器的管理单元，管理着一堆的控制器
+     
+     * Deployment控制器
+     * StatefulSet控制器
+
+
+管理pod
+  * Deployment
+      * 支持创建pod的多副本
+      * 支持pod的升级策略
+      * 支持pod的修改
+    
+    replicas: 1
+
+apiVersion: apps/v1
+kind: Deployment
+metadata: 
+  name: websever
+  namespace: default
+  labels:
+    name: webserver
+  annotations:
+    name: webserver
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      name: webserver
+      type: backend
+  template:
+    metadata:
+      labels:
+        name: webserver
+        type: backend
+    spec:    
+      volumes:
+      - name: datadir
+        hostPath:
+          path: /data/mysql
+          type: DirectoryOrCreate
+      - name: localtime
+        hostPath:
+          path: /etc/localtime
+          type: File
+      - name: sharedir
+        emptyDir: {}
+      - name: cachedir
+        emptyDir: 
+          medium: Memory
+          sizeLimit: 32Mi
+      terminationGracePeriodSeconds: 10
+      containers:
+      - name: nginx
+        image: nginx:1.23
+        volumeMounts:
+        - name: datadir
+          mountPath: /var/lib/mysql
+        - name: localtime
+          mountPath: /etc/localtime
+          readOnly: true
+        - name: sharedir
+          mountPath: /temp/sharedir
+        - name: cachedir
+          mountPath: /cache
+        startupProbe:
+          tcpSocket:
+            port: 80    
+          initialDelaySeconds: 20
+          periodSeconds: 10
+          timeoutSeconds: 1
+          successThreshold: 1
+          failureThreshold: 18
+        livenessProbe:
+          tcpSocket:
+            port: 80
+          initialDelaySeconds: 20
+          periodSeconds: 10
+          timeoutSeconds: 1
+          successThreshold: 1
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            scheme: HTTP
+            path: "/"
+            port: 80
+            httpHeaders:
+            - name: Host
+              value: www.baidu.com
+          initialDelaySeconds: 20
+          periodSeconds: 2
+          timeoutSeconds: 1
+          successThreshold: 1
+          failureThreshold: 3
+      - name: busybox
+        image: busybox:1.28
+        command:
+        - /bin/sh
+        - -c
+        - sleep 3000
+        volumeMounts:
+        - name: localtime
+          mountPath: /etc/localtime
+          readOnly: true
+        - name: sharedir
+          mountPath: /temp/xxx
+ 
+ 
+ 
+ 
+ 
+# kubectl create deployment webserver --image=nginx:1.23 --dry-run=client -o yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  creationTimestamp: null
+  labels:
+    app: webserver
+  name: webserver
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: webserver
+  strategy: {}
+  template:
+    metadata:
+      creationTimestamp: null
+      labels:
+        app: webserver
+    spec:
+      containers:
+      - image: nginx:1.23
+        name: nginx
+        resources: {}
+status: {} 
+ 
+ 
+deployment的升级
+
+ strategy:
+  
+  type: 
+    * Recreate 重建
+    * RollingUpdate 滚动升级/更新
+    
+ 滚动更新：
+   maxSurge: 先建后删
+   * 先创建几个，再删除几个，依次滚动
+    
+     10 +3 =13 -3=10 +3=13 -3=10 +3=13 -3=10 +1=11  -1=10
+     
+     
+   maxUnavailable: 先删后建     
+   * 先删除几个，再创建几个，依次滚动
+   
+     10 -3=7 +3=10 -3=7 +3=10 -3=7 +3=10  -1=9 +1=10
+ 
+strategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxSurge: 3
+    maxUnavailable: 3    
+ 
+默认值：
+strategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxSurge: 25%
+    maxUnavailable: 25%    
+ 
+强制先建后删
+strategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxSurge: 3
+    maxUnavailable: 0
+
+强制先删后建
+strategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxSurge: 0
+    maxUnavailable: 3    
+  
+
+    
+  * statefulSet
+  
+      * shortname: sts
+      * kind: StatefulSet
+      * namespaced: true
+      * gv: apps/v1
+      
+    * 无法通过kubectl create sts 创建
+    * sts主要用于有状态服务的场景：这类服务通常需要有固定的ID，严格的启动顺序
+    * sts通过pod名称的有序标号给每一个pod一个唯一标识：并总是依次顺序启动pod
+    
+    比如：mysql主、从库
+    
+    默认更新时，标号最大的先删除再建，然后挨着顺序执行(OrderdReady)，可以开启并行
+    
+apiVersion: apps/v1
+kind: Deployment
+metadata: 
+  name: websever-sts
+  namespace: default
+  labels:
+    name: webserver-sts
+  annotations:
+    name: webserver-sts
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      name: webserver-sts
+      type: backend
+  serviceName: webserver
+  template:
+    metadata:
+      labels:
+        name: webserver-sts
+        type: backend
+    spec:    
+      volumes:
+      - name: datadir
+        hostPath:
+          path: /data/mysql
+          type: DirectoryOrCreate
+      - name: localtime
+        hostPath:
+          path: /etc/localtime
+          type: File
+      - name: sharedir
+        emptyDir: {}
+      - name: cachedir
+        emptyDir: 
+          medium: Memory
+          sizeLimit: 32Mi
+      terminationGracePeriodSeconds: 10
+      containers:
+      - name: nginx
+        image: nginx:1.23
+        volumeMounts:
+        - name: datadir
+          mountPath: /var/lib/mysql
+        - name: localtime
+          mountPath: /etc/localtime
+          readOnly: true
+        - name: sharedir
+          mountPath: /temp/sharedir
+        - name: cachedir
+          mountPath: /cache
+        startupProbe:
+          tcpSocket:
+            port: 80    
+          initialDelaySeconds: 20
+          periodSeconds: 10
+          timeoutSeconds: 1
+          successThreshold: 1
+          failureThreshold: 18
+        livenessProbe:
+          tcpSocket:
+            port: 80
+          initialDelaySeconds: 20
+          periodSeconds: 10
+          timeoutSeconds: 1
+          successThreshold: 1
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            scheme: HTTP
+            path: "/"
+            port: 80
+            httpHeaders:
+            - name: Host
+              value: www.baidu.com
+          initialDelaySeconds: 20
+          periodSeconds: 2
+          timeoutSeconds: 1
+          successThreshold: 1
+          failureThreshold: 3
+      - name: busybox
+        image: busybox:1.28
+        command:
+        - /bin/sh
+        - -c
+        - sleep 3000
+        volumeMounts:
+        - name: localtime
+          mountPath: /etc/localtime
+          readOnly: true
+        - name: sharedir
+          mountPath: /temp/xxx    
+  
+  
+  
+  
+  
+  
+  
+  * daemonSet
+    * shortname: ds
+	* kind: DaemonSet
+	* namespaced: true
+	* gvk: apps/v1
+	
+	* 不需要指定副本数，它总是确保每个节点上总是运行指定pod的一个副本，且只会运行一个
+	* 不仅再现有节点上运行，当有新节点添加时，其也总会在新节点上自动运行一个
+	* 无法通过kubectl create sts 创建
+	* agent类型的场景
+	   * node-exporter
+	   * zabbit-agent
+	   * kube-proxy
+	   * calico
+	   
+apiVersion: apps/v1
+kind: DaemonSet
+metadata: 
+  name: websever-ds
+  namespace: default
+  labels:
+    name: webserver-ds
+  annotations:
+    name: webserver-ds
+spec:
+  selector:
+    matchLabels:
+      name: webserver-ds
+      type: backend
+  template:
+    metadata:
+      labels:
+        name: webserver-ds
+        type: backend
+    spec:    
+      volumes:
+      - name: datadir
+        hostPath:
+          path: /data/mysql
+          type: DirectoryOrCreate
+      - name: localtime
+        hostPath:
+          path: /etc/localtime
+          type: File
+      - name: sharedir
+        emptyDir: {}
+      - name: cachedir
+        emptyDir: 
+          medium: Memory
+          sizeLimit: 32Mi
+      terminationGracePeriodSeconds: 10
+      containers:
+      - name: nginx
+        image: nginx:1.23
+        volumeMounts:
+        - name: datadir
+          mountPath: /var/lib/mysql
+        - name: localtime
+          mountPath: /etc/localtime
+          readOnly: true
+        - name: sharedir
+          mountPath: /temp/sharedir
+        - name: cachedir
+          mountPath: /cache
+        startupProbe:
+          tcpSocket:
+            port: 80    
+          initialDelaySeconds: 20
+          periodSeconds: 10
+          timeoutSeconds: 1
+          successThreshold: 1
+          failureThreshold: 18
+        livenessProbe:
+          tcpSocket:
+            port: 80
+          initialDelaySeconds: 20
+          periodSeconds: 10
+          timeoutSeconds: 1
+          successThreshold: 1
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            scheme: HTTP
+            path: "/"
+            port: 80
+            httpHeaders:
+            - name: Host
+              value: www.baidu.com
+          initialDelaySeconds: 20
+          periodSeconds: 2
+          timeoutSeconds: 1
+          successThreshold: 1
+          failureThreshold: 3
+      - name: busybox
+        image: busybox:1.28
+        command:
+        - /bin/sh
+        - -c
+        - sleep 3000
+        volumeMounts:
+        - name: localtime
+          mountPath: /etc/localtime
+          readOnly: true
+        - name: sharedir
+          mountPath: /temp/xxx    
+  
+  
+  	   
+  
+    
+  
+  * Job
+  
+  * cronJob
+  
+  每台服务器定时删除日志
+  cronJob + DaemonSet
+  
+  巡洋舰OpenKruise
+
+kubernetes的调度系统
+kube-scheduler： 调度器是串行的
+
+* 预选
+   * 拿到所有节点的信息，排除掉不满足条件的节点
+      * 资源占用
+	  * pod总数
+	  * 端口占用
+
+* 优选
+
+   * 对满足条件的节点进行打分
+
+* 终选
+
+  * 对所有节点的打分进行排序，选择最优节点
+  
+干预调度是在预选阶段完成，干预调度的方式：
+ * 标签选择器
+    * 在创建pod时，指定这个pod必须运行在带有特定标签的节点上
+	* 当pod创建时指定多个nodeSelector的标签时，要运行该pod的node必须同时满足这些标签
+	* 可以与hostPath配合使用
+
+	  kubectl label node k8s-docker2 websever=xxx
+	  kubectl label node k8s-docker2 type=backend	  
+	  
+	  kubectl get nodes -l webserver=xx, type=backend
+	  
+	  
+nodeSelector:
+  webserver: xxx
+  type: backend
+	  
+	  
+ * 污点和容忍
+ 
+    * 节点除了打标签，还可以打污点；打标签的目的是为了让pod选择；打污点的目的是为了让pod不要选择
+	* 污点的级别
+	    * PreferNoSchedule: 尽可能的不要调度
+		* NoSchedule: 不要调度
+		* NoExecute: 非但不要调度，如果已经有运行的pod，还会立即被驱逐
+	* 如果一个节点有多个污点时，一个pod想要调度到这个节点上，必须容忍所有污点
+	
+	  kubectl taint node k8s-docker1 backend=webserver:NoSchedule
+	  kubectl taint node k8s-docker1 type=smoke:NoSchedule	  
+	  kubectl taint node k8s-docker1 xx=bb:NoSchedule
+	  
+	  
+    * 清理污点：
+	  
+	  kubectl taint node k8s-docker1 backend=webserver:NoSchedule-
+	
+	  kubectl taint node k8s-docker1 backend-
+	  
+	* 查看污点
+	
+	  kubectl describe node k8s-docker1
+	
+	* 修改污点---污点级别不能修改，只能修改键值对的值
+	
+	  kubectl taint node k8s-docker1 xx=cc:NoSchedule  --overwrite
+
+	  
+	* 当污点和标签选择器同时存在时，拒绝优先
+	
+	
+	
+容忍：
+
+    容忍污点仅仅代表当前节点跟其他节点一样获得了正常调度的机会，而不代表一定会调度到该节点
+
+kubectl taint node k8s-docker1 backend=webserver:NoSchedule
+kubectl taint node k8s-docker1 backend=webserver:NoExecute
+
+tolerations:
+- key:  backend
+  operator: Equal
+  value: webserver
+  effect: NoSchedule
+  
+tolerations:
+- key: backend
+  operator: Exists
+  effect: NoExecute
+
+---
+tolerations:
+- operator: Exists
+  effect: NoExecute
+
+tolerations:
+- operator: Exists
+  effect: NoSchedule
+
+tolerations:
+- operator: Exists
+  effect: PreferNoSchedule
+
+ ---
+tolerations:
+- operator: Exists  
+  
+  
+k8s-master自动打了污点：
+kubectl describe nodes k8s-master |grep Taints
+
+Taints:             node-role.kubernetes.io/control-plane:NoSchedule
+ 
+ * 节点亲和性
+ 
+ - key: aa
+   operator: In # Equal  Exists In NotIn
+   values:
+   - bb
+   - cc
+
+
+     Possible enum values:
+     - `"DoesNotExist"`
+     - `"Exists"`
+     - `"Gt"`
+     - `"In"`
+     - `"Lt"`
+     - `"NotIn"`
+
+
+   
+ * pod亲和性和反亲和性
+ 
+    * A pod 想要跟运行到跟B pod相同的节点
+    * A pod 不想要跟运行到跟B pod相同的节点 
+	
+    * A pod 不想运行在这样一个节点上：这个节点上运行这个一个带有app=webserver的pod
+	  A pod的标签就是app=webserver
+	  
+	  
+
+    专机专用：
+	  1. 为节点打污点
+	  2. 为节点打标签
+	  3. pod容忍该污点
+	  4. pod指定必须运行在带有该标签的节点
+
+
+kubernetes的网络服务
+
+--------------------------------
+calico:
+
+root@k8s-master:~# route -n
+Kernel IP routing table
+Destination     Gateway         Genmask         Flags Metric Ref    Use Iface
+0.0.0.0         192.168.1.1     0.0.0.0         UG    0      0        0 ens160
+172.16.77.192   192.168.1.235   255.255.255.192 UG    0      0        0 tunl0
+172.16.94.64    192.168.1.236   255.255.255.192 UG    0      0        0 tunl0
+172.16.235.192  0.0.0.0         255.255.255.192 U     0      0        0 *
+192.168.1.0     0.0.0.0         255.255.255.0   U     0      0        0 ens160
+root@k8s-master:~# ip route
+default via 192.168.1.1 dev ens160 proto static 
+172.16.77.192/26 via 192.168.1.235 dev tunl0 proto bird onlink 
+172.16.94.64/26 via 192.168.1.236 dev tunl0 proto bird onlink 
+blackhole 172.16.235.192/26 proto bird 
+192.168.1.0/24 dev ens160 proto kernel scope link src 192.168.1.234 
+root@k8s-master:~# ip a
+1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN group default qlen 1000
+    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
+    inet 127.0.0.1/8 scope host lo
+       valid_lft forever preferred_lft forever
+    inet6 ::1/128 scope host 
+       valid_lft forever preferred_lft forever
+2: ens160: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc mq state UP group default qlen 1000
+    link/ether 00:0c:29:e3:b8:10 brd ff:ff:ff:ff:ff:ff
+    inet 192.168.1.234/24 brd 192.168.1.255 scope global ens160
+       valid_lft forever preferred_lft forever
+    inet6 fe80::20c:29ff:fee3:b810/64 scope link 
+       valid_lft forever preferred_lft forever
+3: tunl0@NONE: <NOARP,UP,LOWER_UP> mtu 1480 qdisc noqueue state UNKNOWN group default qlen 1000
+    link/ipip 0.0.0.0 brd 0.0.0.0
+    inet 172.16.235.192/32 scope global tunl0
+       valid_lft forever preferred_lft forever
+root@k8s-master:~# 
+
+
+
+root@k8s-docker1:~# ip a
+1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN group default qlen 1000
+    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
+    inet 127.0.0.1/8 scope host lo
+       valid_lft forever preferred_lft forever
+    inet6 ::1/128 scope host 
+       valid_lft forever preferred_lft forever
+2: ens160: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc mq state UP group default qlen 1000
+    link/ether 00:0c:29:e1:b5:6c brd ff:ff:ff:ff:ff:ff
+    inet 192.168.1.235/24 brd 192.168.1.255 scope global ens160
+       valid_lft forever preferred_lft forever
+    inet6 fe80::20c:29ff:fee1:b56c/64 scope link 
+       valid_lft forever preferred_lft forever
+3: tunl0@NONE: <NOARP,UP,LOWER_UP> mtu 1480 qdisc noqueue state UNKNOWN group default qlen 1000
+    link/ipip 0.0.0.0 brd 0.0.0.0
+    inet 172.16.77.192/32 scope global tunl0
+       valid_lft forever preferred_lft forever
+6: cali7feb89b1f75@if4: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1480 qdisc noqueue state UP group default 
+    link/ether ee:ee:ee:ee:ee:ee brd ff:ff:ff:ff:ff:ff link-netns cni-f0dab68a-5411-73a0-56b3-166c98197f0c
+    inet6 fe80::ecee:eeff:feee:eeee/64 scope link 
+       valid_lft forever preferred_lft forever
+7: cali343a64ade0d@if4: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1480 qdisc noqueue state UP group default 
+    link/ether ee:ee:ee:ee:ee:ee brd ff:ff:ff:ff:ff:ff link-netns cni-4408ea96-0b38-fce8-c4dc-f65de720fca6
+    inet6 fe80::ecee:eeff:feee:eeee/64 scope link 
+       valid_lft forever preferred_lft forever
+10: cali84f7141cce8@if4: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1480 qdisc noqueue state UP group default 
+    link/ether ee:ee:ee:ee:ee:ee brd ff:ff:ff:ff:ff:ff link-netns cni-46d1f729-4c02-26c5-8e7a-e5359b81694a
+    inet6 fe80::ecee:eeff:feee:eeee/64 scope link 
+       valid_lft forever preferred_lft forever
+11: cali9ed5860011a@if4: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1480 qdisc noqueue state UP group default 
+    link/ether ee:ee:ee:ee:ee:ee brd ff:ff:ff:ff:ff:ff link-netns cni-944af761-91f7-833e-0907-70b0c305fdc7
+    inet6 fe80::ecee:eeff:feee:eeee/64 scope link 
+       valid_lft forever preferred_lft forever
+12: cali8ad6bb91276@if4: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1480 qdisc noqueue state UP group default 
+    link/ether ee:ee:ee:ee:ee:ee brd ff:ff:ff:ff:ff:ff link-netns cni-541651ad-f1a4-7c7b-5f54-05fe1aef71d5
+    inet6 fe80::ecee:eeff:feee:eeee/64 scope link 
+       valid_lft forever preferred_lft forever
+13: cali95ec18d50dd@if4: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1480 qdisc noqueue state UP group default 
+    link/ether ee:ee:ee:ee:ee:ee brd ff:ff:ff:ff:ff:ff link-netns cni-2cdd3903-fd3c-fb98-53eb-a447e1e11026
+    inet6 fe80::ecee:eeff:feee:eeee/64 scope link 
+       valid_lft forever preferred_lft forever
+14: cali21b21593151@if4: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1480 qdisc noqueue state UP group default 
+    link/ether ee:ee:ee:ee:ee:ee brd ff:ff:ff:ff:ff:ff link-netns cni-20a067ea-d8af-d5c5-18c7-4bd625cfca48
+    inet6 fe80::ecee:eeff:feee:eeee/64 scope link 
+       valid_lft forever preferred_lft forever
+root@k8s-docker1:~# ip route
+default via 192.168.1.1 dev ens160 proto static 
+blackhole 172.16.77.192/26 proto bird 
+172.16.77.193 dev cali7feb89b1f75 scope link 
+172.16.77.194 dev cali343a64ade0d scope link 
+172.16.77.197 dev cali84f7141cce8 scope link 
+172.16.77.198 dev cali9ed5860011a scope link 
+172.16.77.199 dev cali8ad6bb91276 scope link 
+172.16.77.200 dev cali95ec18d50dd scope link 
+172.16.77.201 dev cali21b21593151 scope link 
+172.16.94.64/26 via 192.168.1.236 dev tunl0 proto bird onlink 
+172.16.235.192/26 via 192.168.1.234 dev tunl0 proto bird onlink 
+192.168.1.0/24 dev ens160 proto kernel scope link src 192.168.1.235 
+root@k8s-docker1:~# route -n
+Kernel IP routing table
+Destination     Gateway         Genmask         Flags Metric Ref    Use Iface
+0.0.0.0         192.168.1.1     0.0.0.0         UG    0      0        0 ens160
+172.16.77.192   0.0.0.0         255.255.255.192 U     0      0        0 *
+172.16.77.193   0.0.0.0         255.255.255.255 UH    0      0        0 cali7feb89b1f75
+172.16.77.194   0.0.0.0         255.255.255.255 UH    0      0        0 cali343a64ade0d
+172.16.77.197   0.0.0.0         255.255.255.255 UH    0      0        0 cali84f7141cce8
+172.16.77.198   0.0.0.0         255.255.255.255 UH    0      0        0 cali9ed5860011a
+172.16.77.199   0.0.0.0         255.255.255.255 UH    0      0        0 cali8ad6bb91276
+172.16.77.200   0.0.0.0         255.255.255.255 UH    0      0        0 cali95ec18d50dd
+172.16.77.201   0.0.0.0         255.255.255.255 UH    0      0        0 cali21b21593151
+172.16.94.64    192.168.1.236   255.255.255.192 UG    0      0        0 tunl0
+172.16.235.192  192.168.1.234   255.255.255.192 UG    0      0        0 tunl0
+192.168.1.0     0.0.0.0         255.255.255.0   U     0      0        0 ens160
+
+
+root@k8s-docker2:~# route -n
+Kernel IP routing table
+Destination     Gateway         Genmask         Flags Metric Ref    Use Iface
+0.0.0.0         192.168.1.1     0.0.0.0         UG    0      0        0 ens160
+172.16.77.192   192.168.1.235   255.255.255.192 UG    0      0        0 tunl0
+172.16.94.64    0.0.0.0         255.255.255.192 U     0      0        0 *
+172.16.94.65    0.0.0.0         255.255.255.255 UH    0      0        0 cali762e5494152
+172.16.94.66    0.0.0.0         255.255.255.255 UH    0      0        0 calic819148fa1d
+172.16.94.71    0.0.0.0         255.255.255.255 UH    0      0        0 cali8080297d1ba
+172.16.94.73    0.0.0.0         255.255.255.255 UH    0      0        0 cali78fcc3aa31e
+172.16.94.75    0.0.0.0         255.255.255.255 UH    0      0        0 caliac207a0e13e
+172.16.94.76    0.0.0.0         255.255.255.255 UH    0      0        0 cali1c2e219217e
+172.16.94.77    0.0.0.0         255.255.255.255 UH    0      0        0 calib227be511d2
+172.16.94.84    0.0.0.0         255.255.255.255 UH    0      0        0 calic92ef9da0dc
+172.16.235.192  192.168.1.234   255.255.255.192 UG    0      0        0 tunl0
+192.168.1.0     0.0.0.0         255.255.255.0   U     0      0        0 ens160
+root@k8s-docker2:~# ip route
+default via 192.168.1.1 dev ens160 proto static 
+172.16.77.192/26 via 192.168.1.235 dev tunl0 proto bird onlink 
+blackhole 172.16.94.64/26 proto bird 
+172.16.94.65 dev cali762e5494152 scope link 
+172.16.94.66 dev calic819148fa1d scope link 
+172.16.94.71 dev cali8080297d1ba scope link 
+172.16.94.73 dev cali78fcc3aa31e scope link 
+172.16.94.75 dev caliac207a0e13e scope link 
+172.16.94.76 dev cali1c2e219217e scope link 
+172.16.94.77 dev calib227be511d2 scope link 
+172.16.94.84 dev calic92ef9da0dc scope link 
+172.16.235.192/26 via 192.168.1.234 dev tunl0 proto bird onlink 
+192.168.1.0/24 dev ens160 proto kernel scope link src 192.168.1.236 
+
+
+calicao 默认路由模式： fullmesh
+
+calico-kube-controllers---下发路由---> calico agent
+
+
+高级： 多节点时： reflect
+RR
+
+
+calico-kube-controllers---下发路由---->多台专用calico reflect ，充当软路由---> calico agent
+
+
+
+TOR模式：三层交换机
+
+tor
+-------------------------------------
+
+service
+
+* vip:80
+* 转发给谁
+* 转发类型
+    * ClusterIP         用于集群内部的应用之间的访问，serviceSubnet 10.96.0.0/12
+	* NodePort
+	* ExternalName
+	* LoadBanlance
+
+
+root@k8s-master:~# kubectl create service --help
+Create a service using a specified subcommand.
+
+Aliases:
+service, svc
+
+Available Commands:
+  clusterip      Create a ClusterIP service
+  externalname   Create an ExternalName service
+  loadbalancer   Create a LoadBalancer service
+  nodeport       Create a NodePort service
+
+Usage:
+  kubectl create service [flags] [options]
+
+Use "kubectl <command> --help" for more information about a given command.
+Use "kubectl options" for a list of global command-line options (applies to all commands).
+
+
+
+root@k8s-master:~# kubectl create service clusterip --help
+kubectl create service clusterip NAME [--tcp=<port>:<targetPort>] [--dry-run=server|client|none] [options]
+
+kubectl create service clusterip webserver --tcp=80:80 --dry-run=client -o yaml
+
+10.96.0.10:80---->pod:80
+
+root@k8s-master:~# kubectl create service clusterip webserver --tcp=80:80 --dry-run=client -o yaml
+apiVersion: v1
+kind: Service
+metadata:
+  creationTimestamp: null
+  labels:
+    app: webserver
+  name: webserver
+spec:
+  ports:
+  - name: 80-80
+    port: 80
+    protocol: TCP
+    targetPort: 80
+  selector:
+    app: webserver
+  type: ClusterIP
+status:
+  loadBalancer: {}
+root@k8s-master:~# 
+
+
+10.96.0.10:80---->pod:80
+10.96.0.10:8080---->pod:8080
+10.96.0.10:8081---->pod:80
+
+root@k8s-master:~# kubectl create service clusterip webserver --tcp=80:80 --tcp=8080:8080 --tcp=8081:80 --dry-run=client -o yaml
+apiVersion: v1
+kind: Service
+metadata:
+  creationTimestamp: null
+  labels:
+    app: webserver
+  name: webserver
+spec:
+  ports:
+  - name: 80-80
+    port: 80
+    protocol: TCP
+    targetPort: 80
+  - name: 8080-8080
+    port: 8080
+    protocol: TCP
+    targetPort: 8080
+  - name: 8081-80
+    port: 8081
+    protocol: TCP
+    targetPort: 80
+  selector:
+    app: webserver
+  type: ClusterIP
+status:
+  loadBalancer: {}
+
+  
+  
+
+---
+# webserver-svc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: webserver
+  name: webserver
+spec:
+  ports:
+  - name: 80-80
+    port: 80
+    protocol: TCP
+    targetPort: 80
+  - name: 8080-8080
+    port: 8080
+    protocol: TCP
+    targetPort: 8080
+  - name: 8081-80
+    port: 8081
+    protocol: TCP
+    targetPort: 80
+  selector:
+    name: webserver
+  type: ClusterIP
+
+
+
+
+---
+# webserver-svc-hp.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: webserver-01
+  name: webserver-01
+spec:
+  ClusterIP: None
+  ports:
+  - name: 80-80
+    port: 80
+    protocol: TCP
+    targetPort: 80
+  - name: 8080-8080
+    port: 8080
+    protocol: TCP
+    targetPort: 8080
+  - name: 8081-80
+    port: 8081
+    protocol: TCP
+    targetPort: 80
+  selector:
+    name: webserver
+  type: ClusterIP  
+  
+  
+  
+当clusterIP为None时，service被称之为headless service无头服务
+在k8s中，coredns会为每一个service生成一个域名，域名生成的规则：
+<servicename>.<namespace>.svc.<domain-suffix>
+
+#kubeadm.yaml
+networking:
+  dnsDomain: cluster.local
+  serviceSubnet: 10.96.0.0/12
+scheduler: {}
+
+
+kubernetes.default.svc.cluster.local
+
+webserver.default.svc.cluster.local
+
+
+
+sts servicename
+    mysql-hs
+
+pod0--->mysql-0
+pod1--->mysql-1	
+pod2--->mysql-2
+pod3--->mysql-3
+pod4--->mysql-4
+
+	
+有头 mysql.default.svc.cluster.local    10.96.10.100
+
+mysql-0  master
+mysql-1  slave
+mysql-2  slave
+mysql-3  slave
+mysql-4  slave
+
+
+app: mysql
+
+
+headless service: msql-hs
+
+写操作：只有mysql0:    mysql-0.mysql-hs.default.svc.cluster.local
+
+读操作：全体节点：     mysql.default.svc.cluster.local
+
+
+env:
+- name: POD_NAME
+  valueRef:
+    fieldRef:
+	  fieldPath: metadata.name
+- name: NAMESPACE_NAME
+  valueRef:
+    fieldRef:
+	  fieldPath: metadata.namespace	  
+
+
+外部转发：
+	* NodePort
+	* ExternalName
+	* LoadBanlance
+	
+	
+* NodePort
+
+  * nodePort端口范围是30000---32767
+
+---
+# webserver-svc-hp.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: webserver
+  name: webserver-np
+spec:
+  #ClusterIP: None
+  ports:
+  - name: 80-80
+    port: 80
+    protocol: TCP
+    targetPort: 80
+  - name: 8080-8080
+    port: 8080
+    protocol: TCP
+    targetPort: 8080
+  - name: 8081-80
+    port: 8081
+    protocol: TCP
+    targetPort: 80
+  selector:
+    name: webserver
+  type: NodePort 
+
+  
+  
+  lvs---->专机专用的打污点的工作节点，上面有kube-proxy--------->svc------->转发至pod
+  
+  
+* ExternalName
+
+service + ep-->外部mysql地址:3306
+
+
+* LoadBanlance
+	
+
+kube-router
+青云porter
+MetalLB
+
+
+
+kube-proxy是一个四层的负载均衡
+
+    四层转发指的是tcp/udp
+	七层转发指的是http
+
+nginx:
+
+location /webapi {
+  proxy_pass http://172.21.123.100/webapi
+}
+
+location /bbs {
+  proxy_pass http://172.21.123.100/bbs
+}	
+	
+	
+ingress-controller
+
+  * ingress-nginx
+  * router(openshift--haproxy)
+
+ingress-nginx-controller:
+  1. 修改镜像
+  2. 部署方式：
+     * 以daemonSet的方式在每个节点上部署一个
+	 * 专机专用
+	   * deployment replicas: 2
+	   * label: ingress-nginx=enabled
+	   * taint: ingress-nginx=enabled:NoSchedule
+	 * service nodePort LoadBalancer
+	   不创建service
+	      *hostNetwork: true
+
+ingress:
+  * shortname: ing
+  * namespaced: true
+  * gvk: networking.k8s.io/v1
+	   
+	
+如果要使用ingress，必须要先创建service
+ingress---->ep---->pod
+srevice ----> ep
+
+ingressClassName: nginx-2  #进行隔离，配置文件写入不同地方的nginx.conf
+	
+	   
+kubernetes的持久存储
+
+
+
+
+
+
+kubernetes的认证和授权
+
+ * 在执行kubectl的时候，并不是一定要在master上执行；事实上，我们可以在任意一台能够连接api-server的服务器上，装上kubectl，然后把config文件放到~/.kube/下即可
+ 
+ * 这个config文件就是kubernetes的认证文件，其里面包含的内容：
+    * 集群的连接地址
+	* 用于连接集群的认证信息
+
+root@k8s-master:~/.kube# cat ~/.kube/config 
+apiVersion: v1
+clusters:
+- cluster:
+    certificate-authority-data: LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSUMvakNDQWVhZ0F3SUJBZ0lCQURBTkJna3Foa2lHOXcwQkFRc0ZBREFWTVJNd0VRWURWUVFERXdwcmRXSmwKY201bGRHVnpNQjRYRFRJek1EUXdOekE1TVRJME5Wb1hEVE16TURRd05EQTVNVEkwTlZvd0ZURVRNQkVHQTFVRQpBeE1LYTNWaVpYSnVaWFJsY3pDQ0FTSXdEUVlKS29aSWh2Y05BUUVCQlFBRGdnRVBBRENDQVFvQ2dnRUJBTTdKCks5R1hHaSt1anNJNHZjbnRoYnBmd2xtcEg0K3lsbWtkSGt4OHpIUlZDS1U4RnBjSFlOSXMzeTZGK2N1TStrb1QKKyt3NnoyQUJrQ3ozZHZYVjBhaVZvTU1kajhQTjBVQVMrMGFTczZ4bW41cHVPa09iaTY5MVRzZmNDNS8rcFdQOQpJRHE2dmI4N2dSZEgyR2MzWjAvQS9RdE0wMysxZEFxK0FHc3BPYmUwb3B5cUNVT2t3V2QrdTl0STRXZ293NDBUCkEyUmFnUWNjLzc5aXJWSUEzWDFMNTZaZGwwdVpxbmJMeU9qc291d2VHT1gvV2FWb3RrZ2pQRHFaUUczT05vcUQKNXpvajZuYTJTRWxqcmVBT3c2OWRJYlppd0dFOEhuNUI2SjcvdVhlaW1XOUUzdEw0K2VoaE5SU2lVeFhzTUNpdgo5Z3M4QVFMaGVoTjZWNFJwQ2FzQ0F3RUFBYU5aTUZjd0RnWURWUjBQQVFIL0JBUURBZ0trTUE4R0ExVWRFd0VCCi93UUZNQU1CQWY4d0hRWURWUjBPQkJZRUZNZk9zZGQ1S29aaTJJcHB6UE4zQlJOaGo4aEpNQlVHQTFVZEVRUU8KTUF5Q0NtdDFZbVZ5Ym1WMFpYTXdEUVlKS29aSWh2Y05BUUVMQlFBRGdnRUJBRi9LUFhNeTJZUDRRYTJWL2srQwp4eFR1NVd4V2RTUzlTdkpwYkI0bXNRMkpKdmVzRU9xSHQvUEpQNUJ2SmhWdVZ6R25JaDdIRG54NEtwOUVLKytTCkVsWk5zeHhFa0kxNGVOMTNsZ3NOZWlqbHhhV2QydGg1a09xMWNOTDFZRVRodHhrRGd2dDl3TS82TWd1OTRnQ3cKN1hHY29lWVRDV1ptY3hBT0pjcUZDTnlCTnBIUEt5WHRwL2JlbEJEQndRUW94QlhGdDRTT2pxTWlsTEVqalZQcQpkbzN2QkZVNDhMaGk5SjBiQVE4YVFLeDVSUzN0MXV3LzVKTmlQeDhsY0JhbW9vUXREaVRsNTliNEhXYTB5aUJkCnh1b0tLSUxmS3NSQ0hYaUNDOXAwYmRVcW1MWnI3aUJxZ1EwaEVyelFac2V1UURNSTZMTEdPM1EzdGNYVHJiTDcKNGRJPQotLS0tLUVORCBDRVJUSUZJQ0FURS0tLS0tCg==
+    server: https://192.168.1.234:6443
+  name: kubernetes
+contexts:
+- context:
+    cluster: kubernetes
+    user: kubernetes-admin
+  name: kubernetes-admin@kubernetes
+current-context: kubernetes-admin@kubernetes
+kind: Config
+preferences: {}
+users:
+- name: kubernetes-admin
+  user:
+    client-certificate-data: LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSURJVENDQWdtZ0F3SUJBZ0lJYmRRcEZhYzFHRG93RFFZSktvWklodmNOQVFFTEJRQXdGVEVUTUJFR0ExVUUKQXhNS2EzVmlaWEp1WlhSbGN6QWVGdzB5TXpBME1EY3dPVEV5TkRWYUZ3MHlOREEwTURZd09URXlORGxhTURReApGekFWQmdOVkJBb1REbk41YzNSbGJUcHRZWE4wWlhKek1Sa3dGd1lEVlFRREV4QnJkV0psY201bGRHVnpMV0ZrCmJXbHVNSUlCSWpBTkJna3Foa2lHOXcwQkFRRUZBQU9DQVE4QU1JSUJDZ0tDQVFFQW0vMmFGRUNuRThXdmhEeE0KaHlyMjZQY0V2RmxyOHNoQ2pPRlRvTzdpa1c0SjJrZ2lwSE1tN0ZKcGNQSHpDOVZZSHRHQUUyRGdlZEdQd0NYbAplTVk2dUh0ZkxDOGRFS3JUdm1kZEEzUCswQlpRWVBTbkJ3V3ZFZWVJU2tZRlBiZzlPekN0K1Nkc09mbmlTMzdRCkV1d1RCN3NhaTBaQi9pWlRtbjlwSHd1QWFJdXlxL0NPT1p2NysrUTA4M2xKM3pLaVFra1h3MFhJLzhvU1FRaGYKWmlnNUhrblI4cktqZzdjSmxuMHJOTkM2OWhObmx1MlN3NUNTM01JSzkyM2tic0NxMUlmV2kvdHJNWVlNVG8vWQpOSzBjTUQvNWN6OUo5ZmJFNm8xcHpKTCswQlZuYnZNemJjMjRnZjBWR2hhcVpnVE5KeENvT0c2UzVyOHJCS3QzCjVvU2xoUUlEQVFBQm8xWXdWREFPQmdOVkhROEJBZjhFQkFNQ0JhQXdFd1lEVlIwbEJBd3dDZ1lJS3dZQkJRVUgKQXdJd0RBWURWUjBUQVFIL0JBSXdBREFmQmdOVkhTTUVHREFXZ0JUSHpySFhlU3FHWXRpS2Fjenpkd1VUWVkvSQpTVEFOQmdrcWhraUc5dzBCQVFzRkFBT0NBUUVBRHVIMjNZRmFwQTFQVU1ySS9Vcnd6N3AyUXYrRFIyZWdNc04wCkw3WUJVY3VkZXM0LzFET085dTRzRjRFUFlxcFJteDNEb25YNEl0UHN3ZzF3M1BPVHNYNTlacFdoc1NzbmNkZE0KcGU3NWhJMlFUTzlPQlZHVUZjNXBvQkVTNzJkSUx0R01RUXMxcmtlOUVSU3BBeFY2TkxYeUN2QTROT0puVm0vUwoyUCtpbmcyVXlocGpYVWk2KzJOeDlHSFZQVkhUTXBIZ01oL0dLSmpiTUQwd3ZyRmdIWnFWU0NaWWJYRXV0UUFXCmZaUnNXNko4bzUzY0VtSHR3Y3VOcSs2bFVUQnNKMTZoZ0Zubkt1dzRFNFdBUEZpdjRmN25WVVpBeXhPYnlyNXkKelNiYnNYU0JMSW9Wc0hVL0lRd0I1L0VPTHpZbTg5dXp5cHB6aUtMUFY1RWF2cEE1S2c9PQotLS0tLUVORCBDRVJUSUZJQ0FURS0tLS0tCg==
+    client-key-data: LS0tLS1CRUdJTiBSU0EgUFJJVkFURSBLRVktLS0tLQpNSUlFb3dJQkFBS0NBUUVBbS8yYUZFQ25FOFd2aER4TWh5cjI2UGNFdkZscjhzaENqT0ZUb083aWtXNEoya2dpCnBITW03RkpwY1BIekM5VllIdEdBRTJEZ2VkR1B3Q1hsZU1ZNnVIdGZMQzhkRUtyVHZtZGRBM1ArMEJaUVlQU24KQndXdkVlZUlTa1lGUGJnOU96Q3QrU2RzT2ZuaVMzN1FFdXdUQjdzYWkwWkIvaVpUbW45cEh3dUFhSXV5cS9DTwpPWnY3KytRMDgzbEozektpUWtrWHcwWEkvOG9TUVFoZlppZzVIa25SOHJLamc3Y0psbjByTk5DNjloTm5sdTJTCnc1Q1MzTUlLOTIza2JzQ3ExSWZXaS90ck1ZWU1Uby9ZTkswY01ELzVjejlKOWZiRTZvMXB6SkwrMEJWbmJ2TXoKYmMyNGdmMFZHaGFxWmdUTkp4Q29PRzZTNXI4ckJLdDM1b1NsaFFJREFRQUJBb0lCQUZmOXJiUk80L0FiU3U1awp0U1pwN2UxcnFaZzFPTmN5YjVmWVlyd2RCR0RVbVdvdjFwcTgrZS9FYlFYdzlSQnZ2ODFpajhSZW1VRWVIT0JlCmdCcW9kdWNwY0g0VDlXazVjMGVzTnFPRUF2Q09KYmtMU0V5RndFTnhQMGZtUjM2Uk5yajB0SzRldHNYZFZ2RVAKRDRBYytuOFo0OWM4UW0yQ1lSWjlXR2JTcmhSS0YzVWtnOWFJMTNtQ0MyOU82OHVFNHB5QlFKTERIV1R0OFJtdAp3ZjAvNmhEdHB5OHVHNHpiR2NpMnBKYlM3VHpieXRmc1JtYVpESG40Zis2VHNYbzgvbHJSU1VTeWdqdGN3UnB4CldTcmJNbm5BNkxEdHA1YzJrRVF1czRGSC9uSThhNE9GWlAxcUhjQ1VmNzh4TklMZnFPbDZFSURuTkpMaXNrZWQKNzJ4MlFlRUNnWUVBdzBCMFBQMmtsM1YwcjZmOHpzTmxPYTAwLzRUanNPY2RpWlhleDFxNGlJUFdCWm9VQ1MrcQp4YWl4S3c4RVo1SVppcExMK0VnVzByVk5adWZVb1BRSGdUL3UzTmNUNWRxOTdLeENOMTVQcm9mK1RpcEt4VEloCkltVWhYMlpEK2QzTEdxbnNqazNjR0tPZmtOWlJBd0VvYXBjTVcraGo5bWlCMVVmdVM5UlJqMk1DZ1lFQXpJWU0KdklXQkV0bXdzUDdhVGtZUk91eDR4b0NCSGR1TG8rMTd1Y01TV01vbkxpWFdVTXIvM1laTzMxQTh3aFJxWVozQwpjR29WZ3hWT1BHcFJUTENqS2pEdjBDdlNDSW9JZDNLSU56ZWRwNUlTeU16UkhXbGhXdnRSbmdudkVkYksxMzFqCmIyeG1xVVNQdE1UWWhQWjZCbXo3M1JzVTd0dDdTbm1tSWZqSmovY0NnWUFNY2NJMjFPKzFtNDNaV0RxYnJ3WjMKbTV1Q0lhVWxkRVdFckdHcmtST3IxOE0vVGlleXdpLy9NeFkvcVZCZGpZbEZOTC85VGhMdVVSSGkyaW5LTEdPQwpFR0lYL3psTWNCbWt5UUhiWjQ1cWtFNWNDd1FDOTRQM0hqejNTSnhTZzVsYlZMTTRDcXhaZ2F3ODNmd0IxZ1FPCmJ4d2hpM2s3amtPZ0pWcUJ5TUYrQXdLQmdDNldHakNXK0YraTFteDZvSjlUdG5rRmhEMHk2RFkwM0FucS9sUEIKNjF2dU1CNkMzOTVuWHdER3B4Q1c1a0FQQm14VjB3Um9KWjVHTEJ2MjI2M3NUajQrQjJJVG1UUDR2UlQ0TWE3aQpMRGNQUHRnZVQwT3p6VWs4RmNzNTJBcm9NaXdEazdLOXJtVEFDVHZUMnIzdXByenY5aTdYREYyY0FPbGw3RUd3CnViamhBb0dCQUl1eVZybWV6cnVZLytXMUpFQTdhV2srcU0xMi9BVTNqTEpCOWpNMXJuZkdjRzhNSElEQVYzS1UKUGE2aDIzeFNsYTloSDVYSHpBbmVNK29iNENSUXZkSlF0cVIreXlySlJ6SjdTOWpjcUlDcUlEOG52Qzlxc05BbQppWFE3VHk1M3FRMDlwK09xRG5iNElMS3VETDlQVGRVaCs3OGJpaS96eENjcVdCWG1teUg2Ci0tLS0tRU5EIFJTQSBQUklWQVRFIEtFWS0tLS0tCg==
+
+
+root@k8s-master:~/.kube# cat config 
+apiVersion: v1
+clusters:
+- cluster:
+    certificate-authority-data: LS0t......
+    server: https://192.168.1.234:6443
+  name: kubernetes
+contexts:
+- context:
+    cluster: kubernetes
+    user: kubernetes-admin
+  name: kubernetes-admin@kubernetes
+current-context: kubernetes-admin@kubernetes
+kind: Config
+preferences: {}
+users:
+- name: kubernetes-admin
+  user:
+    client-certificate-data: LS0t.....
+    client-key-data: LS0t.....
+
+
+
+用户：
+regular user
+
+serviceAccount
+
+
+openssl genrsa 
+
+
+root@k8s-master:/etc/kubernetes/pki# kubectl config --help
+Modify kubeconfig files using subcommands like "kubectl config set current-context my-context"
+
+ The loading order follows these rules:
+
+  1.  If the --kubeconfig flag is set, then only that file is loaded. The flag may only be set once and no merging takes
+place.
+  2.  If $KUBECONFIG environment variable is set, then it is used as a list of paths (normal path delimiting rules for
+your system). These paths are merged. When a value is modified, it is modified in the file that defines the stanza. When
+a value is created, it is created in the first file that exists. If no files in the chain exist, then it creates the
+last file in the list.
+  3.  Otherwise, ${HOME}/.kube/config is used and no merging takes place.
+
+Available Commands:
+  current-context   Display the current-context
+  delete-cluster    Delete the specified cluster from the kubeconfig
+  delete-context    Delete the specified context from the kubeconfig
+  delete-user       Delete the specified user from the kubeconfig
+  get-clusters      Display clusters defined in the kubeconfig
+  get-contexts      Describe one or many contexts
+  get-users         Display users defined in the kubeconfig
+  rename-context    Rename a context from the kubeconfig file
+  set               Set an individual value in a kubeconfig file
+  set-cluster       Set a cluster entry in kubeconfig
+  set-context       Set a context entry in kubeconfig
+  set-credentials   Set a user entry in kubeconfig
+  unset             Unset an individual value in a kubeconfig file
+  use-context       Set the current-context in a kubeconfig file
+  view              Display merged kubeconfig settings or a specified kubeconfig file
+
+Usage:
+  kubectl config SUBCOMMAND [options]
+
+Use "kubectl <command> --help" for more information about a given command.
+Use "kubectl options" for a list of global command-line options (applies to all commands).
+
+
+root@k8s-master:/etc/kubernetes/pki# kubectl config get-clusters 
+NAME
+kubernetes
+root@k8s-master:/etc/kubernetes/pki# kubectl config view
+apiVersion: v1
+clusters:
+- cluster:
+    certificate-authority-data: DATA+OMITTED
+    server: https://192.168.1.234:6443
+  name: kubernetes
+contexts:
+- context:
+    cluster: kubernetes
+    user: kubernetes-admin
+  name: kubernetes-admin@kubernetes
+current-context: kubernetes-admin@kubernetes
+kind: Config
+preferences: {}
+users:
+- name: kubernetes-admin
+  user:
+    client-certificate-data: DATA+OMITTED
+    client-key-data: DATA+OMITTED
+
+	
+
+kubernetes的授权
+
+RBAC: role-based access control
+
+允许某人做某事
+
+
+做：
+create
+delete
+update
+get
+list
+watch
+
+某事：资源对象
+pod/deploy/sts/ds/svc/ing
+
+
+# 一个规则  rule
+
+create pod
+delete pod
+
+update pod
+
+get deploy
+list deploy
+
+list sts
+
+list ds
+
+
+
+规则的集合，被称之为一个role
+
+
+全局权限
+ClusterRole
+
+命名空间级别的权限
+Role
+
+Role与ClusterRole的区别：
+  * CluterRole是全局的，也就是说可以在任何一个命名空间使用
+  * Role是命名空间级别的资源对象，只能创建在指定的命名空间
+
+user + role
+
+binding
+
+ClusterRoleBinding
+
+RoleBinding
+
+root@k8s-master:/etc/kubernetes/pki# kubectl get clusterrole cluster-admin -o yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  annotations:
+    rbac.authorization.kubernetes.io/autoupdate: "true"
+  creationTimestamp: "2023-04-07T09:12:56Z"
+  labels:
+    kubernetes.io/bootstrapping: rbac-defaults
+  name: cluster-admin
+  resourceVersion: "72"
+  uid: ec00995f-3933-4407-8e16-b4fd691cb6e5
+rules:
+- apiGroups:
+  - '*'
+  resources:
+  - '*'
+  verbs:
+  - '*'
+- nonResourceURLs:
+  - '*'
+  verbs:
+  - '*'
+
+  
+
+root@k8s-master:/etc/kubernetes/pki# kubectl get clusterrole admin -o yaml
+aggregationRule:
+  clusterRoleSelectors:
+  - matchLabels:
+      rbac.authorization.k8s.io/aggregate-to-admin: "true"
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  annotations:
+    rbac.authorization.kubernetes.io/autoupdate: "true"
+  creationTimestamp: "2023-04-07T09:12:56Z"
+  labels:
+    kubernetes.io/bootstrapping: rbac-defaults
+  name: admin
+  resourceVersion: "295"
+  uid: 2edfb8f3-9e84-468c-b61e-1d24cd371369
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - pods/attach
+  - pods/exec
+  - pods/portforward
+  - pods/proxy
+  - secrets
+  - services/proxy
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - serviceaccounts
+  verbs:
+  - impersonate
+
+  
+
+系统预置常用ClusterRole
+   * admin: 管理员权限，除了授权之外的所有权限
+   * Cluster-admin: 超级管理员，拥有集群的完全权限
+   * edit: 拥有任意资源对象的编辑权限
+   * view: 拥有任意资源对象的查看权限
+
+
+   
+   
+规则集配置：
+   apiVersion: ""/ apps/v1   api group version
+*  apiGroups:   
+*  resources: 资源名称 - 小写的复数形式
+
+* verbs: 动作
+
+
+# 对deployment、sts、ds以及pod、service拥有创建和列出的动作
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: createlist
+rules:
+- apiGroups:
+  - "apps"
+  resources:
+  - deployments
+  - statefulsets
+  - daemonsets
+  verbs:
+  - create
+  - list
+- apiGroups:
+  - ""
+  resources:
+  - pods
+  - services
+  verbs:
+  - create
+  - list
+  
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: ingress-cr
+rules:
+- apiGroups:
+  - "networking.k8s.io/v1"
+  resources:
+  - ingresses
+  verbs:
+  - '*'
+
+--------------------
+对比k8s:
+create
+run
+apply
+
+delete
+
+
+apply
+edit
+
+describe
+
+get
+-----------------------------------
+
+
+将用户与角色绑定：
+* ClusterRoleBinding: 该用户在所有命名空间都拥有对应的权限
+
+* RoleBinding: 本身就是一个命名空间级别的资源对象，就意味着通过这个绑定方式，只能将资源对象的授权限制在指定的命名空间
+
+user + Role + RoleBinding                  要求Role和RoleBindig都属于同一个命名空间，此时user只在当前命名空间拥有相应的role的权限
+
+user + Role + ClusterRoleBinding           这会抛出异常
+
+user + ClusterRole + RoleBinding           限制用户只在指定的命名空间有相应的ClusterRole的权限 
+
+user + ClusterRole + ClusterRoleBinding    用户在全局都有对应的ClusterRole的权限
+
+kubectl create rolebinding train-create-xx --user train --clusterrole createlist -n cka
+
+kubectl create clusterrolebinding train-create-xx-cr --user train --clusterrole createlist 
+
+
+
+kubectl create rolebinding train-create-xx --user train --clusterrole createlist -n cka  -o yaml --dry-run=client
+
+root@k8s-master:~/k8s# kubectl -n ingress-nginx get rolebindings.rbac.authorization.k8s.io ingress-nginx  -o yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  annotations:
+    meta.helm.sh/release-name: ingress-nginx
+    meta.helm.sh/release-namespace: ingress-nginx
+  creationTimestamp: "2023-04-15T07:13:56Z"
+  labels:
+    app.kubernetes.io/component: controller
+    app.kubernetes.io/instance: ingress-nginx
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: ingress-nginx
+    app.kubernetes.io/part-of: ingress-nginx
+    app.kubernetes.io/version: 1.7.0
+    helm.sh/chart: ingress-nginx-4.6.0
+  name: ingress-nginx
+  namespace: ingress-nginx
+  resourceVersion: "94485"
+  uid: c134fce3-d9d0-4208-b8b3-e3bfd4a84455
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: ingress-nginx
+subjects:
+- kind: ServiceAccount
+  name: ingress-nginx
+  namespace: ingress-nginx
+root@k8s-master:~/k8s# kubectl create rolebinding train-create-xx --user train --clusterrole createlist -n cka  -o yaml --dry-run=client
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  creationTimestamp: null
+  name: train-create-xx
+  namespace: cka
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: createlist
+subjects:
+- apiGroup: rbac.authorization.k8s.io
+  kind: User
+  name: train
+
+  
+  
+在kubernetes当中，创建一个pod，类似于在操作系统中创建一个进程，每个进程都有用户，那么每个pod启动也会有一个用户，这个用户权限的大小，决定了这个pod能够执行的权限；
+
+在操作系统中，这个专门用于启动进程的用户，叫系统用户
+
+在kubernetes，这种用户叫serviceaccount
+
+
+serviceAccountName: default
+
+
+serviceAccount:
+ * shortName: sa
+ * namespaced: true
+ * gv: v1
+ * kind: ServiceAccount
+ 
+ 
+kubectl create sa user1
+
+kubectl create rolebinding sauser1-create-xx --serviceaccount default:user1 --clusterrole createlist -n cka
+
+kubectl create clusterrolebinding sauser1-create-xx-cr --serviceaccount default:user1 --clusterrole createlist 
+
+
+
+
+kubernetes的持久存储
+
+* hostPath
+* emptyDir
+
+spec:
+  nodeSelector:
+  volumes:
+  - name: datadir
+    hostPath:
+      path: /data/mysql
+  containers:
+  - name: mysql
+    image: mysql:8.0
+    volumeMounts:
+    - name: datadir
+      mountPath: /var/lib/mysql
+	  
+
+
+* nfs
+
+mkdir -p /data/mysql
+chmod -R 777 /data
+
+apt install -y nfs-kernel-server
+
+echo "/data *(rw,sync,no_subtree_check)" >> /etc/exports
+
+systemctl restart nfs
+
+showmount -e
+
+
+---
+spec:
+  nodeSelector:
+    ssd: true
+  volumes:
+  - name: datadir
+    nfs:
+	  server: 192.168.1.234
+      path: /data/mysql
+  containers:
+  - name: mysql
+    image: mysql:8.0
+    volumeMounts:
+    - name: datadir
+      mountPath: /var/lib/mysql
+	  
+  
+---
+spec:
+  nodeSelector:
+    ssd: true
+  volumes:
+  - name: datadir
+    persistentVolumeClaim:
+      claimName:
+  containers:
+  - name: mysql
+    image: mysql:8.0
+    volumeMounts:
+    - name: datadir
+      mountPath: /var/lib/mysql
+	  
+===============
+
+弹性伸缩 keda
+
+# kubectl explain pods --recursive |grep -A 10 emptyDir
+         emptyDir    <Object>
+            medium    <string>
+            sizeLimit    <string>
+         ephemeral    <Object>
+            volumeClaimTemplate    <Object>
+               metadata    <Object>
+                  annotations    <map[string]string>
+                  creationTimestamp    <string>
+                  deletionGracePeriodSeconds    <integer>
+                  deletionTimestamp    <string>
+                  finalizers    <[]string>
+
+
+ systemctl status kubelet
+ systemctl cat kubelet
+
+
+
+velero
+
+k8s 集群ca证书过期
+证书过期告警
+
+
+kube-router
+
+
+--------
+sts servicename
+    mysql-hs
+
+pod0--->mysql-0
+pod1--->mysql-1	
+pod2--->mysql-2
+pod3--->mysql-3
+pod4--->mysql-4
+
+	
+有头 mysql.default.svc.cluster.local    10.96.10.100
+
+mysql-0  master
+mysql-1  slave
+mysql-2  slave
+mysql-3  slave
+mysql-4  slave
+
+
+app: mysql
+
+
+headless service: msql-hs
+
+写操作：只有mysql0:    mysql-0.mysql-hs.default.svc.cluster.local
+
+读操作：全体节点：     mysql.default.svc.cluster.local
+
+------------
+
+
+wordPress 通过k8s部署出来
+
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 

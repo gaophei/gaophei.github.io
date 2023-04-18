@@ -11183,25 +11183,340 @@ mypvc05   Bound    mypv05   1G         RWO            nfs            37s
 
   
 
-- d
-
-- d
-
-- d
-
-- 
-
-#### 
-
 ### 17.kubernetes服务质量
 
-#### 17.1.Service基本概念
+#### 17.1.服务质量
 
-#### 17.2.服务发现
+- QoS原理
 
-#### 17.3.集群中的DNS
+  - kubernetes集群中运行大量的容器
 
-#### 17.4.Headless Service
+    如果容器数量过多，，负载过大时，会陷入无资源可用的情况
+
+    因此需要一定的机制来确保重要的容器拥有足够的资源，甚至不惜杀死一部分容器
+
+  - 服务质量(QoS)就是这样一种机制，它可以确定哪些容器可以使用多少资源，哪些容器的优先级又比较高
+
+- 资源类型
+
+  - kubernetes默认带有两类基本资源
+
+    - CPU
+
+      一个单位的cpu资源都会被标准化为一个标准的"Kubernetes Compute Unit"，大致和x86处理器的一个单个超线程核心是相同的
+
+      cpu资源的基本单位是millicores，因为cpu资源其实准确来讲，指的是cpu时间，它的基本单位是millicores
+
+      1个核等于1000millicores
+
+    - Memory
+
+      内存的限制和请求以字节为单位。可以用T,G,M,K等形式表示，也可用Ti,Gi,Mi,Ki等形式表示
+
+      如100M内存，表示`100*1000*1000`字节内存
+
+      而100Mi内存，表示`100*1024*1024`字节内存
+
+- 可压缩与不可压缩资源
+
+  - kubernetes种资源可以分为两类，可压缩资源和不可压缩资源
+
+    - CPU是可压缩资源
+
+      如果CPU不足了，可以通过减少分配给现有业务的时间分片来腾出一部分资源，也许现有业务会变慢，但仍然能运行
+
+      能做到这个也取决于cpu无状态的特点
+
+    - 内存和硬盘之类的资源是不可压缩资源
+
+      一旦一块内存或硬盘空间分配给了现有业务，除非pod结束了使命，否则这些资源不能被释放给其他pod
+
+      不可压缩资源的使用一旦超限，就意味着有pod将被停止
+
+- 节点资源
+
+  - 使用kubectl get nodes k8s-docker1 -o yaml命令可以查看节点k8s-docekr1的详细情况
+
+    - allocatable字段
+
+      指这台机器可以被容器所使用的资源量
+
+    - capacity字段
+
+      表示这台node的资源真实量
+
+  - 我们主要关注其中的cpu和内存资源，可以看到，使用的节点上有2个cpu(其实是线程)和大约4G的内存
+
+  ```bash
+  # kubectl get nodes
+  NAME          STATUS   ROLES           AGE   VERSION
+  k8s-docker1   Ready    worker          9d    v1.26.2
+  k8s-docker2   Ready    worker          9d    v1.26.2
+  k8s-master    Ready    control-plane   9d    v1.26.2
+  # kubectl get nodes k8s-docker1 -o yaml|grep -A 13 allocatable
+    allocatable:
+      cpu: "2"
+      ephemeral-storage: "36247722334"
+      hugepages-1Gi: "0"
+      hugepages-2Mi: "0"
+      memory: 3923688Ki
+      pods: "110"
+    capacity:
+      cpu: "2"
+      ephemeral-storage: 39331296Ki
+      hugepages-1Gi: "0"
+      hugepages-2Mi: "0"
+      memory: 4026088Ki
+      pods: "110"
+  
+  ```
+
+  
+
+- 定义pod的资源使用
+
+  - kubernetes种pod对资源的申请是以容器为最小单位进行的，针对每个容器，它都可以通过如下两个信息指定它所希望的资源量：
+
+    - request
+
+      request指针对这种资源，这个容器希望能够保证获取到的最少的量
+
+      只有节点上的富裕资源大于request值时，容器才会被调度到该节点
+
+    - limit
+
+      limit对于cpu，还有内存，指的是容器对这个资源使用的上限
+
+      对于cpu来说，容器使用cpu过多，内核调度器就会切换，使其使用的量不会超过limit
+
+      对于内存来说，容器使用内存超过limit，这个容器就会被OOM kill掉，从而发生容器的重启
+
+- kubernetes Pod QoS分类
+
+  - kubernetes支持用户容器通过request、limit两个字段指定自己的申请资源信息
+
+    那么根据容器指定资源的不同情况，pod被划分为3种不同的QoS级别，分别是：
+
+    - Guaranteed 保证
+    - Burstable 爆发
+    - BestEffort 尽力
+
+  - 优先级Guaranteed > Burstable > BestEffort
+
+- QoS等级为Guaranteed
+
+  - pod中的每个容器都设置了request和limit，并且request.cpu=limit.cpu，request.memory=limit.memory
+  - Guaranteedlevel 的pod优先级最高
+
+  ```bash
+  # kubectl create -f- <<EOF
+  apiVersion: v1
+  kind: Pod
+  metadata:
+    name: qos-demo-gua
+  spec:
+    containers:
+    - name: qos-demo-gua
+      image: nginx
+      resources:
+        requests:
+          cpu: "0.1"
+          memory: 128Mi
+        limits:
+          cpu: "0.1"
+          memory: 128Mi
+  EOF
+  
+  pod/qos-demo-gua created
+  
+  # kubectl get pod qos-demo-gua 
+  NAME           READY   STATUS    RESTARTS   AGE
+  qos-demo-gua   1/1     Running   0          12s
+  # kubectl describe pod qos-demo-gua |grep QoS
+  QoS Class:                   Guaranteed
+  ```
+
+  
+
+- QoS等级为Burstable
+
+  - 当出现下面的情况时，则是一个pod被分配了QoS等级为Burstable：
+
+    - 该pod不满足QoS等级Guaranteed的要求
+    - 该pod至少有一个容器有内存或者cpu请求
+
+  - Burstable level 的pod优先级其次，管理员一般知道这个pod的资源需求的最小值，但是当机器资源充足的时候，还是希望它们能够使用更多的资源
+
+    所以一般limit > request
+
+  ```bash
+  # kubectl create -f- <<EOF
+  apiVersion: v1
+  kind: Pod
+  metadata:
+    name: qos-demo-burst
+  spec:
+    containers:
+    - name: qos-demo-burst
+      image: nginx
+      resources:
+        requests:
+          cpu: "0.1"
+          memory: 128Mi
+        limits:
+          cpu: "0.1"
+          memory: 256Mi
+  EOF
+  
+  pod/qos-demo-burst created
+  
+  # kubectl get pod qos-demo-burst 
+  NAME           READY   STATUS    RESTARTS   AGE
+  qos-demo-burst   1/1     Running   0          12s
+  # kubectl describe pod qos-demo-burst |grep QoS
+  QoS Class:                   Burstable
+  ```
+
+  
+
+- QoS等级为BestEffort
+
+  - pod里的容器必须没有任何内存或cpu的限制或请求
+
+  - BestEffort leve的pod优先级最低
+
+    当机器资源充足的时候，它可以充分使用，但是当机器资源被Guaranteed、Burstable的pod抢占的时候，它的资源也会被剥夺，被无限压缩
+
+  ```bash
+  # kubectl create -f- <<EOF
+  apiVersion: v1
+  kind: Pod
+  metadata:
+    name: qos-demo-besteff
+  spec:
+    containers:
+    - name: qos-demo-besteff
+      image: nginx
+  EOF
+  
+  pod/qos-demo-besteff created
+  
+  # kubectl get pod qos-demo-besteff 
+  NAME           READY   STATUS    RESTARTS   AGE
+  qos-demo-besteff   1/1     Running   0          12s
+  # kubectl describe pod qos-demo-burst |grep QoS
+  QoS Class:                   BestEffort
+  ```
+
+  
+
+- 超出容器的内存限制
+
+  - 使用polinux/stress容器测试kubernetes在容器运行时资源使用超过限制值时的表现
+
+    容器的内存限额时100Mi，但运行时实际使用150Mi
+
+  - 查看pod的状态，已被OOMKilled
+
+  ```yaml
+  # memory-demo.yaml
+  apiVersion: v1
+  kind: Pod
+  metadata:
+    name: memory-demo
+  spec:
+    containers:
+    - name: memory-demo-ctr
+      image: polinux/stress
+      resources:
+        requests:
+          memory: 50Mi
+        limits:
+          memory: 100Mi
+      command: ["stress"]
+      args: ["--vm", "1", "--vm-bytes", "150Mi", "--vm-hang", "1"]
+  ```
+
+  ```bash
+  # kubectl create -f memory-stree-demo.yaml 
+  pod/memory-demo created
+  
+  # kubectl get pod memory-demo 
+  NAME          READY   STATUS              RESTARTS   AGE
+  memory-demo   0/1     ContainerCreating   0          9s
+  
+  # kubectl get pod memory-demo 
+  NAME          READY   STATUS             RESTARTS      AGE
+  memory-demo   0/1     CrashLoopBackOff   1 (19s ago)   36s
+  
+  # kubectl get pod memory-demo 
+  NAME          READY   STATUS   RESTARTS   AGE
+  memory-demo   0/1     Error    0          27s
+  
+  # kubectl describe pod memory-demo-stress |grep -A 4 State
+      State:          Waiting
+        Reason:       CrashLoopBackOff
+      Last State:     Terminated
+        Reason:       Error
+        Exit Code:    1
+  
+  # kubectl describe pod memory-demo-stress |grep -A 4 State
+      State:          Terminated
+        Reason:       OOMkilled
+        Exit Code:    1
+        Started:      Mon, 17 Apr 2023 06:23:51 +0000
+        Finished:     Mon, 17 Apr 2023 06:23:51 +0000
+      Last State:     Terminated
+        Reason:       OOMkilled
+        Exit Code:    1
+        Started:      Mon, 17 Apr 2023 06:23:06 +0000
+        Finished:     Mon, 17 Apr 2023 06:23:06 +0000
+  ```
+
+- 超过节点可用资源
+
+  - 申请Guaranteed类型的pod，内存为1000Gi
+
+    由于节点并没有如此大量的资源，因此pod会处于Pending的状态
+
+  - 从该pod的详细信息可以看到
+
+  ```yaml
+  # memory-demo-02.yaml
+  apiVersion: v1
+  kind: Pod
+  metadata:
+    name: memory-demo-02
+  spec:
+    containers:
+    - name: memory-demo-ctr
+      image: polinux/stress
+      resources:
+        requests:
+          cpu: "0.1"
+          memory: 1000Gi
+        limits:
+          cpu: "0.1"
+          memory: 1000Gi
+      command: ["stress"]
+      args: ["--vm", "1", "--vm-bytes", "150Mi", "--vm-hang", "1"]
+  ```
+
+  ```bash
+  # kubectl create -f  memory-demo-02.yaml
+  pod/memory-demo-02 created
+  
+  # kubectl get pod memory-demo-02 
+  NAME             READY   STATUS    RESTARTS   AGE
+  memory-demo-02   0/1     Pending   0          20s
+  s# kubectl describe pod memory-demo-02 |grep -A 10 Events
+  Events:
+    Type     Reason            Age   From               Message
+    ----     ------            ----  ----               -------
+    Warning  FailedScheduling  36s   default-scheduler  0/3 nodes are available: 1 node(s) had untolerated taint {node-role.kubernetes.io/control-plane: }, 3 Insufficient memory. preemption: 0/3 nodes are available: 1 Preemption is not helpful for scheduling, 2 No preemption victims found for incoming pod..
+  ```
+
+  
 
 ### 18.Kubernetes资源调度
 
