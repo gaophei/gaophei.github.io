@@ -1,3 +1,5 @@
+
+
 ### 0. kubectl context设置---注意集群的不同
 
 ```bash
@@ -5,7 +7,7 @@
 # kubectl config get-contextx
 # kubectl config current-context
 
-# kubectl config use-context xxx@yyyyy
+# kubectl config use-context kubernetes-admin@kubernetes
 
 # ssh k8s-node-0
 # sudo -i
@@ -248,7 +250,7 @@ cicd-token-rolebinding   ClusterRole/deployment-clusterrole   9s
 ```bash
 精简命令：
 # kubectl config use-context ek8s
-# kubectl drain node ek8s-node-1 --ignore-daemonsets
+# kubectl drain ek8s-node-1 --ignore-daemonsets
 ```
 
 ```bash
@@ -262,12 +264,45 @@ Drain node in preparation for maintenance.
 Usage:
   kubectl drain NODE [options]
 
-# kubectl drain node ek8s-node-1 --ignore-daemonsets
+# kubectl drain ek8s-node-1 --ignore-daemonsets
+
+# kubectl drain k8s-docker2 --ignore-daemonsets 
+node/k8s-docker2 cordoned
+Warning: ignoring DaemonSet-managed Pods: kube-system/calico-node-q7kn5, kube-system/kube-proxy-p2vws
+evicting pod kube-system/coredns-567c556887-mqvtk
+evicting pod ingress-nginx/ingress-nginx-controller-68c7fccc8d-m87n6
+evicting pod ingress-nginx/ingress-nginx-defaultbackend-6594895459-6nsbv
+pod/ingress-nginx-defaultbackend-6594895459-6nsbv evicted
+pod/coredns-567c556887-mqvtk evicted
+pod/ingress-nginx-controller-68c7fccc8d-m87n6 evicted
+node/k8s-docker2 drained
+# kubectl get nodes
+NAME          STATUS                     ROLES           AGE   VERSION
+k8s-docker1   Ready                      worker          11d   v1.26.2
+k8s-docker2   Ready,SchedulingDisabled   worker          11d   v1.26.2
+k8s-master    Ready                      control-plane   11d   v1.26.2
+
+# kubectl uncordon k8s-docker2
+node/k8s-docker2 uncordoned
+# kubectl get nodes
+NAME          STATUS   ROLES           AGE   VERSION
+k8s-docker1   Ready    worker          11d   v1.26.2
+k8s-docker2   Ready    worker          11d   v1.26.2
+k8s-master    Ready    control-plane   11d   v1.26.2
+
+# kubectl  drain node k8s-docker2
+Error from server (NotFound): nodes "node" not found
+# kubectl  drain  k8s-docker2
+node/k8s-docker2 cordoned
+error: unable to drain node "k8s-docker2" due to error:cannot delete DaemonSet-managed Pods (use --ignore-daemonsets to ignore): kube-system/calico-node-q7kn5, kube-system/kube-proxy-p2vws, continuing command...
+There are pending nodes to be drained:
+ k8s-docker2
+cannot delete DaemonSet-managed Pods (use --ignore-daemonsets to ignore): kube-system/calico-node-q7kn5, kube-system/kube-proxy-p2vws
 ```
 
 
 
-### 3. xxx
+### 3. kubeadm等升级
 
 ```
 题目：
@@ -281,11 +316,187 @@ Do not upgrade the worker nodes,etcd,the container manager,the CNI plugin, the D
 
 ```bash
 精简命令：
+# kubectl drain k8s-master --ingore-daemonsets
 
+# apt update -y
+
+# apt-cache madison kubeadm|more
+
+# apt upgrade kubeadm=1.26.4-00 kubelet=1.26.4-00 kubectl=1.26.4-00 -y
+
+# kubeadm version
+
+# kubeadm upgrade plan
+
+# kubeadm upgrade apply v1.26.4 --etcd-upgrade=false
+
+# kubectl uncordon k8s-master
+
+# kubectl get nodes
 ```
 
 ```bash
 详细命令：
+# kubectl drain k8s-master --ignore-daemonsets 
+node/k8s-master already cordoned
+Warning: ignoring DaemonSet-managed Pods: kube-system/calico-node-w5xph, kube-system/kube-proxy-zmzxx
+evicting pod kube-system/coredns-567c556887-jw55m
+pod/coredns-567c556887-jw55m evicted
+node/k8s-master drained
+# kubectl get nodes
+NAME          STATUS                     ROLES           AGE   VERSION
+k8s-docker1   Ready                      worker          11d   v1.26.2
+k8s-docker2   Ready                      worker          11d   v1.26.2
+k8s-master    Ready,SchedulingDisabled   control-plane   11d   v1.26.2
+# kubectl get pod -A -owide|grep k8s-master
+kube-system     calico-node-w5xph                               1/1     Running   1 (4d12h ago)   11d     192.168.1.234   k8s-master    <none>           <none>
+kube-system     etcd-k8s-master                                 1/1     Running   1 (4d12h ago)   11d     192.168.1.234   k8s-master    <none>           <none>
+kube-system     kube-apiserver-k8s-master                       1/1     Running   1 (4d12h ago)   11d     192.168.1.234   k8s-master    <none>           <none>
+kube-system     kube-controller-manager-k8s-master              1/1     Running   4 (4d11h ago)   11d     192.168.1.234   k8s-master    <none>           <none>
+kube-system     kube-proxy-zmzxx                                1/1     Running   1 (4d12h ago)   11d     192.168.1.234   k8s-master    <none>           <none>
+kube-system     kube-scheduler-k8s-master                       1/1     Running   4 (4d11h ago)   11d     192.168.1.234   k8s-master    <none>           <none>
+
+# apt update -y
+...输出省略...
+
+# apt-cache madison kubeadm|more
+   kubeadm |  1.27.1-00 | https://mirrors.aliyun.com/kubernetes/apt kubernetes-xenial/main amd64 Packages
+   kubeadm |  1.27.0-00 | https://mirrors.aliyun.com/kubernetes/apt kubernetes-xenial/main amd64 Packages
+   kubeadm |  1.26.4-00 | https://mirrors.aliyun.com/kubernetes/apt kubernetes-xenial/main amd64 Packages
+   kubeadm |  1.26.3-00 | https://mirrors.aliyun.com/kubernetes/apt kubernetes-xenial/main amd64 Packages
+   kubeadm |  1.26.2-00 | https://mirrors.aliyun.com/kubernetes/apt kubernetes-xenial/main amd64 Packages
+   kubeadm |  1.26.1-00 | https://mirrors.aliyun.com/kubernetes/apt kubernetes-xenial/main amd64 Packages
+   kubeadm |  1.26.0-00 | https://mirrors.aliyun.com/kubernetes/apt kubernetes-xenial/main amd64 Packages
+
+# dpkg -l |grep kubeadm
+ii  kubeadm                               1.26.2-00                         amd64        Kubernetes Cluster Bootstrapping Tool
+root@k8s-master:~# dpkg -l |grep kubelet
+ii  kubelet                               1.26.2-00                         amd64        Kubernetes Node Agent
+root@k8s-master:~# dpkg -l |grep kubectl
+ii  kubectl                               1.26.2-00                         amd64        Kubernetes Command Line Tool
+
+# apt upgrade kubeadm=1.26.4-00 kubelet=1.26.4-00 kubectl=1.26.4-00 -y
+...输出省略...
+
+# kubeadm version
+kubeadm version: &version.Info{Major:"1", Minor:"26", GitVersion:"v1.26.4", GitCommit:"f89670c3aa4059d6999cb42e23ccb4f0b9a03979", GitTreeState:"clean", BuildDate:"2023-04-12T12:12:17Z", GoVersion:"go1.19.8", Compiler:"gc", Platform:"linux/amd64"}
+
+# kubeadm upgrade plan
+[upgrade/config] Making sure the configuration is correct:
+[upgrade/config] Reading configuration from the cluster...
+[upgrade/config] FYI: You can look at this config file with 'kubectl -n kube-system get cm kubeadm-config -o yaml'
+[preflight] Running pre-flight checks.
+[upgrade] Running cluster health checks
+[upgrade] Fetching available versions to upgrade to
+[upgrade/versions] Cluster version: v1.26.0
+[upgrade/versions] kubeadm version: v1.26.4
+I0419 04:28:51.492828 2337005 version.go:256] remote version is much newer: v1.27.1; falling back to: stable-1.26
+[upgrade/versions] Target version: v1.26.4
+[upgrade/versions] Latest version in the v1.26 series: v1.26.4
+
+Components that must be upgraded manually after you have upgraded the control plane with 'kubeadm upgrade apply':
+COMPONENT   CURRENT       TARGET
+kubelet     2 x v1.26.2   v1.26.4
+            1 x v1.26.4   v1.26.4
+
+Upgrade to the latest version in the v1.26 series:
+
+COMPONENT                 CURRENT   TARGET
+kube-apiserver            v1.26.0   v1.26.4
+kube-controller-manager   v1.26.0   v1.26.4
+kube-scheduler            v1.26.0   v1.26.4
+kube-proxy                v1.26.0   v1.26.4
+CoreDNS                   v1.9.3    v1.9.3
+etcd                      3.5.6-0   3.5.6-0
+
+You can now apply the upgrade by executing the following command:
+
+        kubeadm upgrade apply v1.26.4
+
+_____________________________________________________________________
+
+
+The table below shows the current state of component configs as understood by this version of kubeadm.
+Configs that have a "yes" mark in the "MANUAL UPGRADE REQUIRED" column require manual config upgrade or
+resetting to kubeadm defaults before a successful upgrade can be performed. The version to manually
+upgrade to is denoted in the "PREFERRED VERSION" column.
+
+API GROUP                 CURRENT VERSION   PREFERRED VERSION   MANUAL UPGRADE REQUIRED
+kubeproxy.config.k8s.io   v1alpha1          v1alpha1            no
+kubelet.config.k8s.io     v1beta1           v1beta1             no
+_____________________________________________________________________
+
+# kubeadm upgrade apply v1.26.4 --etcd-upgrade=false
+[upgrade/config] Making sure the configuration is correct:
+[upgrade/config] Reading configuration from the cluster...
+[upgrade/config] FYI: You can look at this config file with 'kubectl -n kube-system get cm kubeadm-config -o yaml'
+[preflight] Running pre-flight checks.
+[upgrade] Running cluster health checks
+[upgrade/version] You have chosen to change the cluster version to "v1.26.4"
+[upgrade/versions] Cluster version: v1.26.0
+[upgrade/versions] kubeadm version: v1.26.4
+[upgrade] Are you sure you want to proceed? [y/N]: y
+[upgrade/prepull] Pulling images required for setting up a Kubernetes cluster
+[upgrade/prepull] This might take a minute or two, depending on the speed of your internet connection
+[upgrade/prepull] You can also perform this action in beforehand using 'kubeadm config images pull'
+[upgrade/apply] Upgrading your Static Pod-hosted control plane to version "v1.26.4" (timeout: 5m0s)...
+[upgrade/staticpods] Writing new Static Pod manifests to "/etc/kubernetes/tmp/kubeadm-upgraded-manifests3284289549"
+[upgrade/staticpods] Preparing for "kube-apiserver" upgrade
+[upgrade/staticpods] Renewing apiserver certificate
+[upgrade/staticpods] Renewing apiserver-kubelet-client certificate
+[upgrade/staticpods] Renewing front-proxy-client certificate
+[upgrade/staticpods] Renewing apiserver-etcd-client certificate
+[upgrade/staticpods] Moved new manifest to "/etc/kubernetes/manifests/kube-apiserver.yaml" and backed up old manifest to "/etc/kubernetes/tmp/kubeadm-backup-manifests-2023-04-19-04-33-23/kube-apiserver.yaml"
+[upgrade/staticpods] Waiting for the kubelet to restart the component
+[upgrade/staticpods] This might take a minute or longer depending on the component/version gap (timeout 5m0s)
+[apiclient] Found 1 Pods for label selector component=kube-apiserver
+[upgrade/staticpods] Component "kube-apiserver" upgraded successfully!
+[upgrade/staticpods] Preparing for "kube-controller-manager" upgrade
+[upgrade/staticpods] Renewing controller-manager.conf certificate
+[upgrade/staticpods] Moved new manifest to "/etc/kubernetes/manifests/kube-controller-manager.yaml" and backed up old manifest to "/etc/kubernetes/tmp/kubeadm-backup-manifests-2023-04-19-04-33-23/kube-controller-manager.yaml"
+[upgrade/staticpods] Waiting for the kubelet to restart the component
+[upgrade/staticpods] This might take a minute or longer depending on the component/version gap (timeout 5m0s)
+[apiclient] Found 1 Pods for label selector component=kube-controller-manager
+[upgrade/staticpods] Component "kube-controller-manager" upgraded successfully!
+[upgrade/staticpods] Preparing for "kube-scheduler" upgrade
+[upgrade/staticpods] Renewing scheduler.conf certificate
+[upgrade/staticpods] Moved new manifest to "/etc/kubernetes/manifests/kube-scheduler.yaml" and backed up old manifest to "/etc/kubernetes/tmp/kubeadm-backup-manifests-2023-04-19-04-33-23/kube-scheduler.yaml"
+[upgrade/staticpods] Waiting for the kubelet to restart the component
+[upgrade/staticpods] This might take a minute or longer depending on the component/version gap (timeout 5m0s)
+[apiclient] Found 1 Pods for label selector component=kube-scheduler
+[upgrade/staticpods] Component "kube-scheduler" upgraded successfully!
+[upload-config] Storing the configuration used in ConfigMap "kubeadm-config" in the "kube-system" Namespace
+[kubelet] Creating a ConfigMap "kubelet-config" in namespace kube-system with the configuration for the kubelets in the cluster
+[kubelet-start] Writing kubelet configuration to file "/var/lib/kubelet/config.yaml"
+[bootstrap-token] Configured RBAC rules to allow Node Bootstrap tokens to get nodes
+[bootstrap-token] Configured RBAC rules to allow Node Bootstrap tokens to post CSRs in order for nodes to get long term certificate credentials
+[bootstrap-token] Configured RBAC rules to allow the csrapprover controller automatically approve CSRs from a Node Bootstrap Token
+[bootstrap-token] Configured RBAC rules to allow certificate rotation for all node client certificates in the cluster
+[addons] Applied essential addon: CoreDNS
+[addons] Applied essential addon: kube-proxy
+
+[upgrade/successful] SUCCESS! Your cluster was upgraded to "v1.26.4". Enjoy!
+
+[upgrade/kubelet] Now that your control plane is upgraded, please proceed with upgrading your kubelets if you haven't already done so.
+
+# kubectl get nodes
+NAME          STATUS                     ROLES           AGE   VERSION
+k8s-docker1   Ready                      worker          11d   v1.26.2
+k8s-docker2   Ready                      worker          11d   v1.26.2
+k8s-master    Ready,SchedulingDisabled   control-plane   11d   v1.26.4
+
+# kubectl uncordon k8s-master 
+node/k8s-master uncordoned
+
+# kubectl get nodes
+NAME          STATUS   ROLES           AGE   VERSION
+k8s-docker1   Ready    worker          11d   v1.26.2
+k8s-docker2   Ready    worker          11d   v1.26.2
+k8s-master    Ready    control-plane   11d   v1.26.4
+```
+
+```bash
+参考命令：
 kubectl  drain cka01 --ignore-daemonsets
 
 apt update -y 
@@ -315,7 +526,7 @@ kubectl uncordon cka01
 
 
 
-### 4. xxx
+### 4. etcd备份
 
 
 ```
@@ -333,11 +544,131 @@ kubectl uncordon cka01
 
 ```bash
 精简命令：
+# apt install etcd-client -y
+# export ETCDCTL_API=3
+# etcdctl -h
+备份：
+# etcdctl --endpoint=127.0.0.1:2379 --cacert=/opt/KUIN00601/ca.crt --crt=/opt/KUIN00601/etcd-client.crt --key=/opt/KUIN00601/etcd-client.key snapshot save /data/bucket/etcd-snapshot.db
+
+在恢复数据之前，需要停止使用和写入新数据
+# mv /etc/kubernetes/manifests /etc/kubernetes/manifests.bak
+# mv /var/lib/etcd /var/lib/etcd.bak
+
+还原：
+# etcdctl --endpoint=127.0.0.1:2379 --cacert=/opt/KUIN00601/ca.crt --crt=/opt/KUIN00601/etcd-client.crt --key=/opt/KUIN00601/etcd-client.key --data-dir=/var/lib/etcd snapshot restore /srv/data/etcd-snaphot-previous.db
+
+恢复服务：
+# mv /etc/kubernetes/manifests.bak /etc/kubernetes/manifests
+# systemctl restart kubelet.service
 
 ```
 
 ```bash
 详细命令：
+# apt install etcd-client -y
+# etcdctl -h
+
+# export ETCDCTL_API=3
+# etcdctl -h
+
+# cd /etc/kubernetes/pki/etcd
+# ls
+ca.crt  ca.key  healthcheck-client.crt  healthcheck-client.key  peer.crt  peer.key  server.crt  server.key
+
+备份：
+# export ETCDCTL_API=3
+# etcdctl --endpoints=127.0.0.1:2379 --cacert=./ca.crt --cert=./server.crt --key=./server.key member list
+5bcec1d5b14a78aa, started, k8s-master, https://192.168.1.234:2380, https://192.168.1.234:2379
+
+# etcdctl --endpoints=127.0.0.1:2379 --cacert=./ca.crt --cert=./server.crt --key=./server.key endpoint health
+127.0.0.1:2379 is healthy: successfully committed proposal: took = 1.427836ms
+# etcdctl --endpoints=127.0.0.1:2379 --cacert=./ca.crt --cert=./server.crt --key=./server.key endpoint status
+127.0.0.1:2379, 5bcec1d5b14a78aa, 3.5.6, 3.9 MB, true, 4, 16876
+
+# etcdctl snapshot save --help
+NAME:
+        snapshot save - Stores an etcd node backend snapshot to a given file
+
+USAGE:
+        etcdctl snapshot save <filename> [flags]
+
+OPTIONS:
+  -h, --help[=false]    help for save
+
+GLOBAL OPTIONS:
+      --cacert=""                               verify certificates of TLS-enabled secure servers using this CA bundle
+      --cert=""                                 identify secure client using this TLS certificate file
+      --command-timeout=5s                      timeout for short running command (excluding dial timeout)
+      --debug[=false]                           enable client-side debug logging
+      --dial-timeout=2s                         dial timeout for client connections
+      --endpoints=[127.0.0.1:2379]              gRPC endpoints
+      --hex[=false]                             print byte strings as hex encoded strings
+      --insecure-skip-tls-verify[=false]        skip server certificate verification
+      --insecure-transport[=true]               disable transport security for client connections
+      --key=""                                  identify secure client using this TLS key file
+      --user=""                                 username[:password] for authentication (prompt if password is not supplied)
+  -w, --write-out="simple"                      set the output format (fields, json, protobuf, simple, table)
+
+# etcdctl --endpoints=127.0.0.1:2379 --cacert=./ca.crt --cert=./server.crt --key=./server.key snapshot save /opt/20240101.db
+Snapshot saved at /opt/20240101.db
+# etcdctl --endpoints=127.0.0.1:2379 --cacert=./ca.crt --cert=./server.crt --key=./server.key snapshot status /opt/20240101.db 
+886e9ef5, 15012, 1296, 3.9 MB
+
+还原：
+先停止服务
+mv /etc/kubernetes/manifests /etc/kubernetes/manifests.bak
+sleep 1m
+
+删除现有etcd
+mv /var/lib/etcd /var/lib/etc.bak
+
+还原失败：
+# cd /etc/kubernetes/pki/etcd
+# etcdctl --endpoints=127.0.0.1:2379 --cacert=./ca.crt --cert=./server.crt --key=./server.key --data-dir /var/lib/etcd snapshot restor /opt/20240101.db 
+Error:  expected sha256 [28 142 48 141 16 190 99 86 3 46 154 184 142 55 192 47 28 62 173 32 210 100 223 224 76 194 65 100 104 68 127 98], got [130 19 195 169 66 122 173 207 13 187 125 208 48 178 95 162 160 58 90 1 160 243 47 144 15 43 185 145 105 206 174 36]
+
+加参数，还原成功：
+# rm -rfv /var/lib/etcd
+# etcdctl --endpoints=127.0.0.1:2379 --cacert=ca.crt --cert=server.crt --key=server.key --data-dir /var/lib/etcd snapshot restore /opt/20240101.db --skip-hash-check=true
+2023-04-20 07:07:14.614360 I | mvcc: restore compact to 14168
+2023-04-20 07:07:14.623310 I | etcdserver/membership: added member 8e9e05c52164694d [http://localhost:2380] to cluster cdf818194e3a8c32
+
+# systemctl restart kubelet 
+
+# etcdctl snapshot restore --help
+NAME:
+        snapshot restore - Restores an etcd member snapshot to an etcd directory
+
+USAGE:
+        etcdctl snapshot restore <filename> [options] [flags]
+
+OPTIONS:
+      --data-dir=""                                             Path to the data directory
+  -h, --help[=false]                                            help for restore
+      --initial-advertise-peer-urls="http://localhost:2380"     List of this member's peer URLs to advertise to the rest of the cluster
+      --initial-cluster="default=http://localhost:2380"         Initial cluster configuration for restore bootstrap
+      --initial-cluster-token="etcd-cluster"                    Initial cluster token for the etcd cluster during restore bootstrap
+      --name="default"                                          Human-readable name for this member
+      --skip-hash-check[=false]                                 Ignore snapshot integrity hash value (required if copied from data directory)
+
+GLOBAL OPTIONS:
+      --cacert=""                               verify certificates of TLS-enabled secure servers using this CA bundle
+      --cert=""                                 identify secure client using this TLS certificate file
+      --command-timeout=5s                      timeout for short running command (excluding dial timeout)
+      --debug[=false]                           enable client-side debug logging
+      --dial-timeout=2s                         dial timeout for client connections
+      --endpoints=[127.0.0.1:2379]              gRPC endpoints
+      --hex[=false]                             print byte strings as hex encoded strings
+      --insecure-skip-tls-verify[=false]        skip server certificate verification
+      --insecure-transport[=true]               disable transport security for client connections
+      --key=""                                  identify secure client using this TLS key file
+      --user=""                                 username[:password] for authentication (prompt if password is not supplied)
+  -w, --write-out="simple"                      set the output format (fields, json, protobuf, simple, table)
+
+```
+
+```bash
+参考命令：
 export ETCDCTL_API=3
 
 etcdctl --endpoints=https://127.0.0.1:2379 --cacert=/opt/KUIN00601/ca.crt --cert=/opt/KUIN00601/etcd-client.crt --key=/opt/KUIN00601/etcd-client.key snapshot save /data/backup/etcd-snapshot.db
@@ -505,7 +836,8 @@ networkpolicy.networking.k8s.io/allow-port-from-namespace created
 # kubectl -n internal get networkpolicy
 NAME                        POD-SELECTOR   AGE
 allow-port-from-namespace   <none>         43s
-root@k8s-master:~/cka# kubectl -n internal describe networkpolicies allow-port-from-namespace 
+
+# kubectl -n internal describe networkpolicies allow-port-from-namespace 
 Name:         allow-port-from-namespace
 Namespace:    internal
 Created on:   2023-04-18 09:51:04 +0000 UTC
@@ -614,7 +946,7 @@ Spec:
 
 
 
-### 6. xxx
+### 6. deployment/svc配置
 
 ```
 题目：
@@ -631,17 +963,442 @@ Configure the new service to also expose the individual Pods via a NodePort on t
 
 ```bash
 详细命令：
+---
+# 原始dp.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: front-end
+  labels:
+    app: front-end
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: front-end
+  template:
+    metadata:
+      labels:
+        app: front-end
+    spec:
+      containers:
+      - name: nginx
+        image: nginx
 
+---
+# 修改后dp01.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: front-end
+  labels:
+    app: front-end
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: front-end
+  template:
+    metadata:
+      labels:
+        app: front-end
+    spec:
+      containers:
+      - name: nginx
+        image: nginx
+        ports:
+        - name: http
+          protocol: TCP
+          containerPort: 80
+---
+# front-end-svc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: front-end-svc
+  labels:
+    app: front-end-svc
+spec:
+  type: NodePort
+  selector:
+    app: nginx
+  ports:
+  - name: http
+    protocol: TCP
+    port: 80
+    targetPort: 80
+    
+# kubectl edit deployments.apps front-end 
+添加：
+        ports:
+        - name: http
+          protocol: TCP
+          containerPort: 80
+
+deployment.apps/front-end edited
+
+# kubectl create -f front-end-svc.yaml 
+service/front-end-svc created
+# kubectl get svc
+NAME            TYPE       CLUSTER-IP    EXTERNAL-IP   PORT(S)        AGE
+front-end-svc   NodePort   10.98.24.28   <none>        80:32063/TCP   6s
 ```
 
 
 
 
-### 7. xxx
+### 7. ingress配置
 
 ```
 题目：
-将一个名为ek8s-node-1的节点设置为不可用并将其上的pod重新调度
+Create a new nginx ingress resource as follows:
+	Name: ping 
+	Namespace: ing-internal
+	Exposing service hi on path /hi using service port 5678
+
+tips: The availability of service hi can be checked using the following commands,which should retun hi: 
+curl -KL <INTERNAL_IP>/hi
+
+```
+
+```bash
+精简命令：
+---
+# ingress.yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ping
+  namespace: ing-internal
+spec:
+  rules:
+  - http:
+      paths:
+      - path: /hi
+        pathType: Prefix
+        backend:
+          service:
+            name: hi
+            port:
+              number: 5678
+
+# kubectl create -f ingress.yaml
+```
+
+```bash
+详细命令：
+# config environment
+
+kubectl create ns ing-internal
+
+kubectl run hi --image=registry.cn-zhangjiakou.aliyuncs.com/breezey/ping -n ing-internal
+
+kubectl expose pod hi --port=5678 -n ing-internal
+
+kubectl -n ing-internal get svc
+NAME   TYPE        CLUSTER-IP       EXTERNAL-IP   PORT(S)    AGE
+hi     ClusterIP   10.111.223.202   <none>        5678/TCP   99s
+
+curl 10.111.223.202:5678/hi
+hi
+
+解析：
+# kubectl create ingress 
+...输出省略...
+Usage:
+  kubectl create ingress NAME --rule=host/path=service:port[,tls[=secret]]  [options]
+
+Use "kubectl options" for a list of global command-line options (applies to all commands).
+
+# kubectl -n ing-internal create ingress ping --rule=/hi=hi:5678 -o yaml --dry-run=client
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ping
+  namespace: ing-internal
+spec:
+  rules:
+  - http:
+      paths:
+      - backend:
+          service:
+            name: hi
+            port:
+              number: 5678
+        path: /hi
+        pathType: Exact
+ 
+根据kubectl create ingress或网址yaml修改：
+---
+# ingress.yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ping
+  namespace: ing-internal
+spec:
+  rules:
+  - http:
+      paths:
+      - path: /hi
+        pathType: Prefix
+        backend:
+          service:
+            name: hi
+            port:
+              number: 5678
+
+# kubectl create -f ingress.yaml
+ingress.networking.k8s.io/ping created
+# kubectl -n ing-internal get ingress
+NAME   CLASS   HOSTS   ADDRESS   PORTS   AGE
+ping   nginx   *                 80      41s
+```
+
+
+
+
+### 8. deployment的扩缩容配置
+```
+题目：
+Scale the deploy persentation to 3 pods 
+```
+
+```bash
+精简命令：
+# kubectl get deployments.apps presentation
+```
+
+```bash
+详细命令：
+config env
+# kubectl create deploy presentation --image=busybox -- sleep 3600
+
+answer
+# kubectl get deployments.apps presentation
+NAME           READY   UP-TO-DATE   AVAILABLE   AGE
+presentation   1/1     1            1           38s
+
+# kubectl scale deployment presentation --replicas=3
+deployment.apps/presentation scaled
+
+# kubectl get deployments.apps presentation 
+NAME           READY   UP-TO-DATE   AVAILABLE   AGE
+presentation   1/3     3            1           69s
+
+# kubectl get deployments.apps presentation 
+NAME           READY   UP-TO-DATE   AVAILABLE   AGE
+presentation   3/3     3            3           97s
+```
+
+
+
+
+
+### 9. nodeSelector及scheduler配置
+
+```
+题目：
+Schedule a pod as follows:
+	Name: nginx-kusc00401
+	Image: nginx
+	Node selector: disk=spinning
+```
+
+```bash
+精简命令：
+# kubectl run nginx-kusc00401 --image=nginx --dry-run=client -o yaml > kusc.yaml
+在containers一行的上面添加：
+  nodeSelector:
+    disk: spinning
+    
+# kubectl apply -f kusc.yaml
+```
+
+```bash
+详细命令：
+config env
+# kubectl get nodes
+NAME          STATUS   ROLES           AGE   VERSION
+k8s-docker1   Ready    worker          11d   v1.26.2
+k8s-docker2   Ready    worker          11d   v1.26.2
+k8s-master    Ready    control-plane   11d   v1.26.4
+
+# kubectl label node k8s-docker2 disk=spinning
+node/k8s-docker2 labeled
+
+answer
+
+# kubectl run --help
+Usage:
+  kubectl run NAME --image=image [--env="key=value"] [--port=port] [--dry-run=server|client] [--overrides=inline-json]
+[--command] -- [COMMAND] [args...] [options]
+
+# kubectl run nginx-kusc00401 --image=nginx --dry-run=client -o yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  creationTimestamp: null
+  labels:
+    run: nginx-kusc00401
+  name: nginx-kusc00401
+spec:
+  containers:
+  - image: nginx
+    name: nginx-kusc00401
+    resources: {}
+  dnsPolicy: ClusterFirst
+  restartPolicy: Always
+status: {}
+
+添加nodeSelector一项进行修改：
+---
+# ns-01.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  labels:
+    run: nginx-kusc00401
+  name: nginx-kusc00401
+spec:
+  nodeSelector:
+    disk: spinning
+  containers:
+  - image: nginx
+    name: nginx-kusc00401
+    resources: {}
+  dnsPolicy: ClusterFirst
+  restartPolicy: Always
+  
+# kubectl apply -f ns-01.yaml 
+pod/nginx-kusc00401 created  
+```
+
+
+
+
+### 10. kubectl describe过滤Taints
+
+```
+题目：
+Check to see how many nodes are ready(not including nodes tainted NoSchedule) and write the number to /opt/KUSCoo402/kusc00402.txt.
+```
+
+```bash
+精简命令：
+# for i in `kubectl get nodes|grep -v NAME|grep Ready|awk '{print $1}'`; do kubectl describe nodes $i |grep Taints|grep "<none>"; done| wc -l
+
+echo 1 > /opt/KUSCoo402/kusc00402.txt
+```
+
+```bash
+详细命令：
+config evn
+# kubectl get nodes
+NAME          STATUS   ROLES           AGE   VERSION
+k8s-docker1   Ready    worker          11d   v1.26.2
+k8s-docker2   Ready    worker          11d   v1.26.2
+k8s-master    Ready    control-plane   11d   v1.26.4
+# kubectl taint node k8s-docker2 unuse=tmp:NoSchedule
+node/k8s-docker2 tainted
+# kubectl get nodes
+NAME          STATUS   ROLES           AGE   VERSION
+k8s-docker1   Ready    worker          11d   v1.26.2
+k8s-docker2   Ready    worker          11d   v1.26.2
+k8s-master    Ready    control-plane   11d   v1.26.4
+
+# kubectl describe nodes k8s-docker2|grep -i taints
+Taints:             unuse=tmp:NoSchedule
+# kubectl describe nodes k8s-docker1|grep -i taints
+Taints:             <none>
+# kubectl describe nodes k8s-master|grep -i taints
+Taints:             node-role.kubernetes.io/control-plane:NoSchedule
+
+answer
+
+# for i in `kubectl get nodes|grep -v NAME|grep Ready|awk '{print $1}'`; do kubectl describe nodes $i |grep Taints|grep "<none>"; done
+Taints:             <none>
+
+# for i in `kubectl get nodes|grep -v NAME|grep Ready|awk '{print $1}'`; do kubectl describe nodes $i |grep Taints|grep "<none>"; done| wc -l
+1
+
+# echo 1 > /opt/KUSCoo402/kusc00402.txt
+```
+
+```bash
+参考配置：
+for i in `kubectl get nodes  | awk '$2 ~/^Ready/{print $1}'`;do kubectl describe node $i |grep Taints |grep "<none>";done | wc -l
+
+echo 1 > /opt/KUSCoo402/kusc00402.txt
+```
+
+
+
+### 11. pod多容器配置
+
+```
+题目：
+Create a pod named kucc8 with a single app container for each of the following images running inside(there may be between 1 and 4 images specified):
+nginx + redis + memcached + consul
+```
+
+```bash
+精简命令：
+# kubectl run --help
+# kubectl run kucc8 --image=nginx --dry-run=client -o yaml > kucc8.yaml
+修改yaml添加:
+  - image: redis
+    name: redis
+  - image: memcached 
+    name: memcached
+  - image: consul
+    name: consul
+# kubectl create -f ./kucc8.yaml 
+```
+
+```bash
+详细命令：
+# kubectl run --help
+...输出省略...
+Usage:
+  kubectl run NAME --image=image [--env="key=value"] [--port=port] [--dry-run=server|client] [--overrides=inline-json]
+[--command] -- [COMMAND] [args...] [options]
+
+# kubectl run kucc8 --image=nginx --dry-run=client -o yaml > kucc8.yaml
+# vi kucc8.yaml 
+# cat kucc8.yaml 
+apiVersion: v1
+kind: Pod
+metadata:
+  labels:
+    run: kucc8
+  name: kucc8
+spec:
+  containers:
+  - image: nginx
+    name: kucc8
+  - image: redis
+    name: redis
+  - image: memcached 
+    name: memcached
+  - image: consul
+    name: consul
+    resources: {}
+  dnsPolicy: ClusterFirst
+  restartPolicy: Always
+
+# kubectl create -f ./kucc8.yaml 
+pod/kucc8 created
+```
+
+
+
+
+### 12. pv配置
+
+```
+题目：
+Create a persistent volume with name app-config, of capacity 1Gi and access mode ReadOnlyMany. The type of volume is hostPath and its location is /srv/app-config.
 ```
 
 ```bash
@@ -651,16 +1408,191 @@ Configure the new service to also expose the individual Pods via a NodePort on t
 
 ```bash
 详细命令：
+# kubectl explain pv.spec
+---
+# pv.yaml
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: app-config
+spec:
+  capacity:
+    storage: 1G
+  accessModes:
+    - ReadOnlyMany
+  hostPath:
+    path: /srv/app-config
+---
 
+# kubectl apply -f pv.yaml 
+persistentvolume/app-config created
+# kubectl get pv
+NAME         CAPACITY   ACCESS MODES   RECLAIM POLICY   STATUS      CLAIM                         STORAGECLASS   REASON   AGE
+app-config   1G         ROX            Retain           Available                                                         3s
 ```
 
 
+### 13. pvc及volumeMounts/volumes配置
 
-
-### 8. xxx
 ```
 题目：
-将一个名为ek8s-node-1的节点设置为不可用并将其上的pod重新调度
+Create a new PersistentVolumeClaim:
+	Name: pv-volume
+	Class: csi-hostpath-sc
+	Capacity: 10Mi
+Create a new Pod which mounts the PersistentVolumeClaim as a volume:
+	Name: web-server
+	Image: nginx
+	Mount path: /usr/share/nginx/html
+Configure the new Pod to have ReadWriteOnce access on the volume.
+Finally, using kubectl edit or kubectl patch expand the PersistentVolumeClaim to a capacity of 70Mi and record that change
+
+```
+
+```bash
+精简命令：
+# kubectl explain pvc.spec
+# kubectl run web-server --image=nginx --dry-run=client -o yaml > web-server.yaml
+
+---
+# web-server.yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: pv-volume
+spec:
+  accessModes: 
+    - ReadWriteOnce
+  storageClassName: csi-hostpath-sc
+  resources:
+    requests:
+      storage: 10Mi
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  labels:
+    run: web-server
+  name: web-server
+spec:
+  containers:
+  - image: nginx
+    name: web-server
+    resources: {}
+    volumeMounts:
+    - name: pv-volume
+      mountPath: /usr/share/nginx/html
+  dnsPolicy: ClusterFirst
+  restartPolicy: Always
+  volumes:
+  - name: pv-volume
+    persistentVolumeClaim:
+      claimName: pv-volume
+```
+
+```bash
+详细命令：
+config env:
+安装nfs-kernel-server及存储类csi-hostpath-sc
+
+answer:
+
+# kubectl explain pvc.spec
+# kubectl run web-server --image=nginx --dry-run=client -o yaml > web-server.yaml
+
+---
+# web-server.yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: pv-volume
+spec:
+  accessModes: 
+    - ReadWriteOnce
+  storageClassName: csi-hostpath-sc
+  resources:
+    requests:
+      storage: 10Mi
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  labels:
+    run: web-server
+  name: web-server
+spec:
+  containers:
+  - image: nginx
+    name: web-server
+    resources: {}
+    volumeMounts:
+    - name: pv-volume
+      mountPath: /usr/share/nginx/html
+  dnsPolicy: ClusterFirst
+  restartPolicy: Always
+  volumes:
+  - name: pv-volume
+    persistentVolumeClaim:
+      claimName: pv-volume
+      
+# kubectl apply -f web-server.yaml
+
+修改为70Mi
+# kubectl edit pvc pv-volume --record=true
+```
+
+
+
+### 14. kubectl logs
+
+```
+疑问：
+kubectl logs bar |grep unable-to-access-website > /opt/KUTR00101/bar
+kubectl logs -f bar |grep unable-to-access-website > /opt/KUTR00101/bar
+```
+
+
+
+```
+题目：
+Monitor the logs of pod bar and:
+	Extract log lines corresponding to error unable-to-access-website
+	Write them to /opt/KUTR00101/bar
+```
+
+```bash
+精简命令：
+# kubectl logs bar|grep unable-to-access-website > /opt/KUTR00101/bar
+# cat /opt/KUTR00101/bar
+```
+
+```bash
+详细命令：
+config env:
+# kubectl run bar --image=registry.cn-zhangjiakou.aliyuncs.com/breezey/bar
+# mkdir /opt/KUTR00101
+# touch /opt/KUTR00101/bar
+
+answer:
+# kubectl get pod bar
+NAME   READY   STATUS    RESTARTS   AGE
+bar    1/1     Running   0          72s
+
+# kubectl logs bar|grep unable-to-access-website > /opt/KUTR00101/bar
+# cat /opt/KUTR00101/bar
+```
+
+### 15. 一个pod多个容器，sidecar，共享volume
+
+```
+题目：
+Add a busybox sidecar container to the existing Pod big-corp-app.The new sidecar container has to run the following command: 
+/bin/sh -c tail -n+1 /var/log/big-corp-app.log
+
+Use a volume mount named logs to make the file /var/log/big-corp-app.log available to the sidecar container
+
+warn: Don't modify the existing container. Don't modify the path of the log file. both containers must access it at /var/log/big-corp-app.log
+
 ```
 
 ```bash
@@ -670,18 +1602,138 @@ Configure the new service to also expose the individual Pods via a NodePort on t
 
 ```bash
 详细命令：
+config env:
+# kubectl run  big-corp-app --image=registry.cn-zhangjiakou.aliyuncs.com/breezey/bar 
+
+# answer
+
+# kubectl get pod big-corp-app -o yaml > big-corp-app.yaml
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  labels:
+    run: big-corp-app
+  name: big-corp-app
+  namespace: default
+spec:
+  containers:
+  - image: registry.cn-zhangjiakou.aliyuncs.com/breezey/bar
+    imagePullPolicy: Always
+    name: big-corp-app
+    resources: {}
+    terminationMessagePath: /dev/termination-log
+    terminationMessagePolicy: File
+    volumeMounts:
+    - mountPath: /var/run/secrets/kubernetes.io/serviceaccount
+      name: kube-api-access-wz9kd
+      readOnly: true
+    - mountPath: /var/log
+      name: logs
+  - name: busybox
+    image: busybox
+    command:
+    - /bin/sh 
+    - -c 
+    - tail -n+1 /var/log/big-corp-app.log
+    volumeMounts:
+    - mountPath: /var/log
+      name: logs
+      readOnly: true
+  dnsPolicy: ClusterFirst
+  enableServiceLinks: true
+  nodeName: k8s-docker1
+  preemptionPolicy: PreemptLowerPriority
+  priority: 0
+  restartPolicy: Always
+  schedulerName: default-scheduler
+  securityContext: {}
+  serviceAccount: default
+  serviceAccountName: default
+  terminationGracePeriodSeconds: 30
+  tolerations:
+  - effect: NoExecute
+    key: node.kubernetes.io/not-ready
+    operator: Exists
+    tolerationSeconds: 300
+  - effect: NoExecute
+    key: node.kubernetes.io/unreachable
+    operator: Exists
+    tolerationSeconds: 300
+  volumes:
+  - name: logs
+    emptyDir: {}
+  - name: kube-api-access-wz9kd
+    projected:
+      defaultMode: 420
+      sources:
+      - serviceAccountToken:
+          expirationSeconds: 3607
+          path: token
+      - configMap:
+          items:
+          - key: ca.crt
+            path: ca.crt
+          name: kube-root-ca.crt
+      - downwardAPI:
+          items:
+          - fieldRef:
+              apiVersion: v1
+              fieldPath: metadata.namespace
+            path: namespace
+---
+# kubectl delete pod big-core-app
+
+# kubectl apply -f big-core-app.yaml 
+pod/big-corp-app created
+```
+
+```bash
+参考答案：
+# answer
+# big-corp-app.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  creationTimestamp: null
+  labels:
+    run: big-corp-app
+  name: big-corp-app
+spec:
+  volumes:
+  - name: logs
+    emptyDir: 
+  containers: 
+- image: registry.cn-zhangjiakou.aliyuncs.com/breezey/bar
+    name: big-corp-app
+    volumeMounts:
+    - name: logs
+      mountPath: /var/log
+resources: {}
+  - name: busybox
+image: busybox
+volumeMounts:
+- name: logs
+  mountPath: /var/log
+command:
+    - "/bin/sh"
+    - "-c"
+- "tail -n+1 /var/log/big-corp-app.log" 
+  dnsPolicy: ClusterFirst
+  restartPolicy: Always
+
+
+kubectl apply -f big-corp-app.yaml
 
 ```
 
 
 
-
-
-### 9. xxx
+### 16. kubectl top pods
 
 ```
 题目：
-将一个名为ek8s-node-1的节点设置为不可用并将其上的pod重新调度
+From the pod label name=cpu-loader, find pods running high CPU workloads and write the name of the pod consuming most CPU to file /opt/KUTR00401.txt(which alreay exists).
 ```
 
 ```bash
@@ -691,17 +1743,71 @@ Configure the new service to also expose the individual Pods via a NodePort on t
 
 ```bash
 详细命令：
+config env:
+kubectl create deploy cpu-loader --image=mysql --replicas=5 --dry-run=client -o yaml > cpu-loader.yaml
 
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  creationTimestamp: null
+  labels:
+    name: cpu-loader
+  name: cpu-loader
+spec:
+  replicas: 5
+  selector:
+    matchLabels:
+      name: cpu-loader
+  strategy: {}
+  template:
+    metadata:
+      creationTimestamp: null
+      labels:
+        name: cpu-loader
+    spec:
+      containers:
+      - image: mysql
+        name: mysql
+        env:
+        - name: MYSQL_ROOT_PASSWORD
+          value: wordpress
+        resources: {}
+status: {}
+
+
+kubectl apply -f cpu-loader.yaml
+
+answer:
+s
+
+# kubectl top pods -l name=cpu-loader --sort-by=cpu|grep -v NAME|head -1|awk '{print $1}' > /opt/KUTR00401.txt
+
+```
+
+```bash
+参考答案：
+# kubectl top pods -l name=cpu-loader | sort -k2 -nr | head -1 | awk '{print $1}' > /tmp/cpu-loader.txt
 ```
 
 
 
 
-### 10. xxx
+
+### 17. docker -kubelet
 
 ```
 题目：
-将一个名为ek8s-node-1的节点设置为不可用并将其上的pod重新调度
+A kubernetes worker node, named wk8s-node-0 is in state NotReady. Investigate why this is the case, and perform any appropriate steps to bring the node to a Ready state,ensuring that any changes are made permanent.
+
+tips: 
+
+you can ssh to the failed node using:
+ssh wk8s-node-0
+
+you can assume elevated privileges on the node with the following command：
+sudo  -i 
+
 ```
 
 ```bash
@@ -711,230 +1817,11 @@ Configure the new service to also expose the individual Pods via a NodePort on t
 
 ```bash
 详细命令：
+# systemctl start docker 
+
+# systemctl start kubelet 
+
+# systemctl enable kubelet docker
 
 ```
 
-
-### 11. xxx
-
-```
-题目：
-将一个名为ek8s-node-1的节点设置为不可用并将其上的pod重新调度
-```
-
-```bash
-精简命令：
-
-```
-
-```bash
-详细命令：
-
-```
-
-
-
-
-### 12. xxx
-
-```
-题目：
-将一个名为ek8s-node-1的节点设置为不可用并将其上的pod重新调度
-```
-
-```bash
-精简命令：
-
-```
-
-```bash
-详细命令：
-
-```
-
-
-### 13. xxx
-
-```
-题目：
-将一个名为ek8s-node-1的节点设置为不可用并将其上的pod重新调度
-```
-
-```bash
-精简命令：
-
-```
-
-```bash
-详细命令：
-
-```
-
-
-
-### 14. xxx
-
-```
-题目：
-将一个名为ek8s-node-1的节点设置为不可用并将其上的pod重新调度
-```
-
-```bash
-精简命令：
-
-```
-
-```bash
-详细命令：
-
-```
-
-### 15. xxx
-
-```
-题目：
-将一个名为ek8s-node-1的节点设置为不可用并将其上的pod重新调度
-```
-
-```bash
-精简命令：
-
-```
-
-```bash
-详细命令：
-
-```
-
-
-
-### 16. xxx
-
-```
-题目：
-将一个名为ek8s-node-1的节点设置为不可用并将其上的pod重新调度
-```
-
-```bash
-精简命令：
-
-```
-
-```bash
-详细命令：
-
-```
-
-
-
-
-
-### 17. xxx
-
-```
-题目：
-将一个名为ek8s-node-1的节点设置为不可用并将其上的pod重新调度
-```
-
-```bash
-精简命令：
-
-```
-
-```bash
-详细命令：
-
-```
-
-
-
-### 18. xxx
-
-```
-题目：
-将一个名为ek8s-node-1的节点设置为不可用并将其上的pod重新调度
-```
-
-```bash
-精简命令：
-
-```
-
-```bash
-详细命令：
-
-```
-
-### 19. xxx
-
-```
-题目：
-将一个名为ek8s-node-1的节点设置为不可用并将其上的pod重新调度
-```
-
-```bash
-精简命令：
-
-```
-
-```bash
-详细命令：
-
-```
-
-
-
-### 20. xxx
-
-```
-题目：
-将一个名为ek8s-node-1的节点设置为不可用并将其上的pod重新调度
-```
-
-```bash
-精简命令：
-
-```
-
-```bash
-详细命令：
-
-```
-
-
-
-### 21. xxx
-
-```
-题目：
-将一个名为ek8s-node-1的节点设置为不可用并将其上的pod重新调度
-```
-
-```bash
-精简命令：
-
-```
-
-```bash
-详细命令：
-
-```
-
-
-
-### 22. xxx
-
-```
-题目：
-将一个名为ek8s-node-1的节点设置为不可用并将其上的pod重新调度
-```
-
-```bash
-精简命令：
-
-```
-
-```bash
-详细命令：
-
-```
