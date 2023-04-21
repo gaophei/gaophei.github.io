@@ -236,6 +236,10 @@ NAME                     ROLE                                 AGE
 cicd-token-rolebinding   ClusterRole/deployment-clusterrole   9s
 
 # kubectl delete deployment test-busybox -n app-team1
+
+验证权限：
+# kubectl -n app-team1 auth can-i create deployments --as system:serviceaccount:app-team1:cicd-token
+# kubectl -n app-team1 auth can-i create secrets --as system:serviceaccount:app-team1:cicd-token 
 ```
 
 
@@ -322,6 +326,35 @@ Do not upgrade the worker nodes,etcd,the container manager,the CNI plugin, the D
 
 # apt-cache madison kubeadm|more
 
+# apt-mark unhold kubeadm && \
+ apt-get update && apt-get install -y kubeadm=1.26.4-00 && \
+ apt-mark hold kubeadm
+
+# kubeadm version
+
+# kubeadm upgrade plan
+
+# kubeadm upgrade apply v1.26.4 --etcd-upgrade=false
+
+# apt-mark unhold kubelet kubectl && \
+apt-get update && apt-get install -y kubelet=1.26.4-00 kubectl=1.26.4-00 && \
+apt-mark hold kubelet kubectl
+
+# sudo systemctl daemon-reload
+# sudo systemctl retart kubelet
+
+# kubectl uncordon k8s-master
+
+# kubectl get nodes
+```
+```bash
+精简命令参考命令：
+# kubectl drain k8s-master --ingore-daemonsets
+
+# apt update -y
+
+# apt-cache madison kubeadm|more
+
 # apt upgrade kubeadm=1.26.4-00 kubelet=1.26.4-00 kubectl=1.26.4-00 -y
 
 # kubeadm version
@@ -333,10 +366,16 @@ Do not upgrade the worker nodes,etcd,the container manager,the CNI plugin, the D
 # kubectl uncordon k8s-master
 
 # kubectl get nodes
+
+```
+
+
+```bash
+
 ```
 
 ```bash
-详细命令：
+详细命令参考命令：
 # kubectl drain k8s-master --ignore-daemonsets 
 node/k8s-master already cordoned
 Warning: ignoring DaemonSet-managed Pods: kube-system/calico-node-w5xph, kube-system/kube-proxy-zmzxx
@@ -375,7 +414,10 @@ ii  kubelet                               1.26.2-00                         amd6
 root@k8s-master:~# dpkg -l |grep kubectl
 ii  kubectl                               1.26.2-00                         amd64        Kubernetes Command Line Tool
 
-# apt upgrade kubeadm=1.26.4-00 kubelet=1.26.4-00 kubectl=1.26.4-00 -y
+# apt-mark unhold kubeadm && \
+ apt-get update && apt-get install -y kubeadm=1.26.4-00 && \
+ apt-mark hold kubeadm
+
 ...输出省略...
 
 # kubeadm version
@@ -478,6 +520,13 @@ _____________________________________________________________________
 [upgrade/successful] SUCCESS! Your cluster was upgraded to "v1.26.4". Enjoy!
 
 [upgrade/kubelet] Now that your control plane is upgraded, please proceed with upgrading your kubelets if you haven't already done so.
+
+# apt-mark unhold kubelet kubectl && \
+apt-get update && apt-get install -y kubelet=1.26.4-00 kubectl=1.26.4-00 && \
+apt-mark hold kubelet kubectl
+
+# sudo systemctl daemon-reload
+# sudo systemctl retart kubelet
 
 # kubectl get nodes
 NAME          STATUS                     ROLES           AGE   VERSION
@@ -1042,6 +1091,15 @@ service/front-end-svc created
 # kubectl get svc
 NAME            TYPE       CLUSTER-IP    EXTERNAL-IP   PORT(S)        AGE
 front-end-svc   NodePort   10.98.24.28   <none>        80:32063/TCP   6s
+
+或者直接用kubectl expose命令：
+# kubectl expose deployment --help
+...输出省略...
+Usage:
+  kubectl expose (-f FILENAME | TYPE NAME) [--port=port] [--protocol=TCP|UDP|SCTP] [--target-port=number-or-name]
+[--name=name] [--external-ip=external-ip-of-service] [--type=type] [options]
+
+# kubectl expose deployment front-end --name=front-end-svc --port=80 --protocol=TCP --target-port=80 --type=NodePort
 ```
 
 
@@ -1153,6 +1211,27 @@ ingress.networking.k8s.io/ping created
 # kubectl -n ing-internal get ingress
 NAME   CLASS   HOSTS   ADDRESS   PORTS   AGE
 ping   nginx   *                 80      41s
+
+网址模板：
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: minimal-ingress
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+spec:
+  ingressClassName: nginx-example
+  rules:
+  - http:
+      paths:
+      - path: /testpath
+        pathType: Prefix
+        backend:
+          service:
+            name: test
+            port:
+              number: 80
 ```
 
 
@@ -1161,7 +1240,7 @@ ping   nginx   *                 80      41s
 ### 8. deployment的扩缩容配置
 ```
 题目：
-Scale the deploy persentation to 3 pods 
+Scale the deploy persentation to 3 pods
 ```
 
 ```bash
@@ -1189,6 +1268,13 @@ presentation   1/3     3            1           69s
 # kubectl get deployments.apps presentation 
 NAME           READY   UP-TO-DATE   AVAILABLE   AGE
 presentation   3/3     3            3           97s
+
+
+
+Scale the deploy persentation to 3 pods and record it
+# kubectl scale deployment presentation --replicas=3 --record=true
+Flag --record has been deprecated, --record will be removed in the future
+deployment.apps/abc scaled
 ```
 
 
@@ -1227,7 +1313,10 @@ k8s-master    Ready    control-plane   11d   v1.26.4
 # kubectl label node k8s-docker2 disk=spinning
 node/k8s-docker2 labeled
 
+
 answer
+
+# kubectl get nodes --show-labels
 
 # kubectl run --help
 Usage:
@@ -1330,6 +1419,10 @@ Taints:             <none>
 for i in `kubectl get nodes  | awk '$2 ~/^Ready/{print $1}'`;do kubectl describe node $i |grep Taints |grep "<none>";done | wc -l
 
 echo 1 > /opt/KUSCoo402/kusc00402.txt
+
+
+# kubectl describe node | grep -i taints|grep -v -i -e noschedule -e unreachable | wc -l
+1
 ```
 
 
@@ -1537,6 +1630,12 @@ spec:
       
 # kubectl apply -f web-server.yaml
 
+确认存储类是否允许扩容，注意下面的ALLOWVOLUMEEXPANSION参数是否为true
+# kubectl get storageclass
+NAME                        PROVISIONER         RECLAIMPOLICY   VOLUMEBINDINGMODE   ALLOWVOLUMEEXPANSION   AGE
+csi-hostpath-sc (default)   cnlxh/nfs-storage   Delete          Immediate           true                   18h
+
+
 修改为70Mi
 # kubectl edit pvc pv-volume --record=true
 ```
@@ -1682,6 +1781,7 @@ spec:
               fieldPath: metadata.namespace
             path: namespace
 ---
+pod不支持直接修改，确认没问题之后，直接删除原有pod并重建
 # kubectl delete pod big-core-app
 
 # kubectl apply -f big-core-app.yaml 
@@ -1704,21 +1804,21 @@ spec:
   - name: logs
     emptyDir: 
   containers: 
-- image: registry.cn-zhangjiakou.aliyuncs.com/breezey/bar
+  - image: registry.cn-zhangjiakou.aliyuncs.com/breezey/bar
     name: big-corp-app
     volumeMounts:
     - name: logs
       mountPath: /var/log
-resources: {}
+    resources: {}
   - name: busybox
-image: busybox
-volumeMounts:
-- name: logs
-  mountPath: /var/log
-command:
+    image: busybox
+    volumeMounts:
+    - name: logs
+      mountPath: /var/log
+    command:
     - "/bin/sh"
     - "-c"
-- "tail -n+1 /var/log/big-corp-app.log" 
+    - "tail -n+1 /var/log/big-corp-app.log" 
   dnsPolicy: ClusterFirst
   restartPolicy: Always
 
@@ -1781,12 +1881,13 @@ kubectl apply -f cpu-loader.yaml
 answer:
 s
 
-# kubectl top pods -l name=cpu-loader --sort-by=cpu|grep -v NAME|head -1|awk '{print $1}' > /opt/KUTR00401.txt
+# kubectl top pods -l name=cpu-loader -A --sort-by=cpu|grep -v NAME|head -1|awk '{print $1}' > /opt/KUTR00401.txt
 
 ```
 
 ```bash
 参考答案：
+# kubectl top pod -l name=cpu-user -A --sort-by cpu 
 # kubectl top pods -l name=cpu-loader | sort -k2 -nr | head -1 | awk '{print $1}' > /tmp/cpu-loader.txt
 ```
 
@@ -1817,7 +1918,21 @@ sudo  -i
 
 ```bash
 详细命令：
+# kubectl get nodes
+# kubectl describe nodes cka-worker1
+此处注意下节点的Container Runtime Version是containerd还是docker
+Container Runtime Version:  containerd://1.6.20
+Container Runtime Version:  docker://23.0.1
+
+# ssh wk8s-node-0
+# sudo -i
+
+# systemctl status docker
+或者# systemctl status containerd
+
+
 # systemctl start docker 
+或者# systemctl start containerd
 
 # systemctl start kubelet 
 
