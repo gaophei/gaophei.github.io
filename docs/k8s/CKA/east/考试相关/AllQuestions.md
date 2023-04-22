@@ -1,0 +1,217 @@
+# Q1: Backup and Restore Etcd
+
+`lixiaohui tips:`
+
+`All question is used to kubernetes-admin@kubernetes context on cluster, please don't forget it before you are to do test`
+
+`You have to do this test first, if not, you might get a zero at score`
+
+First, create a snapshot of the existing etcd instance running at https://127.0.0.1:2379, saving the snapshot to /srv/etcd-snapshot.db.
+Next, restore an existing, previous snapshot localted at /srv/etcd_exam_backup.db
+
+The following TLS certificates/key are supplied for connecting to the server with etcdctl:
+
+CA certificate: /etc/kubernetes/pki/etcd/ca.crt
+
+Client certificate: /etc/kubernetes/pki/etcd/server.crt
+
+Client key: /etc/kubernetes/pki/etcd/server.key
+
+
+
+# Q2: RBAC
+
+You have been asked to create a new ClusterRole for a deployment pipeline and bind it to a specific ServiceAccount scoped to a specific namespace.
+Task
+Create a new ClusterRole named deployment-clusterrole, which only allows to create the following resource types:
+
+1. Deployment
+
+2. StatefulSet
+
+3. DaemonSet
+
+Create a new ServiceAccount named cicd-token in the existing namespace app-team1
+
+Bind the new ClusterRole to the new ServiceAccount cicd-token, limited to the namespace app-team1
+
+
+
+# Q3: Node Maintenance
+
+Set the node named cka-master as unavailiable and reschedule all the pods running on it
+
+
+
+# Q4: Upgrading kubeadm clusters
+
+Given an existing kubernetes cluster running version 1.26.4,upgrade all of the Kubernetes control plane and node components on the master node only to version 1.27.2,Please do not upgrade etcd database.
+
+You are also expected to upgrade kubelete and kubectl on the master node.
+
+
+
+
+
+# Q5: Create NetworkPolicy
+
+Create a new NetworkPolicy named allow-port-from-namespace that allows Pods in namespace corp to connect to port 80 of other Pods in the internal namespace.
+
+Ensure that the new NetworkPolicy:
+
+1. does not allow access to Pods not listening on port 80
+
+2. does not allow access from Pods not in namespace corp
+
+
+
+# Q6: Create service
+
+Reconfigure the existing deployment front-end and add a port specification named http exposing port 80/tcp of the existing container nginx
+
+Create a new service named front-end-svc exposing the container port http.
+
+Configure the new service to also expose the individual Pods via a NoedPort on the nodes on which they are scheduled.
+
+
+
+
+
+# Q7: Create ingress
+
+Create a new nginx ingress resource as follows:
+
+1. Name: pong
+
+2. Namespace: ing-internal
+
+3. Exposing service hi on path /hi using service port 5678
+
+Tips: 
+
+The availability of service hi can be checked using the following commands,which should retun hi: 
+curl -KL <INTERNAL_IP>/hi
+
+
+
+# Q8: Scale deployment
+
+Scale the deployment loadbalancer to 6 pods and record it
+
+
+
+
+
+# Q9: Assigning Pods to Nodes
+
+Schedule a pod as follows:
+
+1. Name: nginx-kusc00401
+
+2. Image: nginx
+
+3. Node selector: disk=spinning
+
+
+
+
+
+# Q10: Find how many health node
+
+Check to see how many nodes are ready (not including nodes tainted NoSchedule) and write the number to /opt/kusc00402.txt
+
+
+
+# Q11: Create multi container in pod
+
+Create a pod named kucc1 with a single app container for each of the following images running inside(there may be between 1 and 4 images specified): nginx+redis+memcached+consul.
+
+
+
+# Q12: Create PersistentVolume
+
+Create a persistent volume with name app-config, of capacity 2Gi and access mode ReadWriteMany. the type of volume is hostPath and its location is /srv/app-config
+
+
+
+
+
+# Q13: Create PVC
+
+Create a new PersistentVolumeClaim:
+
+1. Name: pv-volume
+
+2. Class: csi-hostpath-sc
+
+3. Capacity: 10Mi
+
+Create a new Pod which mounts the persistentVolumeClaim as a volume:
+
+1. Name: web-server
+
+2. Image: nginx
+
+3. Mount path: /usr/share/nginx/html
+
+Configure the new Pod to have ReadWriteOnce access on the volume.
+
+Finally, using kubectl edit or kubectl patch expand the PersistentVolumeClaim to a capacity of 70Mi and record that change.
+
+
+
+# Q14: Monitor pod logs
+
+Monitor the logs of pod foobar and :
+
+1. Extract log lines corresponding to error unable-to-access-website
+
+2. Write them to /opt/foobar.txt
+
+
+
+# Q15: Add sidecar container
+
+Without changing its existing containers, an existing Pod needs to be integrated into Kubernetes's build-in logging architecture(e.g kubectl logs).Adding a streaming sidecar container is a good and common way accomplish this requirement.
+
+Task
+Add a busybox sidecar container to the existing Pod legacy-app. The new sidecar container has to run the following command:
+
+```bash
+/bin/sh -c tail -n+1 -f /var/log/legacy-app.log
+```
+
+Use a volume mount named logs to make the file /var/log/legacy-app.log available to the sidecar container.
+
+**TIPS**
+
+1. Don't modify the existing container.
+
+2. Don't modify the path of the log file, both containers
+
+3. must access it at /var/log/legacy-app.log
+
+
+
+# Q16: Find pod with high cpu usage
+
+From the pod label name=cpu-user, find pods running high CPU workloads and write the name of the pod consuming most CPU to the file /opt/findhighcpu.txt
+
+
+
+# Q17: Fixing kubernetes node state
+
+A kubernetes worker node, named CKA-Worker1 is in state NotReady. Investigate why this is the case, and perform any appropriate steps to bring the node to a Ready state,ensuring that any changes are made permanent.
+
+Tips:
+
+1、you can ssh to the failed node using:
+
+ssh CKA-Worker1
+
+2、you can assume elevated privileges on the node with the following command：
+
+sudo  -i
+
+
+

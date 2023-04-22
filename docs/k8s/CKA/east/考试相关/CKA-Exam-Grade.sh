@@ -10,8 +10,8 @@ echo "##########################################################################
 #    1. complete /etc/hosts file
 #    
 #       192.168.1.234 k8s-master
-#       192.168.1.235 cka-worker1
-#       192.168.1.236 cka-worker2
+#       192.168.1.235 k8s-docker1
+#       192.168.1.236 k8s-docker2
 #
 #    2. root password has been set to 1 on all of node
 #
@@ -131,23 +131,23 @@ function node_maintenance {
 function upgrade {
   echo '集群升级题目：正在判定集群是否升级成功' 
   echo
-  if kubectl get nodes | grep k8s-master | grep -q 1.27.2;then
+  if kubectl get nodes | grep k8s-master | grep -q 1.27.1;then
     score=$(expr $score + 2 )
-    pass && echo 'k8s-master已升级到1.27.2'
+    pass && echo 'k8s-master已升级到1.27.1'
   else
-    fail && echo 'k8s-master没有成功升级到1.27.2'
+    fail && echo 'k8s-master没有成功升级到1.27.1'
   fi  
-  if kubectl version 2> /dev/null | grep -q v1.27.2 &> /dev/null &> /dev/null;then
+  if kubectl version 2> /dev/null | grep -q v1.27.1 &> /dev/null &> /dev/null;then
     score=$(expr $score + 2 )
-    pass && echo 'kubectl已升级到1.27.2'
+    pass && echo 'kubectl已升级到1.27.1'
   else
-    fail && echo 'kubectl没有成功升级到1.27.2'
+    fail && echo 'kubectl没有成功升级到1.27.1'
   fi  
-  if kubelet --version | grep -q v1.27.2 &> /dev/null;then
+  if kubelet --version | grep -q v1.27.1 &> /dev/null;then
     score=$(expr $score + 2 )
-    pass && echo 'kubelet已升级到1.27.2'
+    pass && echo 'kubelet已升级到1.27.1'
   else
-    fail && echo 'kubelet没有成功升级到1.27.2'
+    fail && echo 'kubelet没有成功升级到1.27.1'
   fi  
   echo
   echo  
@@ -218,7 +218,7 @@ function ingress {
   else
     fail && echo 'ing-internal命名空间中没有pong ingress'
   fi
-  if curl -kL cka-worker2/hi 2> /dev/null | grep -q hi &> /dev/null;then
+  if curl -kL k8s-docker2/hi 2> /dev/null | grep -q hi &> /dev/null;then
     score=$(expr $score + 2 )
     pass && echo '已经可以访问ingress暴露的url'
   else
@@ -461,11 +461,11 @@ function highcpu {
 function fixnode {
   echo '节点故障修复题目：正在判定故障节点是否已经修复'    
   echo
-  if kubectl get nodes | grep cka-worker1 | grep -w Ready &> /dev/null;then
+  if kubectl get nodes | grep k8s-docker1 | grep -w Ready &> /dev/null;then
     score=$(expr $score + 2 )
     pass && echo '恭喜恭喜，已成功修复'
   else
-    fail && echo '快修快修，CKA-Worker1这个节点还没有修好哦，加油了'
+    fail && echo '快修快修，k8s-docker1这个节点还没有修好哦，加油了'
   fi
   echo
   echo 

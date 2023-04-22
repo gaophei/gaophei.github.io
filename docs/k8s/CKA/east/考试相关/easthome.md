@@ -542,6 +542,9 @@ NAME          STATUS   ROLES           AGE   VERSION
 k8s-docker1   Ready    worker          11d   v1.26.2
 k8s-docker2   Ready    worker          11d   v1.26.2
 k8s-master    Ready    control-plane   11d   v1.26.4
+
+如果coredns发生了镜像变化，那么必须回滚
+# kubectl -n kube-system edit deployment coredns
 ```
 
 ```bash
@@ -905,6 +908,22 @@ Spec:
     To:
       PodSelector: <none>
   Policy Types: Ingress, Egress
+  
+# kubectl -n internal create deployment tomcat --image=tomcat 
+
+# kubectl -n internal create deployment redis --image=redis 
+
+# kubectl -n internal create deployment busybox --image=busybox
+
+# kubectl -n default create deployment tomcat --image=tomcat 
+
+# kubectl -n internal  exec -it busybox-xxx-xxx -- /bin/sh
+  telnet tomcatPodIP 8080
+  telnet redisPodIP 6379
+  
+# kubectl -n default  exec -it busybox-xxx-xxx -- /bin/sh
+  telnet tomcatPodIP 8080
+  telnet redisPodIP 6379
 ```
 
 
@@ -1293,12 +1312,14 @@ Schedule a pod as follows:
 
 ```bash
 精简命令：
+# kubectl get nodes --show-labels
 # kubectl run nginx-kusc00401 --image=nginx --dry-run=client -o yaml > kusc.yaml
 在containers一行的上面添加：
   nodeSelector:
     disk: spinning
     
 # kubectl apply -f kusc.yaml
+# kubectl get pod |grep nginx-kusc00401
 ```
 
 ```bash
@@ -1378,6 +1399,12 @@ Check to see how many nodes are ready(not including nodes tainted NoSchedule) an
 # for i in `kubectl get nodes|grep -v NAME|grep Ready|awk '{print $1}'`; do kubectl describe nodes $i |grep Taints|grep "<none>"; done| wc -l
 
 echo 1 > /opt/KUSCoo402/kusc00402.txt
+
+或者：
+先看Ready的node
+# kubectl get nodes
+再过滤taints
+# kubectl describe nodes |grep -i taints
 ```
 
 ```bash
@@ -1734,7 +1761,7 @@ spec:
     command:
     - /bin/sh 
     - -c 
-    - tail -n+1 /var/log/big-corp-app.log
+    - "tail -n+1 /var/log/big-corp-app.log"
     volumeMounts:
     - mountPath: /var/log
       name: logs
@@ -1786,6 +1813,8 @@ pod不支持直接修改，确认没问题之后，直接删除原有pod并重�
 
 # kubectl apply -f big-core-app.yaml 
 pod/big-corp-app created
+
+# kubectl logs big-core-app busybox
 ```
 
 ```bash

@@ -11631,6 +11631,8 @@ mypvc05   Bound    mypv05   1G         RWO            nfs            37s
 |  3   |   :r !seq 1 100   |              递归数字               |
 |  4   |   :r dockerfile   | 导入所在文件夹下的dockerfile的内容  |
 |  5   | :set paste ---> i | 解决在vim中直接粘贴内容时的缩进错乱 |
+|  6   |      :g/^$/d      |              删除空行               |
+|      |                   |                                     |
 
 
 
