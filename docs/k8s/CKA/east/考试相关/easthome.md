@@ -1,6 +1,6 @@
 
 
-### 0. kubectl context设置---注意集群的不同
+### 2. kubectl context设置---注意集群的不同
 
 ```bash
 精简命令：
@@ -11,7 +11,6 @@
 
 # ssh k8s-node-0
 # sudo -i
-
 ```
 
 
@@ -1140,6 +1139,8 @@ curl -KL <INTERNAL_IP>/hi
 
 ```bash
 精简命令：
+# kubectl get ingressclass
+
 ---
 # ingress.yaml
 apiVersion: networking.k8s.io/v1
@@ -1148,6 +1149,7 @@ metadata:
   name: ping
   namespace: ing-internal
 spec:
+  ingressClassName: nginx
   rules:
   - http:
       paths:
@@ -1180,6 +1182,9 @@ curl 10.111.223.202:5678/hi
 hi
 
 解析：
+# kubectl get ingressclass
+nginx   k8s.io/ingress-nginx   <none>       4d23h
+
 # kubectl create ingress 
 ...输出省略...
 Usage:
@@ -1214,6 +1219,7 @@ metadata:
   name: ping
   namespace: ing-internal
 spec:
+  ingressClassName: nginx
   rules:
   - http:
       paths:

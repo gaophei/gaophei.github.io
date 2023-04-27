@@ -11520,15 +11520,15 @@ mypvc05   Bound    mypv05   1G         RWO            nfs            37s
 
 ### 18.Kubernetes资源调度
 
-#### 11.1.Service基本概念
+#### 18.1.Kubernetes资源管理
 
-#### 11.2.服务发现
+#### 18.2.Kubernetes调度器
 
-#### 11.3.集群中的DNS
+#### 18.3.Kubernetes调度策略
 
-#### 11.4.Headless Service
+#### 18.4.Kubernetes调度优先级和抢占机制
 
-### 11.
+### 19.
 
 #### 11.1.Service基本概念
 
@@ -11632,6 +11632,8 @@ mypvc05   Bound    mypv05   1G         RWO            nfs            37s
 |  4   |   :r dockerfile   | 导入所在文件夹下的dockerfile的内容  |
 |  5   | :set paste ---> i | 解决在vim中直接粘贴内容时的缩进错乱 |
 |  6   |      :g/^$/d      |              删除空行               |
+|  7   |       :.,$d       |         从当前行到结尾删除          |
+|      |                   |                                     |
 |      |                   |                                     |
 
 
