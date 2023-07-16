@@ -2,6 +2,8 @@
 
 `lixiaohui tips:`
 
+kubectl config use-context kubernetes-admin@kubernetes
+
 `All question is used to kubernetes-admin@kubernetes context on cluster, please don't forget it before you are to do test`
 
 `You have to do this test first, if not, you might get a zero at score`
@@ -20,6 +22,9 @@ Client key: /etc/kubernetes/pki/etcd/server.key
 
 
 # Q2: RBAC
+
+
+kubectl config use-context kubernetes-admin@kubernetes
 
 
 `All question is used to kubernetes-admin@kubernetes context on cluster, please don't forget it before you are to do test`
@@ -43,6 +48,8 @@ Bind the new ClusterRole to the new ServiceAccount cicd-token, limited to the na
 
 # Q3: Node Maintenance
 
+kubectl config use-context kubernetes-admin@kubernetes
+
 `All question is used to kubernetes-admin@kubernetes context on cluster, please don't forget it before you are to do test`
 
 
@@ -51,6 +58,9 @@ Set the node named cka-master as unavailiable and reschedule all the pods runnin
 
 
 # Q4: Upgrading kubeadm clusters
+kubectl config use-context kubernetes-admin@kubernetes
+
+
 
 `All question is used to kubernetes-admin@kubernetes context on cluster, please don't forget it before you are to do test`
 
@@ -66,6 +76,10 @@ You are also expected to upgrade kubelete and kubectl on the master node.
 
 `All question is used to kubernetes-admin@kubernetes context on cluster, please don't forget it before you are to do test`
 
+kubectl config use-context kubernetes-admin@kubernetes
+
+
+
 Create a new NetworkPolicy named allow-port-from-namespace that allows Pods in namespace corp to connect to port 80 of other Pods in the internal namespace.
 
 Ensure that the new NetworkPolicy:
@@ -80,6 +94,9 @@ Ensure that the new NetworkPolicy:
 
 `All question is used to kubernetes-admin@kubernetes context on cluster, please don't forget it before you are to do test`
 
+kubectl config use-context kubernetes-admin@kubernetes
+
+
 Reconfigure the existing deployment front-end and add a port specification named http exposing port 80/tcp of the existing container nginx
 
 Create a new service named front-end-svc exposing the container port http.
@@ -93,6 +110,8 @@ Configure the new service to also expose the individual Pods via a NoedPort on t
 # Q7: Create ingress
 
 `All question is used to kubernetes-admin@kubernetes context on cluster, please don't forget it before you are to do test`
+kubectl config use-context kubernetes-admin@kubernetes
+
 
 Create a new nginx ingress resource as follows:
 registry.cn-zhangjiakou.aliyuncs.com/breezey/ping
@@ -113,6 +132,9 @@ curl -kL <INTERNAL_IP>/hi
 # Q8: Scale deployment
 
 `All question is used to kubernetes-admin@kubernetes context on cluster, please don't forget it before you are to do test`
+kubectl config use-context kubernetes-admin@kubernetes
+
+
 
 Scale the deployment loadbalancer to 6 pods and record it
 
@@ -123,6 +145,8 @@ Scale the deployment loadbalancer to 6 pods and record it
 # Q9: Assigning Pods to Nodes
 
 `All question is used to kubernetes-admin@kubernetes context on cluster, please don't forget it before you are to do test`
+kubectl config use-context kubernetes-admin@kubernetes
+
 
 Schedule a pod as follows:
 
@@ -137,6 +161,8 @@ Schedule a pod as follows:
 
 
 # Q10: Find how many health node
+kubectl config use-context kubernetes-admin@kubernetes
+
 
 `All question is used to kubernetes-admin@kubernetes context on cluster, please don't forget it before you are to do test`
 
@@ -145,6 +171,7 @@ Check to see how many nodes are ready (not including nodes tainted NoSchedule) a
 
 
 # Q11: Create multi container in pod
+kubectl config use-context kubernetes-admin@kubernetes
 
 `All question is used to kubernetes-admin@kubernetes context on cluster, please don't forget it before you are to do test`
 
@@ -156,6 +183,10 @@ Create a pod named kucc1 with a single app container for each of the following i
 
 `All question is used to kubernetes-admin@kubernetes context on cluster, please don't forget it before you are to do test`
 
+kubectl config use-context kubernetes-admin@kubernetes
+
+
+
 Create a persistent volume with name app-config, of capacity 2Gi and access mode ReadWriteMany. the type of volume is hostPath and its location is /srv/app-config
 
 
@@ -163,6 +194,7 @@ Create a persistent volume with name app-config, of capacity 2Gi and access mode
 # Q13: Create PVC
 
 `All question is used to kubernetes-admin@kubernetes context on cluster, please don't forget it before you are to do test`
+kubectl config use-context kubernetes-admin@kubernetes
 
 Create a new PersistentVolumeClaim:
 
@@ -187,6 +219,7 @@ Finally, using kubectl edit or kubectl patch expand the PersistentVolumeClaim to
 
 
 # Q14: Monitor pod logs
+kubectl config use-context kubernetes-admin@kubernetes
 
 `All question is used to kubernetes-admin@kubernetes context on cluster, please don't forget it before you are to do test`
 
@@ -199,6 +232,7 @@ Monitor the logs of pod foobar and :
 
 
 # Q15: Add sidecar container
+kubectl config use-context kubernetes-admin@kubernetes
 
 `All question is used to kubernetes-admin@kubernetes context on cluster, please don't forget it before you are to do test`
 
@@ -227,6 +261,10 @@ Use a volume mount named logs to make the file /var/log/legacy-app.log available
 
 `All question is used to kubernetes-admin@kubernetes context on cluster, please don't forget it before you are to do test`
 
+kubectl config use-context kubernetes-admin@kubernetes
+
+
+
 From the pod label name=cpu-user, find pods running high CPU workloads and write the name of the pod consuming most CPU to the file /opt/findhighcpu.txt
 
 
@@ -234,6 +272,10 @@ From the pod label name=cpu-user, find pods running high CPU workloads and write
 # Q17: Fixing kubernetes node state
 
 `All question is used to kubernetes-admin@kubernetes context on cluster, please don't forget it before you are to do test`
+
+kubectl config use-context kubernetes-admin@kubernetes
+
+
 
 A kubernetes worker node, named CKA-Worker1 is in state NotReady. Investigate why this is the case, and perform any appropriate steps to bring the node to a Ready state,ensuring that any changes are made permanent.
 
