@@ -794,7 +794,7 @@ cat /sys/kernel/mm/transparent_hugepage/enabled
 ##方法一
 #修改/etc/rc.local，并重启OS
 ```bash
-cat >> /etc/d/rc.local <<EOF
+cat >> /etc/rc.d/rc.local <<EOF
 if test -f /sys/kernel/mm/transparent_hugepage/enabled; then
    echo never > /sys/kernel/mm/transparent_hugepage/enabled
 fi
@@ -963,6 +963,7 @@ EOF
 #适用于vsphere平台直接共享存储磁盘
 
 #检查磁盘UUID
+
 ```bash
 sfdisk -s
 ##由于华三超融合平台不支持scsi_id命令，只能使用udevadm，改为裸块加入iscsi高速硬盘后，支持
@@ -2042,7 +2043,7 @@ PRCN-2067 : Port 1521 is not available across node(s) "db-rac01-vip"
 
 #先停止db-rac01-vip和db-rac02-vip
 crsctl stop resource ora.db-rac01.vip
-crsctl stop resource ora.db-rac01.vip
+crsctl stop resource ora.db-rac02.vip
 #检查是否有listener的残留进程
 ps -ef|grep tns
 #如果有以下类似进程，需kill掉，不然会存在Not All Endpoints Registered的问题
