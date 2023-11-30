@@ -10,11 +10,14 @@
 #建议
 
 ```
-vm: 16核/32G 
+主服务器: 物理机/128核/768G(512+256)
+从服务器: 虚拟机/32核/64G
 
-OS: oracle Linux 7.9(5.4.17-2011.6.2.el7uek.x86_64)
+OS: openEuler 22.03 LTS(5.10.0-60.18.0.50.oe2203.x86_64)
 
-磁盘LVM管理，挂载第二块磁盘1T，/data为最大分区
+OS磁盘LVM管理
+主：多路径挂载存储lun，目录/var/lib/mysql
+从：/分区中的/var/lib/mysql
 ```
 
 ## 部署过程
@@ -27,64 +30,66 @@ OS: oracle Linux 7.9(5.4.17-2011.6.2.el7uek.x86_64)
 
 ```bash
 cat >> /etc/hosts <<EOF
-10.20.12.136 mysql01
-10.20.12.137 mysql02
+10.0.2.30 DT_Mysql1
+10.0.2.31 DT_Mysql2
 EOF
 
-#mysql01
-hostnamectl set-hostname mysql01
-#mysql02
-hostnamectl set-hostname mysql02
+#DT_Mysql1
+hostnamectl set-hostname DT_Mysql1
+#DT_Mysql2
+hostnamectl set-hostname DT_Mysql2
 
 hostnamectl status
 
-ping mysql01 
-ping mysql02
+ping DT_Mysql1 
+ping DT_Mysql2
 
 ```
 
 ```
-[root@localhost ~]# hostnamectl set-hostname mysql01
+[root@localhost ~]# hostnamectl set-hostname DT_Mysql1
 [root@localhost ~]# exit
 
-[root@mysql01 ~]# hostnamectl status
-   Static hostname: mysql01
-         Icon name: computer-vm
-           Chassis: vm
-        Machine ID: 4e99db48ca56469d86d4043965953a54
-           Boot ID: d7b0f5da94ba4c43b9f3432a6c1258c1
-    Virtualization: kvm
-  Operating System: Oracle Linux Server 7.9
-       CPE OS Name: cpe:/o:oracle:linux:7:9:server
-            Kernel: Linux 5.4.17-2011.6.2.el7uek.x86_64
-      Architecture: x86-64
+[root@DTMysql1 etc]# hostnamectl status
+ Static hostname: DTMysql1
+ Pretty hostname: DT_Mysql1
+       Icon name: computer-server
+         Chassis: server
+      Machine ID: 7c0fde14018c4bc4a8cade288f67b489
+         Boot ID: 9b2f867c6c774803841fbb1812eb10b0
+Operating System: openEuler 22.03 LTS
+          Kernel: Linux 5.10.0-60.18.0.50.oe2203.x86_64
+    Architecture: x86-64
+ Hardware Vendor: Lenovo
+  Hardware Model: ThinkSystem SR860 -_7X69CTO1WW_-
 
-[root@mysql01 ~]# cat >> /etc/hosts <<EOF
-10.20.12.136 mysql01
-10.20.12.137 mysql02
+
+[root@DT_Mysql1 ~]# cat >> /etc/hosts <<EOF
+10.0.2.30 DT_Mysql1
+10.0.2.31 DT_Mysql2
 EOF
 
-[root@mysql01 ~]# cat /etc/hosts
+[root@DT_Mysql1 ~]# cat /etc/hosts
 127.0.0.1   localhost localhost.localdomain localhost4 localhost4.localdomain4
 ::1         localhost localhost.localdomain localhost6 localhost6.localdomain6
-10.20.12.136 mysql01
-10.20.12.137 mysql02
+10.0.2.30 DT_Mysql1
+10.0.2.31 DT_Mysql2
 
-[root@mysql01 ~]# ping mysql01 -c 1
-PING mysql01 (10.20.12.136) 56(84) bytes of data.
-64 bytes from mysql01 (10.20.12.136): icmp_seq=1 ttl=64 time=0.065 ms
+[root@DT_Mysql1 ~]# ping DT_Mysql1 -c 1
+PING DT_Mysql1 (10.0.2.30) 56(84) bytes of data.
+64 bytes from DT_Mysql1 (10.0.2.30): icmp_seq=1 ttl=64 time=0.065 ms
 
---- mysql01 ping statistics ---
+--- DT_Mysql1 ping statistics ---
 1 packets transmitted, 1 received, 0% packet loss, time 0ms
 rtt min/avg/max/mdev = 0.065/0.065/0.065/0.000 ms
-[root@mysql01 ~]# ping mysql02 -c 1
-PING mysql02 (10.20.12.137) 56(84) bytes of data.
-64 bytes from mysql02 (10.20.12.137): icmp_seq=1 ttl=64 time=0.619 ms
+[root@DT_Mysql1 ~]# ping DT_Mysql2 -c 1
+PING DT_Mysql2 (10.0.2.31) 56(84) bytes of data.
+64 bytes from DT_Mysql2 (10.0.2.31): icmp_seq=1 ttl=64 time=0.619 ms
 
---- mysql02 ping statistics ---
+--- DT_Mysql2 ping statistics ---
 1 packets transmitted, 1 received, 0% packet loss, time 0ms
 rtt min/avg/max/mdev = 0.619/0.619/0.619/0.000 ms
-[root@mysql01 ~]#
+[root@DT_Mysql1 ~]#
 
 ```
 
@@ -146,6 +151,64 @@ deb http://mirrors.aliyun.com/ubuntu/ focal-security multiverse
 EOF
 
 apt update
+
+
+#华为欧拉
+[root@DTMysql1 etc]# cd /etc/yum.repos.d/
+[root@DTMysql1 yum.repos.d]# ls
+openEuler.repo
+[root@DTMysql1 yum.repos.d]# cat openEuler.repo 
+#generic-repos is licensed under the Mulan PSL v2.
+#You can use this software according to the terms and conditions of the Mulan PSL v2.
+#You may obtain a copy of Mulan PSL v2 at:
+#    http://license.coscl.org.cn/MulanPSL2
+#THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR
+#IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR
+#PURPOSE.
+#See the Mulan PSL v2 for more details.
+
+[OS]
+name=OS
+baseurl=http://repo.openeuler.org/openEuler-22.03-LTS/OS/$basearch/
+enabled=1
+gpgcheck=1
+gpgkey=http://repo.openeuler.org/openEuler-22.03-LTS/OS/$basearch/RPM-GPG-KEY-openEuler
+
+[everything]
+name=everything
+baseurl=http://repo.openeuler.org/openEuler-22.03-LTS/everything/$basearch/
+enabled=1
+gpgcheck=1
+gpgkey=http://repo.openeuler.org/openEuler-22.03-LTS/everything/$basearch/RPM-GPG-KEY-openEuler
+
+[EPOL]
+name=EPOL
+baseurl=http://repo.openeuler.org/openEuler-22.03-LTS/EPOL/main/$basearch/
+enabled=1
+gpgcheck=1
+gpgkey=http://repo.openeuler.org/openEuler-22.03-LTS/OS/$basearch/RPM-GPG-KEY-openEuler
+
+[debuginfo]
+name=debuginfo
+baseurl=http://repo.openeuler.org/openEuler-22.03-LTS/debuginfo/$basearch/
+enabled=1
+gpgcheck=1
+gpgkey=http://repo.openeuler.org/openEuler-22.03-LTS/debuginfo/$basearch/RPM-GPG-KEY-openEuler
+
+[source]
+name=source
+baseurl=http://repo.openeuler.org/openEuler-22.03-LTS/source/
+enabled=1
+gpgcheck=1
+gpgkey=http://repo.openeuler.org/openEuler-22.03-LTS/source/RPM-GPG-KEY-openEuler
+
+[update]
+name=update
+baseurl=http://repo.openeuler.org/openEuler-22.03-LTS/update/$basearch/
+enabled=1
+gpgcheck=1
+gpgkey=http://repo.openeuler.org/openEuler-22.03-LTS/OS/$basearch/RPM-GPG-KEY-openEuler
+
 ```
 
 #### 4、开始时间同步及修改东8区
@@ -350,7 +413,7 @@ yum install -y mysql-community-server
 yum install -y mysql-community-{server,client,client-plugins,icu-data-files,common,libs,libs-compat}-8.0.20-1.el7
 ```
 
-#### 3、优化mysql---mysql01和mysql02有细微差别
+#### 3、优化mysql---DT_Mysql1和DT_Mysql2有细微差别
 
 #检查my.cnf
 
@@ -360,7 +423,7 @@ mysqld --defaults-file=/etc/my.cnf  --validate-config --log-error-verbosity=2
 
 
 
-##### 1) mysql01---/etc/my.cnf
+##### 1) DT_Mysql1---/etc/my.cnf
 
 ```bash
 cp /etc/my.cnf /etc/my.cnf.bak
@@ -385,11 +448,11 @@ sql_mode=STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_
 user = mysql
 port = 3306
 #basedir = /data/mysql
-datadir = /data/mysql
+datadir = /var/lib/mysql
 #tmpdir = /tmp
-socket = /data/mysql/mysql.sock
+socket = /var/lib/mysql/mysql.sock
 #服务器唯一id，默认为1，值范围为1～2^32−1. ；主数据库和从数据库的server-id不能重复
-server_id = 136
+server_id = 30
 #server_id = 137
 #mysqlx_port = 33060
 #管理员用来连接的端口号,注意如果admin_address没有设置的话,这个端口号是无效的
@@ -660,7 +723,7 @@ EOF
 ```mysql
 [client]
 port = 3306
-socket = /data/mysql/mysql.sock
+socket = /var/lib/mysql/mysql.sock
 [mysql]
 prompt = "\u@\h:\p [\d]> "
 no-auto-rehash
@@ -668,9 +731,9 @@ no-auto-rehash
 sql_mode=STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION
 user = mysql
 port = 3306
-datadir = /data/mysql
-socket = /data/mysql/mysql.sock
-server_id = 136
+datadir = /var/lib/mysql
+socket = /var/lib/mysql/mysql.sock
+server_id = 30
 admin_port = 33062
 admin_address = '127.0.0.1'
 create_admin_listener_thread = on
@@ -678,6 +741,7 @@ skip_name_resolve = 1
 default_time_zone = "+8:00"
 character-set-server = utf8mb4
 lower_case_table_names = 1
+default_authentication_plugin=mysql_native_password
 log_bin_trust_function_creators = 1
 max_connections = 3000
 max_user_connections = 2000
@@ -690,7 +754,7 @@ log_replica_updates = on
 gtid_mode = on
 enforce_gtid_consistency = on
 binlog_cache_size = 2M
-max_binlog_size = 512M
+max_binlog_size = 100M
 binlog_rows_query_log_events = on
 sync_binlog = 1
 binlog_group_commit_sync_delay = 0
@@ -736,11 +800,17 @@ relay_log_recovery = ON
 replica_preserve_commit_order = OFF
 replica_parallel_type = LOGICAL_CLOCK
 replica_parallel_workers = 16
-innodb_buffer_pool_size = 16384M
-innodb_buffer_pool_instances = 4
+innodb_buffer_pool_size = 420000M
+innodb_buffer_pool_instances = 8
 innodb_buffer_pool_load_at_startup = 1
 innodb_buffer_pool_dump_at_shutdown = 1
-innodb_data_file_path = ibdata1:1024M:autoextend
+#innodb_data_file_path = ibdata1:1024M:autoextend
+#默认innodb_data_file_path = ibdata1:12M:autoextend
+#无法直接修改，否则报错
+#The Auto-extending innodb_system data file './ibdata1' is of a different size 4864 pages (rounded down to MB) than specified in the .cnf file: initial 65536 pages, max 0 (relevant if non-zero) pages!
+#可以再添加个文件
+#innodb_data_file_path = ibdata1:12M;ibdata2:1024M:autoextend
+
 innodb_flush_log_at_trx_commit = 1
 innodb_log_buffer_size = 64M
 innodb_redo_log_capacity=1073741824
@@ -757,7 +827,7 @@ innodb_write_io_threads = 4
 innodb_deadlock_detect = on
 innodb_lock_wait_timeout = 20
 innodb_max_undo_log_size = 4G
-innodb_undo_directory = /data/mysql/mysql3306/data/undolog
+innodb_undo_directory = /var/lib/mysql
 innodb_undo_log_truncate = 1
 performance_schema                                                      = on
 performance_schema_consumer_global_instrumentation                      = on
@@ -776,12 +846,11 @@ performance_schema_instrument                                           = 'memor
 [mysqldump]
 quick
 max_allowed_packet = 32M
-
 ```
 
 
 
-##### 2) mysql02---/etc/my.cnf
+##### 2) DT_Mysql2---/etc/my.cnf
 
 ```bash
 cp /etc/my.cnf /etc/my.cnf.bak
@@ -811,7 +880,7 @@ datadir = /data/mysql
 socket = /data/mysql/mysql.sock
 #服务器唯一id，默认为1，值范围为1～2^32−1. ；主数据库和从数据库的server-id不能重复
 #server_id = 136
-server_id = 137
+server_id = 31
 #mysqlx_port = 33060
 #管理员用来连接的端口号,注意如果admin_address没有设置的话,这个端口号是无效的
 admin_port = 33062
@@ -906,7 +975,7 @@ long_query_time = 15
 #设置慢查询日志文件的路径和名称
 slow_query_log_file = slow.log
 #将没有使用索引的语句记录到慢查询日志
-log_queries_not_using_indexes = 0
+#log_queries_not_using_indexes = 1
 #设定每分钟记录到日志的未使用索引的语句数目,超过这个数目后只记录语句数量和花费的总时间
 log_throttle_queries_not_using_indexes = 60
 
@@ -1080,7 +1149,7 @@ EOF
 ```mysql
 [client]
 port = 3306
-socket = /data/mysql/mysql.sock
+socket = /var/lib/mysql/mysql.sock
 [mysql]
 prompt = "\u@\h:\p [\d]> "
 no-auto-rehash
@@ -1088,9 +1157,9 @@ no-auto-rehash
 sql_mode=STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION
 user = mysql
 port = 3306
-datadir = /data/mysql
-socket = /data/mysql/mysql.sock
-server_id = 137
+datadir = /var/lib/mysql
+socket = /var/lib/mysql/mysql.sock
+server_id = 31
 admin_port = 33062
 admin_address = '127.0.0.1'
 create_admin_listener_thread = on
@@ -1098,6 +1167,7 @@ skip_name_resolve = 1
 default_time_zone = "+8:00"
 character-set-server = utf8mb4
 lower_case_table_names = 1
+default_authentication_plugin=mysql_native_password
 log_bin_trust_function_creators = 1
 max_connections = 3000
 max_user_connections = 2000
@@ -1110,7 +1180,7 @@ log_replica_updates = on
 gtid_mode = on
 enforce_gtid_consistency = on
 binlog_cache_size = 2M
-max_binlog_size = 512M
+max_binlog_size = 100M
 binlog_rows_query_log_events = on
 sync_binlog = 1
 binlog_group_commit_sync_delay = 0
@@ -1156,11 +1226,17 @@ relay_log_recovery = ON
 replica_preserve_commit_order = OFF
 replica_parallel_type = LOGICAL_CLOCK
 replica_parallel_workers = 16
-innodb_buffer_pool_size = 16384M
-innodb_buffer_pool_instances = 4
+innodb_buffer_pool_size = 420000M
+innodb_buffer_pool_instances = 8
 innodb_buffer_pool_load_at_startup = 1
 innodb_buffer_pool_dump_at_shutdown = 1
-innodb_data_file_path = ibdata1:1024M:autoextend
+#innodb_data_file_path = ibdata1:1024M:autoextend
+#默认innodb_data_file_path = ibdata1:12M:autoextend
+#无法直接修改，否则报错
+#The Auto-extending innodb_system data file './ibdata1' is of a different size 4864 pages (rounded down to MB) than specified in the .cnf file: initial 65536 pages, max 0 (relevant if non-zero) pages!
+#可以再添加个文件
+#innodb_data_file_path = ibdata1:12M;ibdata2:1024M:autoextend
+
 innodb_flush_log_at_trx_commit = 1
 innodb_log_buffer_size = 64M
 innodb_redo_log_capacity=1073741824
@@ -1177,7 +1253,7 @@ innodb_write_io_threads = 4
 innodb_deadlock_detect = on
 innodb_lock_wait_timeout = 20
 innodb_max_undo_log_size = 4G
-innodb_undo_directory = /data/mysql/mysql3306/data/undolog
+innodb_undo_directory = /var/lib/mysql
 innodb_undo_log_truncate = 1
 performance_schema                                                      = on
 performance_schema_consumer_global_instrumentation                      = on
@@ -1200,7 +1276,7 @@ max_allowed_packet = 32M
 
 
 
-##### 3) mysqld.server---mysql01/mysql02
+##### 3) mysqld.server---DT_Mysql1/DT_Mysql2
 
 ```bash
 sed -i 's/LimitNOFILE = 10000/LimitNOFILE = 65500/g' /usr/lib/systemd/system/mysqld.service
@@ -1258,10 +1334,10 @@ flush privileges;
 ```sql
    set global validate_password.policy=0;
    set global validate_password.length=1;
-create user 'repl'@'10.20.12.%' identified with mysql_native_password by 'Repl123!@#2023';
-grant replication slave on *.* to 'repl'@'10.20.12.%';
+create user 'repl'@'10.0.2.%' identified with mysql_native_password by 'Repl123!@#2023';
+grant replication slave on *.* to 'repl'@'10.0.2.%';
 
-show grants for 'repl'@'10.20.12.%';
+show grants for 'repl'@'10.0.2.%';
 
 SET @@GLOBAL.read_only = ON;
 flush tables with read lock; 
@@ -1278,11 +1354,11 @@ flush tables with read lock;
 ```bash
 /usr/bin/mysqldump -uroot -pMysql2023\!\@\#Root --quick --events --all-databases --master-data=2 --single-transaction --set-gtid-purged=OFF > 20231102.sql
 
-/usr/bin/mysqldump -uroot -pMysql2023\!\@\#Root --quick --events --all-databases --source-data=2 --single-transaction --set-gtid-purged=OFF > 20231102.sql
+/usr/bin/mysqldump -uroot -pAbc123\!\@\# --quick --events --all-databases --source-data=2 --single-transaction --set-gtid-purged=OFF > 20231122.sql
 
-/usr/bin/tar -zcvf 20231102.sql.tar.gz 20231102.sql
+/usr/bin/tar -zcvf 20231122.sql.tar.gz 20231122.sql
 
- scp 20231102.sql.tar.gz 10.20.12.136:/root/
+ scp 20231122.sql.tar.gz 10.0.2.30:/root/
 ```
 
 
@@ -1290,7 +1366,7 @@ flush tables with read lock;
 #从库执行
 
 ```bash
-tar -zxvf 20231102.sql.tar.gz
+tar -zxvf 20231122.sql.tar.gz
 
 mysql -u root -p
 ```
@@ -1298,7 +1374,7 @@ mysql -u root -p
 #导入sql文件
 
 ```mysql
-source /root/20231102.sql
+source /root/20231122.sql
 ```
 
 #### 3、配置主从同步
@@ -1308,7 +1384,7 @@ source /root/20231102.sql
 ```bash
 SET @@GLOBAL.read_only = ON;
 
-CHANGE REPLICATION SOURCE TO SOURCE_HOST='10.20.12.136',SOURCE_PORT=3306,SOURCE_USER='repl',SOURCE_PASSWORD='Repl123!@#2023',SOURCE_AUTO_POSITION = 1;
+CHANGE REPLICATION SOURCE TO SOURCE_HOST='10.0.2.30',SOURCE_PORT=3306,SOURCE_USER='repl',SOURCE_PASSWORD='Repl123!@#2023',SOURCE_AUTO_POSITION = 1;
 
 show warnings;
 
@@ -1480,7 +1556,7 @@ stop replica;
  begin; 
  commit;  
 
- set @@session.gtid_next='b526a489-7796-11ee-b698-fefcfec91d86:113'; 
+ set @@session.gtid_next='957aa1c1-7790-11ee-a333-6805cadb244c:9'; 
  begin; 
  commit; 
  
@@ -2365,7 +2441,7 @@ SET @@GLOBAL.read_only = ON;
 #### 10、主从变双主
 #在主节点上执行
 ```mysql
-CHANGE REPLICATION SOURCE TO SOURCE_HOST='10.20.12.137',SOURCE_PORT=3306,SOURCE_USER='repl',SOURCE_PASSWORD='Repl123!@#2023',SOURCE_AUTO_POSITION = 1;
+CHANGE REPLICATION SOURCE TO SOURCE_HOST='10.0.2.31',SOURCE_PORT=3306,SOURCE_USER='repl',SOURCE_PASSWORD='Repl123!@#2023',SOURCE_AUTO_POSITION = 1;
 
 start replica;
 show replica status\G;
@@ -2403,6 +2479,11 @@ show replica status\G;
 
 ```bash
 yum install -y pcre-devel openssl-devel popt-devel libnl libnl-devel psmisc
+
+#No match for argument: libnl
+#No match for argument: libnl-devel
+#Package psmisc-23.4-1.oe2203.x86_64 is already installed.
+#Error: Unable to find a match: libnl libnl-devel
 ```
 
 
@@ -2456,7 +2537,7 @@ cat >> /etc/keepalived/keepalived.conf <<EOF
 
 #主要配置故障发生时的通知对象及机器标识
 global_defs {
-   router_id MYSQL-136                   #主机标识符，唯一即可
+   router_id MYSQL-1                   #主机标识符，唯一即可
    vrrp_skip_check_adv_addr
    vrrp_strict
    vrrp_garp_interval 0
@@ -2468,7 +2549,7 @@ global_defs {
 #用来定义对外提供服务的VIP区域及相关属性
 vrrp_instance VI_1 {
     state BACKUP                     #表示keepalived角色，都是设成BACKUP则以优先级为主要参考
-    interface eth0                 #指定HA监听的网络接口，刚才ifconfig查看的接口名称
+    interface ens4f0                 #指定HA监听的网络接口，刚才ifconfig查看的接口名称
     virtual_router_id 117            #虚拟路由标识，取值0-255，master-1和master-2保持一致
     priority 100                     #优先级，用来选举master，取值范围1-255
     advert_int 1                     #发VRRP包时间间隔，即多久进行一次master选举
@@ -2477,25 +2558,25 @@ vrrp_instance VI_1 {
         auth_pass 1111
     }
     virtual_ipaddress {              #虚拟出来的地址
-        10.20.12.117
+        10.0.2.40
     }
 }
 
 #虚拟服务器定义
-virtual_server 10.20.12.117 3306 { #虚拟出来的地址加端口
+virtual_server 10.0.2.40 3306 { #虚拟出来的地址加端口
     delay_loop 2                     #设置运行情况检查时间，单位为秒
     lb_algo rr                       #设置后端调度器算法，rr为轮询算法
     lb_kind DR                       #设置LVS实现负载均衡的机制，有DR、NAT、TUN三种模式可选
     persistence_timeout 50           #会话保持时间，单位为秒
     protocol TCP                     #指定转发协议，有 TCP和UDP可选
 
-        real_server 10.20.12.136 3306 {          #实际本地ip+3306端口
+        real_server 10.0.2.30 3306 {          #实际本地ip+3306端口
        weight=5                      #表示服务器的权重值。权重值越高，服务器在负载均衡中被选中的概率就越大
         #当该ip 端口连接异常时，执行该脚本
         notify_down /etc/keepalived/shutdown.sh   #检查mysql服务down掉后执行的脚本
         TCP_CHECK {
             #实际物理机ip地址
-            connect_ip 10.20.12.136
+            connect_ip 10.0.2.30
             #实际物理机port端口
             connect_port 3306
             connect_timeout 3
@@ -2514,7 +2595,7 @@ cat >> /etc/keepalived/keepalived.conf <<EOF
 ! Configuration File for keepalived
 
 global_defs {
-   router_id MYSQL-136                   
+   router_id MYSQL-1                   
    vrrp_skip_check_adv_addr
    vrrp_strict
    vrrp_garp_interval 0
@@ -2526,8 +2607,8 @@ global_defs {
 
 vrrp_instance VI_1 {
     state BACKUP                    
-    interface eth0                
-    virtual_router_id 117            
+    interface ens4f0                
+    virtual_router_id 40            
     priority 100                     
     advert_int 1                    
     authentication {
@@ -2535,23 +2616,23 @@ vrrp_instance VI_1 {
         auth_pass 1111
     }
     virtual_ipaddress {             
-        10.20.12.117
+        10.0.2.40
     }
 }
 
 
-virtual_server 10.20.12.117 3306 { 
+virtual_server 10.0.2.40 3306 { 
     delay_loop 2                   
     lb_algo rr                      
     lb_kind DR                     
     persistence_timeout 50           
     protocol TCP                  
 
-        real_server 10.20.12.136 3306 {      
+        real_server 10.0.2.30 3306 {      
        weight=5                    
         notify_down /etc/keepalived/shutdown.sh  
         TCP_CHECK {
-            connect_ip 10.20.12.136
+            connect_ip 10.0.2.30
             connect_port 3306
             connect_timeout 3
             nb_get_retry 3
@@ -2575,7 +2656,7 @@ cat >> /etc/keepalived/keepalived.conf <<EOF
 
 #主要配置故障发生时的通知对象及机器标识
 global_defs {
-   router_id MYSQL-115                   #主机标识符，唯一即可
+   router_id MYSQL-2                   #主机标识符，唯一即可
    vrrp_skip_check_adv_addr
    vrrp_strict
    vrrp_garp_interval 0
@@ -2634,7 +2715,7 @@ cat >> /etc/keepalived/keepalived.conf <<EOF
 
 
 global_defs {
-   router_id MYSQL-137
+   router_id MYSQL-2
    vrrp_skip_check_adv_addr
    vrrp_strict
    vrrp_garp_interval 0
@@ -2646,8 +2727,8 @@ global_defs {
 
 vrrp_instance VI_1 {
     state BACKUP                     
-    interface eth0                 
-    virtual_router_id 117            
+    interface ens5                 
+    virtual_router_id 40            
     priority 40                     
     advert_int 1                     
     authentication {
@@ -2655,23 +2736,23 @@ vrrp_instance VI_1 {
         auth_pass 1111
     }
     virtual_ipaddress {              
-        10.20.12.117
+        10.0.2.40
     }
 }
 
 
-virtual_server 10.20.12.117 3306 { 
+virtual_server 10.0.2.40 3306 { 
     delay_loop 2                     
     lb_algo rr                       
     lb_kind DR                       
     persistence_timeout 50           
     protocol TCP                   
 
-        real_server 10.20.12.137 3306 {          
+        real_server 10.0.2.31 3306 {          
        weight=5                      
         notify_down /etc/keepalived/shutdown.sh   
         TCP_CHECK {
-            connect_ip 10.20.12.137
+            connect_ip 10.0.2.31
             connect_port 3306
             connect_timeout 3
             nb_get_retry 3
@@ -2750,8 +2831,8 @@ systemctl status keepalived
 #测试条件
 
 ```
-172.18.13.114 mysql01
-172.18.13.115 mysql02
+172.18.13.114 DT_Mysql1
+172.18.13.115 DT_Mysql2
 
 vip: 172.18.13.113
 ```
@@ -3091,301 +3172,5 @@ rpm -ivh mysql-community-server-8.0.34-1.el7.x86_64.rpm
 
 ```bash
 yum install -y perl
-```
-
-
-
-#### 8.20 my.cnf
-
-```bash
-[root@k8s-mysql-ole-test etc]# cat /etc/my.cnf
-[client]
-port = 3306
-#socket连接文件；该配置不用修改
-socket = /data/mysql/mysql.sock
-#default-character-set = utf8mb4
-
-[mysql]
-#mysql终端提醒配置
-prompt = "\u@\h:\p [\d]> "
-#关闭自动补全功能
-no-auto-rehash
-#default-character-set = utf8mb4
-
-[mysqld]
-####################general####################
-sql_mode=STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION
-user = mysql
-port = 3306
-#basedir = /data/mysql
-datadir = /data/mysql
-#tmpdir = /tmp
-socket = /data/mysql/mysql.sock
-#服务器唯一id，默认为1，值范围为1～2^32−1. ；主数据库和从数据库的server-id不能重复
-server_id = 120
-#server_id = 137
-#mysqlx_port = 33060
-#管理员用来连接的端口号,注意如果admin_address没有设置的话,这个端口号是无效的
-admin_port = 33062
-#用于指定管理员发起tcp连接的主机地址
-admin_address = '127.0.0.1'
-#是否创建一个单独的listener线程来监听admin的链接请求,默认值是关闭的
-create_admin_listener_thread = on
-
-#禁用dns解析
-skip_name_resolve = 1
-#设置默认时区
-default_time_zone = "+8:00"
-#设置默认的字符集
-character-set-server = utf8mb4
-#collation_connection = utf8mb4_0900_ai_ci
-#character-set-client-handshake = FALSE
-#init_connect = 'SET NAMES utf8mb4'
-
-#设置表名不区分大小写,默认值为0,表名是严格区分大小写的
-lower_case_table_names = 1
-#是否信任存储函数创建者
-log_bin_trust_function_creators = 1
-
-
-#内部临时表
-#internal_tmp_mem_storage_engine = MEMORY
-#internal_tmp_mem_storage_engine = TempTable
-
-####################max connection################
-#对整个服务器的用户限制，设置允许的最大连接数
-max_connections = 3000
-#限制每个用户的session连接个数
-max_user_connections = 2000
-#客户端连接失败以下次数，MySQL不再响应客户端连接
-max_connect_errors = 100000
-mysqlx_max_connections = 300
-
-back_log = 2000
-
-####################binlog#######################
-#设置binlog日志(主从同步和数据恢复需要)
-#log-bin = /data/mysql/logs/mysql-bin
-log-bin = mysql-bin
-#设置主从复制的模式：STATEMENT模式（SBR）、ROW模式（RBR）、MIXED模式（MBR）
-binlog_format = row
-#开启该参数,从库从主库同步的数据也会更新到从库的binlog文件,默认为ON状态
-#log_replica_updates = on
-#开启全局事务标识模式,gtid用于在binlog中唯一标识一个事务
-gtid_mode = on
-#当启用enforce_gtid_consistency功能的时候,MySQL只允许能够保障事务安全,并且能够被日志记录的SQL语句被执行
-#像create table … select 和 create temporary table语句,以及同时更新事务表和非事务表的SQL语句或事务都不允许执行
-enforce_gtid_consistency = on
-#为每个session分配的内存,在事务过程中用来存储二进制日志的缓存
-binlog_cache_size = 2M
-#max_binlog_cache_size=8M
-#binlog文件的大小,超过该大小会自动创建新的binlog文件
-max_binlog_size = 512M
-#在row模式下开启该参数,将把sql语句打印到binlog日志里面,默认值为0(off)
-binlog_rows_query_log_events = on
-#设置每次事务提交都将数据同步到磁盘
-sync_binlog = 1
-#表示binlog提交后等待延迟多少时间再同步到磁盘,默认值为0,不延迟
-#设置延迟可以让多个事务在某一时刻提交,提高binlog组提交的并发数和效率,提高slave的吞吐量
-binlog_group_commit_sync_delay = 0
-#表示等待延迟提交的最大事务数,如果binlog_group_commit_sync_dela没到,但事务数到了,则直接同步到磁盘
-#若binlog_group_commit_sync_delay没有开启,则该参数也不会开启,默认值为0
-binlog_group_commit_sync_no_delay_count = 0
-#提交的事务是否按照写入二进制日志binlog的顺序提交,在一些情况下关闭这个参数,可以获得性能上的一点提升,默认值为on
-binlog_order_commits = off
-#设置binlog日志的保存天数,超过天数的日志会被自动删除,默认值为0,不自动清理
-#expire_logs_days = 7
-binlog_expire_logs_seconds = 604800
-
-#binlog事务压缩传输
-binlog_transaction_compression = on
-binlog_transaction_compression_level_zstd = 3
-
-##################Parallel replication---is deprecated##########
-#控制检测事务依赖关系时采用的HASH算法,有三个取值OFF|XXHASH64|MURMUR32
-#transaction_write_set_extraction = 'XXHASH64'
-#5.7.29+版本有下面2个参数,低于该版本的请关闭下面配置
-#控制事务依赖模式,让从库根据主库写入binlog中的commit timestamps或者write sets并行回放事务
-#有三个取值COMMIT_ORDERE|WRITESET|WRITESET_SESSION
-#binlog_transaction_dependency_tracking = 'writeset'
-#取值范围为1-1000000,初始默认值为25000
-#binlog_transaction_dependency_history_size = 25000
-
-####################slow log####################
-#开启慢查询
-slow_query_log = 1
-#SQL语句运行时间阈值,执行时间大于参数值的语句才会被记录下来
-long_query_time = 15
-#设置慢查询日志文件的路径和名称
-slow_query_log_file = slow.log
-#将没有使用索引的语句记录到慢查询日志
-log_queries_not_using_indexes = 0
-#设定每分钟记录到日志的未使用索引的语句数目,超过这个数目后只记录语句数量和花费的总时间
-log_throttle_queries_not_using_indexes = 60
-
-#Don't write queries to slow log that examine fewer rows than that
-# min_examined_row_limit = 3
-
-####################error log####################
-#控制错误日志、慢查询日志等日志中的显示时间,在5.7.2 之后该参数为默认UTC,会导致日志中记录的时间比中国这边的慢,导致查看日志不方便
-log_timestamps = SYSTEM
-#设置错误日志的路径和名称
-log_error = error.log
-#1-错误信息;2-错误信息和告警信息;3-错误信息、告警信息和通知信息
-log_error_verbosity = 3
-
-#跳过临时表缺少binlog错误
-slave-skip-errors=1032
-#replica_skip_errors = 1032
-#log_error_suppression_list = 'MY-010914,MY-013360,MY-013730,MY-010584,MY-010559'
-#log_error_suppression_list='MY-010956,MY-010957'
-
-####################session######################
-sort_buffer_size = 2M
-join_buffer_size = 2M
-key_buffer_size = 16M
-thread_cache_size = 1500
-thread_stack = 256K
-tmp_table_size = 96M
-read_buffer_size = 2M
-read_rnd_buffer_size = 16M
-bulk_insert_buffer_size = 32M
-max_allowed_packet = 32M
-
-####################timeout######################
-interactive_timeout = 600
-wait_timeout = 600
-innodb_rollback_on_timeout = on
-#replica_net_timeout = 30
-#rpl_stop_replica_timeout = 300
-slave_net_timeout = 30
-rpl_stop_slave_timeout = 180
-lock_wait_timeout = 300
-
-####################relay_log####################
-relay_log = relay-bin
-relay_log_index = relay-bin.index
-
-#is deprecated and will be removed
-master_info_repository = table
-relay_log_info_repository = table
-
-relay_log_purge = on
-
-#默认值10000
-sync_relay_log = 10000
-
-#默认值10000
-#is deprecated and will be removed
-sync_relay_log_info = 10000
-
-####################sql_thread####################
-#从库在异常宕机时,会自动放弃所有未执行的relay log,重新从主库获取日志,保证relay-log的完整性,默认该功能是关闭的
-relay_log_recovery = ON
-#replica_preserve_commit_order = OFF
-
-#replica_parallel
-#replica_parallel_type = LOGICAL_CLOCK
-
-#replica_parallel_workers = 16
-#deprecated
-slave_preserve_commit_order = OFF
-#并行复制模式:DATABASE默认值,基于库的并行复制方式;LOGICAL_CLOCK,基于组提交的并行复制方式
-slave_parallel_type = LOGICAL_CLOCK
-#主从复制时,设置并行复制的工作线程数
-slave_parallel_workers=16
-
-####################innodb#######################
-#内存的50%-70%
-innodb_buffer_pool_size = 16384M
-#2个G一个instance,一般小于32G配置为4,大于32G配置为8
-innodb_buffer_pool_instances = 4
-#默认启用,指定在MySQL服务器启动时,InnoDB缓冲池通过加载之前保存的相同页面自动预热,通常与innodb_buffer_pool_dump_at_shutdown结合使用.
-innodb_buffer_pool_load_at_startup = 1
-#默认启用,指定在MySQL服务器关闭时是否记录在InnoDB缓冲池中缓存的页面,以便在下次重新启动时缩短预热过程.
-innodb_buffer_pool_dump_at_shutdown = 1
-#指定innodb tablespace表空间的大小,默认: ibdata1:12M:autoextend
-innodb_data_file_path = ibdata1:1024M:autoextend
-#默认值为1,在每个事务提交时，InnoDB立即将缓存中的redo日志回写到日志文件,并调用操作系统fsync刷新IO缓存,保证完整的ACID.
-innodb_flush_log_at_trx_commit = 1
-#日志缓冲区大小
-innodb_log_buffer_size = 64M
-#redo日志大小
-#innodb_redo_log_capacity=1073741824
-
-#8.0.30以前
-innodb_log_file_size = 1024M
-#redo日志组数,默认为2
-innodb_log_files_in_group = 3
-
-#用来控制buffer pool中脏页的百分比,当脏页数量占比超过这个参数设置的值时,InnoDB会启动刷脏页的操作.
-innodb_max_dirty_pages_pct = 90
-#开启独立表空间,默认为开启
-innodb_file_per_table = 1
-#开始事务超时回滚整个事务。默认不开启,超时回滚最后一次提交记录
-innodb_rollback_on_timeout = on
-#根据您的服务器IOPS能力适当调整,一般配普通SSD盘的话,可以调整到10000-20000
-#配置高端PCIe SSD卡的话,则可以调整的更高,比如50000-80000
-innodb_io_capacity = 10000
-#设置事务的隔离级别为读已提交
-transaction_isolation = READ-COMMITTED
-innodb_flush_method = O_DIRECT
-#开启保存死锁日志,死锁日志存放到log_error配置的文件里
-innodb_print_all_deadlocks = 1
-#禁用线程并发检查,使InnoDB按照请求的需求,创造尽可能多的线程
-innodb_thread_concurrency = 0
-#设置IO读写的线程数(默认：4),一般CPU多少核就设置多少
-innodb_read_io_threads = 4
-innodb_write_io_threads = 4
-#开启死锁检测,默认开启 
-innodb_deadlock_detect = on
-#设置锁等待超时时间,默认为50s
-innodb_lock_wait_timeout = 20
-
-####################undo########################
-#设置undo log的最大值,默认值为1G.当超过设置的阈值,会触发truncate回收(收缩)动作.
-innodb_max_undo_log_size = 4G
-#undo文件存放的位置
-innodb_undo_directory = /data/mysql/mysql3306/data/undolog
-#从 8.0.14开始废弃该参数,默认表空间数量为2
-#innodb_undo_tablespaces = 4
-#开启自动清理undo log的功能
-innodb_undo_log_truncate = 1
-
-####################performance_schema####################
-#MySQL的performance schema用于监控MySQL server在一个较低级别的运行过程中的资源消耗、资源等待等情况
-performance_schema                                                      = on
-performance_schema_consumer_global_instrumentation                      = on
-performance_schema_consumer_thread_instrumentation                      = on
-performance_schema_consumer_events_stages_current                       = on
-performance_schema_consumer_events_stages_history                       = on
-performance_schema_consumer_events_stages_history_long                  = off
-performance_schema_consumer_statements_digest                           = on
-performance_schema_consumer_events_statements_current                   = on
-performance_schema_consumer_events_statements_history                   = on
-performance_schema_consumer_events_statements_history_long              = off
-performance_schema_consumer_events_waits_current                        = on
-performance_schema_consumer_events_waits_history                        = on
-performance_schema_consumer_events_waits_history_long                   = off
-#key-value格式,支持使用通配符,匹配memory/开头的
-performance_schema_instrument                                           = 'memory/%=COUNTED'
-
-#####################MGR################################
-#binlog_checksum=none
-#transaction_write_set_extraction=XXHASH64
-#binlog_transaction_dependency_tracking=WRITESET
-#loose-group_replication_group_name="e7d07963-de9b-4506-9ede-8297903c257c" 
-#loose-group_replication_start_on_boot=off 
-#loose-group_replication_local_address= "192.168.113.243:33061" 
-#loose-group_replication_group_seeds= "192.168.113.243:33061,192.168.113.244:33061,192.168.113.245:33061" 
-#loose-group_replication_bootstrap_group= off
-
-####################MGR multi master####################
-#loose-group_replication_single_primary_mode=off
-#loose-group_replication_enforce_update_everywhere_checks=on
-
-[mysqldump]
-quick
-max_allowed_packet = 32M
 ```
 
