@@ -2622,9 +2622,18 @@ ll /dev|grep asm
 ```
 ### 2.10. 配置互信
 
-```
+```bash
 #oracle/k8s123#@!
 #grid/k8s123#@!
+
+#可以用/u01/app/19.0.0/grid/oui/prov/resources/scripts/sshUserSetup.sh
+#仅在节点一root用户下执行
+
+/u01/app/19.0.0/grid/oui/prov/resources/scripts/sshUserSetup.sh -user grid  -hosts "k8s-rac01 k8s-rac02" -advanced exverify -confirm
+
+/u01/app/19.0.0/grid/oui/prov/resources/scripts/sshUserSetup.sh -user grid  -hosts "k8s-rac01 k8s-rac02" -advanced exverify -confirm
+
+#也可以用下面的步骤挨个执行
 ```
 
 #grid用户
@@ -2731,6 +2740,8 @@ rpm -ivh cvuqdisk-1.0.10-1.rpm
 #节点一安装前检查：
 [grid@rac01 ~]$ cd /u01/app/19.0.0/grid/
 [grid@rac01 grid]$ ./runcluvfy.sh stage -pre crsinst -n k8s-rac01,k8s-rac02 -fixup -verbose|tee -a pre.log
+
+#./runcluvfy.sh stage -pre crsinst -allnodes -fixup -verbose -method root|tee -a pre.log
 ```
 
 #error检查
