@@ -717,12 +717,31 @@ systemctl restart target.service
 
 systemctl enable tgtd
 
+tgt-admin -dump
+
 tgtadm --lld iscsi --mode target --op show
+
+netstat -anp|grep tgt
 ```
 
 #日志
 
 ```bash
+[root@k8s-oracle-store ~]# tgt-admin -dump
+default-driver iscsi
+
+<target iqn.2023-11.com.oracle:rac>
+	backing-store /dev/vdb
+	backing-store /dev/vdc
+	backing-store /dev/vdd
+	backing-store /dev/vde
+	backing-store /dev/vdf
+	backing-store /dev/vdg
+	backing-store /dev/vdh
+	initiator-address 172.18.13.0/24
+</target>
+
+
 [root@k8s-oracle-store ~]# tgtadm --lld iscsi --mode target --op show
 Target 1: iqn.2023-11.com.oracle:rac
     System information:
@@ -845,6 +864,148 @@ Target 1: iqn.2023-11.com.oracle:rac
     Account information:
     ACL information:
         172.18.13.0/24
+     
+     
+#oracle rac 连接后
+
+[root@k8s-oracle-store ~]# tgtadm -L iscsi -o show -m target
+Target 1: iqn.2023-11.com.oracle:rac
+    System information:
+        Driver: iscsi
+        State: ready
+    I_T nexus information:
+        I_T nexus: 2
+            Initiator: iqn.2023-11.com.oracle:rac alias: k8s-rac01
+            Connection: 0
+                IP Address: 172.18.13.97
+        I_T nexus: 15
+            Initiator: iqn.2023-11.com.oracle:rac alias: k8s-rac02
+            Connection: 0
+                IP Address: 172.18.13.98
+    LUN information:
+        LUN: 0
+            Type: controller
+            SCSI ID: IET     00010000
+            SCSI SN: beaf10
+            Size: 0 MB, Block size: 1
+            Online: Yes
+            Removable media: No
+            Prevent removal: No
+            Readonly: No
+            SWP: No
+            Thin-provisioning: No
+            Backing store type: null
+            Backing store path: None
+            Backing store flags: 
+        LUN: 1
+            Type: disk
+            SCSI ID: IET     00010001
+            SCSI SN: beaf11
+            Size: 53687 MB, Block size: 512
+            Online: Yes
+            Removable media: No
+            Prevent removal: No
+            Readonly: No
+            SWP: No
+            Thin-provisioning: No
+            Backing store type: rdwr
+            Backing store path: /dev/vdb
+            Backing store flags: 
+        LUN: 2
+            Type: disk
+            SCSI ID: IET     00010002
+            SCSI SN: beaf12
+            Size: 53687 MB, Block size: 512
+            Online: Yes
+            Removable media: No
+            Prevent removal: No
+            Readonly: No
+            SWP: No
+            Thin-provisioning: No
+            Backing store type: rdwr
+            Backing store path: /dev/vdc
+            Backing store flags: 
+        LUN: 3
+            Type: disk
+            SCSI ID: IET     00010003
+            SCSI SN: beaf13
+            Size: 53687 MB, Block size: 512
+            Online: Yes
+            Removable media: No
+            Prevent removal: No
+            Readonly: No
+            SWP: No
+            Thin-provisioning: No
+            Backing store type: rdwr
+            Backing store path: /dev/vdd
+            Backing store flags: 
+        LUN: 4
+            Type: disk
+            SCSI ID: IET     00010004
+            SCSI SN: beaf14
+            Size: 107374 MB, Block size: 512
+            Online: Yes
+            Removable media: No
+            Prevent removal: No
+            Readonly: No
+            SWP: No
+            Thin-provisioning: No
+            Backing store type: rdwr
+            Backing store path: /dev/vde
+            Backing store flags: 
+        LUN: 5
+            Type: disk
+            SCSI ID: IET     00010005
+            SCSI SN: beaf15
+            Size: 107374 MB, Block size: 512
+            Online: Yes
+            Removable media: No
+            Prevent removal: No
+            Readonly: No
+            SWP: No
+            Thin-provisioning: No
+            Backing store type: rdwr
+            Backing store path: /dev/vdf
+            Backing store flags: 
+        LUN: 6
+            Type: disk
+            SCSI ID: IET     00010006
+            SCSI SN: beaf16
+            Size: 107374 MB, Block size: 512
+            Online: Yes
+            Removable media: No
+            Prevent removal: No
+            Readonly: No
+            SWP: No
+            Thin-provisioning: No
+            Backing store type: rdwr
+            Backing store path: /dev/vdg
+            Backing store flags: 
+        LUN: 7
+            Type: disk
+            SCSI ID: IET     00010007
+            SCSI SN: beaf17
+            Size: 214748 MB, Block size: 512
+            Online: Yes
+            Removable media: No
+            Prevent removal: No
+            Readonly: No
+            SWP: No
+            Thin-provisioning: No
+            Backing store type: rdwr
+            Backing store path: /dev/vdh
+            Backing store flags: 
+    Account information:
+    ACL information:
+        172.18.13.0/24
+        
+[root@k8s-oracle-store ~]# netstat -anp|grep tgt
+netstat: showing only processes with your user ID
+tcp        0      0 0.0.0.0:3260            0.0.0.0:*               LISTEN      25468/tgtd
+tcp        0      0 172.18.13.104:3260      172.18.13.98:64708      ESTABLISHED 25468/tgtd
+tcp        0      0 172.18.13.104:3260      172.18.13.97:33274      ESTABLISHED 25468/tgtd
+tcp        0      0 :::3260                 :::*                    LISTEN      25468/tgtd
+        
 ```
 
 

@@ -3389,3 +3389,27 @@ quick
 max_allowed_packet = 32M
 ```
 
+#### .my.cnf
+```bash
+cat >> /root/.my.cnf <<EOF
+[mysqldump]
+user="root"
+password ="xxxxxx"
+[mysqladmin]
+user="root"
+password ="xxxxxx"
+[mysql]
+user="root"
+password ="xxxxxx"
+[client]
+user="root"
+password ="xxxxxx"
+EOF
+
+chmod 600 /root/.my.cnf
+
+mysql
+exit
+
+mysqlcheck -Aa
+```
