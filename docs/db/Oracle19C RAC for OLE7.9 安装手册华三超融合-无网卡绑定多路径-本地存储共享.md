@@ -2869,6 +2869,92 @@ ssh k8s-rac01 date;ssh k8s-rac02 date;ssh k8s-rac01-prv date;ssh k8s-rac02-prv d
 ssh  k8s-rac01 date -Ins;ssh  k8s-rac02 date -Ins;ssh  k8s-rac01-prv date -Ins;ssh  k8s-rac02-prv date -Ins
 ```
 
+
+
+#后面升级openssh后，原来配置的互信失效，重新配置，此时可以再次使用rsa和dsa，也可以使用ecdsa和ed25519，但是必须scp -O
+
+#vi .bashrc
+
+#alias scp="scp -O"
+
+#grid用户
+
+#k8s123#@!
+
+```bash
+su - grid
+
+cd /home/grid
+mv .ssh .ssh.bak
+mkdir ~/.ssh
+chmod 700 ~/.ssh
+
+ssh-keygen -t ecdsa
+
+ssh-keygen -t ed25519
+
+#以下只在oracle01执行，逐条执行
+cat ~/.ssh/id_ecdsa.pub >>~/.ssh/authorized_keys
+cat ~/.ssh/id_ed25519.pub >>~/.ssh/authorized_keys
+
+ssh oracle02 cat ~/.ssh/id_ecdsa.pub >>~/.ssh/authorized_keys
+
+ssh oracle02 cat ~/.ssh/id_ed25519.pub >>~/.ssh/authorized_keys
+
+scp -O ~/.ssh/authorized_keys oracle02:~/.ssh/authorized_keys
+
+ssh oracle01 date;ssh oracle02 date;ssh oracle01-prv date;ssh oracle02-prv date
+
+ssh oracle01 date;ssh oracle02 date;ssh oracle01-prv date;ssh oracle02-prv date
+
+ssh oracle01 date -Ins;ssh oracle02 date -Ins;ssh oracle01-prv date -Ins;ssh oracle02-prv date -Ins
+#在oracle02执行
+ssh oracle01 date;ssh oracle02 date;ssh oracle01-prv date;ssh oracle02-prv date
+
+ssh oracle01 date;ssh oracle02 date;ssh oracle01-prv date;ssh oracle02-prv date
+
+ssh oracle01 date -Ins;ssh oracle02 date -Ins;ssh oracle01-prv date -Ins;ssh oracle02-prv date -Ins
+```
+#oracle用户
+
+#k8s123#@!
+
+```bash
+su - oracle
+
+cd /home/oracle
+mv .ssh .ssh.bak
+mkdir ~/.ssh
+chmod 700 ~/.ssh
+
+ssh-keygen -t ecdsa
+
+ssh-keygen -t ed25519
+
+#以下只在oracle01执行，逐条执行
+cat ~/.ssh/id_ecdsa.pub >>~/.ssh/authorized_keys
+cat ~/.ssh/id_ed25519.pub >>~/.ssh/authorized_keys
+
+ssh oracle02 cat ~/.ssh/id_ecdsa.pub >>~/.ssh/authorized_keys
+
+ssh oracle02 cat ~/.ssh/id_ed25519.pub >>~/.ssh/authorized_keys
+
+scp -O ~/.ssh/authorized_keys oracle02:~/.ssh/authorized_keys
+
+ssh oracle01 date;ssh oracle02 date;ssh oracle01-prv date;ssh oracle02-prv date
+
+ssh oracle01 date;ssh oracle02 date;ssh oracle01-prv date;ssh oracle02-prv date
+
+ssh oracle01 date -Ins;ssh oracle02 date -Ins;ssh oracle01-prv date -Ins;ssh oracle02-prv date -Ins
+
+#在oracle02上执行
+ssh oracle01 date;ssh oracle02 date;ssh oracle01-prv date;ssh oracle02-prv date
+
+ssh oracle01 date;ssh oracle02 date;ssh oracle01-prv date;ssh oracle02-prv date
+
+ssh oracle01 date -Ins;ssh oracle02 date -Ins;ssh oracle01-prv date -Ins;ssh oracle02-prv date -Ins
+```
+
 ## 3 开始安装 grid
 
 ### 3.1. 上传集群软件包
