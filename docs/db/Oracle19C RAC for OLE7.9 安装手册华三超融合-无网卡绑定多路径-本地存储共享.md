@@ -1330,7 +1330,7 @@ k8s-rac02     2023/11/18 18:35:48     /u01/app/grid/crsdata/k8s-rac02/olr/backup
 PROTL-24: No auto backups of the OLR are available at this time.
 
 k8s-rac02     2023/11/18 18:35:48     /u01/app/grid/crsdata/k8s-rac02/olr/backup_20231118_183548.olr     724960844     
-[root@k8s-rac02 trace]# /u01/app/19.0.0/grid/bin/ocrconfig -local -restore /u01/app/grid/crsdata/k8s-rac02/olr/autobackup_20231118_184948.olr^C
+
 [root@k8s-rac02 trace]# /u01/app/19.0.0/grid/bin/ocrcheck -local
 Status of Oracle Local Registry is as follows :
 	 Version                  :          4
@@ -1351,9 +1351,6 @@ Status of Oracle Local Registry is as follows :
 CRS-6706: Oracle Clusterware Release patch level ('3976270074') does not match Software patch level ('724960844'). Oracle Clusterware cannot be started.
 CRS-4000: Command Start failed, or completed with errors.
 [root@k8s-rac02 ~]# 
-
-
-
 ```
 
 

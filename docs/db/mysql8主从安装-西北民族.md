@@ -5,6 +5,8 @@
 #安装开始前，请注意OS系统的优化、服务器内存大小、磁盘分区大小，mysql安装到最大分区里
 #20211228补充OS优化部分，安装版本为8.0.34
 
+#keepalive安装时注意。。。
+
 ## 服务器资源
 
 #建议
@@ -2539,7 +2541,8 @@ cat >> /etc/keepalived/keepalived.conf <<EOF
 global_defs {
    router_id MYSQL-1                   #主机标识符，唯一即可
    vrrp_skip_check_adv_addr
-   vrrp_strict
+   #欧拉系统必须注释掉vrrp_strict，否则VIP无法ping通
+   #vrrp_strict
    vrrp_garp_interval 0
    vrrp_gna_interval 0
    script_user root
@@ -2597,7 +2600,6 @@ cat >> /etc/keepalived/keepalived.conf <<EOF
 global_defs {
    router_id MYSQL-1                   
    vrrp_skip_check_adv_addr
-   vrrp_strict
    vrrp_garp_interval 0
    vrrp_gna_interval 0
    script_user root
@@ -2647,7 +2649,7 @@ EOF
 
 
 ###从库
-```
+```bash
  mv /etc/keepalived/keepalived.conf  /etc/keepalived/keepalived.conf.bak
 
 
@@ -2658,7 +2660,8 @@ cat >> /etc/keepalived/keepalived.conf <<EOF
 global_defs {
    router_id MYSQL-2                   #主机标识符，唯一即可
    vrrp_skip_check_adv_addr
-   vrrp_strict
+   #欧拉系统必须注释掉vrrp_strict，否则VIP无法ping通
+   #vrrp_strict
    vrrp_garp_interval 0
    vrrp_gna_interval 0
    script_user root
@@ -2717,7 +2720,6 @@ cat >> /etc/keepalived/keepalived.conf <<EOF
 global_defs {
    router_id MYSQL-2
    vrrp_skip_check_adv_addr
-   vrrp_strict
    vrrp_garp_interval 0
    vrrp_gna_interval 0
    script_user root
@@ -2802,6 +2804,67 @@ ip a
        valid_lft forever preferred_lft forever
 
 ```
+
+#error: ping: sendmsg: Operation not permitted---欧拉系统不注释掉vrrp_strict时，keepalived VIP ping error
+
+```bash
+[root@openEuler2203001 ~]# ping 172.18.13.119
+PING 172.18.13.119 (172.18.13.119) 56(84) bytes of data.
+64 bytes from 172.18.13.119: icmp_seq=1 ttl=64 time=0.110 ms
+64 bytes from 172.18.13.119: icmp_seq=2 ttl=64 time=0.075 ms
+^C
+--- 172.18.13.119 ping statistics ---
+2 packets transmitted, 2 received, 0% packet loss, time 1038ms
+rtt min/avg/max/mdev = 0.075/0.092/0.110/0.017 ms
+[root@openEuler2203001 ~]# ping 172.18.13.123
+PING 172.18.13.123 (172.18.13.123) 56(84) bytes of data.
+ping: sendmsg: Operation not permitted
+ping: sendmsg: Operation not permitted
+ping: sendmsg: Operation not permitted
+^C
+--- 172.18.13.123 ping statistics ---
+3 packets transmitted, 0 received, 100% packet loss, time 2048ms
+
+#单独设置第二IP，可以正常Ping通
+[root@openEuler2203001 ~]# ping 172.18.13.122
+PING 172.18.13.122 (172.18.13.122) 56(84) bytes of data.
+64 bytes from 172.18.13.122: icmp_seq=1 ttl=64 time=0.173 ms
+64 bytes from 172.18.13.122: icmp_seq=2 ttl=64 time=0.082 ms
+^C
+--- 172.18.13.122 ping statistics ---
+2 packets transmitted, 2 received, 0% packet loss, time 1037ms
+rtt min/avg/max/mdev = 0.082/0.127/0.173/0.045 ms
+
+[root@openEuler2203001 ~]# ip a
+1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN group default qlen 1000
+    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
+    inet 127.0.0.1/8 scope host lo
+       valid_lft forever preferred_lft forever
+    inet6 ::1/128 scope host 
+       valid_lft forever preferred_lft forever
+2: ens18: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc fq_codel state UP group default qlen 1000
+    link/ether fe:fc:fe:eb:b3:ce brd ff:ff:ff:ff:ff:ff
+    altname enp0s18
+    inet 172.18.13.119/16 brd 172.18.255.255 scope global noprefixroute ens18
+       valid_lft forever preferred_lft forever
+    inet 172.18.13.123/32 scope global ens18
+       valid_lft forever preferred_lft forever
+    inet 172.18.13.122/16 brd 172.18.255.255 scope global secondary noprefixroute ens18
+       valid_lft forever preferred_lft forever
+    inet6 fe80::d6ae:36d5:a43b:15fd/64 scope link noprefixroute 
+       valid_lft forever preferred_lft forever
+3: virbr0: <NO-CARRIER,BROADCAST,MULTICAST,UP> mtu 1500 qdisc noqueue state DOWN group default qlen 1000
+    link/ether 52:54:00:1d:09:b6 brd ff:ff:ff:ff:ff:ff
+    inet 192.168.122.1/24 brd 192.168.122.255 scope global virbr0
+       valid_lft forever preferred_lft forever
+4: virbr0-nic: <BROADCAST,MULTICAST> mtu 1500 qdisc fq_codel master virbr0 state DOWN group default qlen 1000
+    link/ether 52:54:00:1d:09:b6 brd ff:ff:ff:ff:ff:ff
+
+```
+
+
+
+
 
 #### 6、主库关闭mysqld/keepalived测试
 
