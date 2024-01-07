@@ -524,7 +524,7 @@ abc
 ```
 #### 3.2.5.string字符串类型
 ```
-1)字符串是一串固定长度的字符连接起来的字符序列，Go的字符串是由单个字节连接起来的，使用UTF-8编码表示Unicode文本
+1)字符串是一串固定长度的字符连接起来的字符序列，Go的字符串是由单个字节连接起来的，使用UTF-8编码表示Unicode文本，长度是16字节
 2)字符串一旦赋值了，字符串中的字节内容就不能修改了，即在Go中字符串是不可变的
   var str string = "hello"
   // str[0] = 'm' //wrong!
@@ -552,6 +552,15 @@ abc
 3)被转换的是变量存储的数据(值)，变量本身的数据类型并没有变化
 4)可以表示范围小--->表示范围大，也可以由表示范围大--->表示范围小
 5)当范围大的数值超过范围小的数值的范围后，强制转换，编译器不会报错，但会造成溢出，结果不是想得到的结果，因此转换时需要考虑范围
+
+    var a int32 = 12
+	var b int8
+	var c int8
+	var d int8
+ 
+	b = int8(a) + 127  //编译通过，但是结果会溢出
+	c = int8(a) + 128  //编译不通过，因为128超过了int8的范围(-128~127)
+	d = int8(a) * int8(a)  //编译通过，但是结果会溢出
 ```
 #### 3.3.1.基本数据类型转string
 ```
@@ -614,16 +623,16 @@ abc
   ===>"100.12300"
 
   //bool ---> string
-  //strconv.FormatInt(b bool) 
+  //strconv.FormatBool(b bool) 
   var b1 = true
-  str := strconv.FormatInt(b1)
+  str := strconv.FormatBool(b1)
   fmt.Printf("%q\n", str)
   ===>"true"
 
   //byte ---> string
-  //strconv.FormatInt(i uint64, base int)  //i 必须先转换成uint64，后面是base进制
+  //strconv.FormatUint(i uint64, base int)  //i 必须先转换成uint64，后面是base进制
   var c1 byte = 'X'
-  str := strconv.FormatInt(uint64(c1), 10)
+  str := strconv.FormatUint(uint64(c1), 10)
   fmt.Printf("%q\n", str)
   ===>"88"  //'X'的unicode码值88
 ```
@@ -667,6 +676,9 @@ abc
   //strint --->int 缩写
   //strconv.Atoi(string)(int,error)
   //相当于strconv.ParseInt(string,10,0)
+  
+  //string ---> uint
+  //strconv.ParseUint(str string, base, bitSize int) (uint64, error) //base进制，bitSzie:0-int 8/16/32/64
 2)ParseFloat返回的是float64，ParseInt返回的是int64，如果最后希望得到float32或者int32等，必须再次进行强制类型转换
 3)在将String转成基本类型时，必须确保String类型能够转成有效的数据，比如不能把"hello"转成int
   var str4 string = "hello"
