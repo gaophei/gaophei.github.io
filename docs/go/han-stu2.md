@@ -63,7 +63,7 @@ fmt.Printf("baseArr[1] addr=%p", &baseArr[1])
   
   recover() interface{}
   
-  panic(v interface{})
+  panic(v interface{}) 
   
   new(Type) *Type
   make(v Type, len, cap int) Type
@@ -261,14 +261,14 @@ windows下:
 //set CGO_ENABLED=0
 //set GOARCH=amd64
 set GOOS=linux
-go build -o appName main.go
+go build -o hello_linux main.go
 然后传到linux服务器执行
 
 编译生成MacOS执行文件,在cmd中执行以下命令：
 //set CGO_ENABLED=0
 //set GOARCH=amd64
 set GOOS=darwin
-go build -o appName main.go
+go build -o hello_mac main.go
 然后传到linux服务器执行
 
 linux下:
@@ -276,14 +276,14 @@ linux下:
 //export CGO_ENABLED=0
 //export GOARCH=amd64
 export GOOS=windows
-go build -o appName.exe main.go
+go build -o hello_win.exe main.go
 然后传到linux服务器执行
 
 编译生成MacOS执行文件,在shell中执行以下命令：
 //export CGO_ENABLED=0
 //export GOARCH=amd64
 export GOOS=darwin
-go build -o appName main.go
+go build -o hello_mac main.go
 然后传到linux服务器执行
 
 ```
@@ -297,16 +297,19 @@ go build -o appName main.go
 6)定义的变量和import的包必须有使用，如果没有使用，那么编译不通过
 7)大括号必须成对出现，左大括号必须在上一行的后面
 ```
-### 2.7.Go语言转移字符(escape char)
+### 2.7.Go语言转义字符(escape char)
 ```
 1)\t  制表符，实现对齐功能
-2)\n  换行符
-3)\\  一个\
-4)\"  一个"
-5)\r  回车，从当前行的最前面开始输出，覆盖掉以前内容
+2)\v  垂直制表符
+3)\n  换行符
+4)\\  一个\
+5)\"  一个"
+6)\'  一个'
+7)\r  回车，从当前行的最前面开始输出，覆盖掉以前内容
 
 fmt.Println("123456789\rworld")
 ====>world6789
+
 ```
 ### 2.8.Golang开发常见错误
 ```
@@ -517,7 +520,7 @@ abc
   var b bool =  true
   // b = 1 //错误的写法
 2)bool类型占1个字节 unsafe.Size(a1) ===> 1
-3)bool类型适于逻辑运算，一般用于程序流程控制if/for
+3)bool类型适于逻辑运算，一般用于程序流程控制if条件控制语句/for循环控制语句
 ```
 #### 3.2.5.string字符串类型
 ```

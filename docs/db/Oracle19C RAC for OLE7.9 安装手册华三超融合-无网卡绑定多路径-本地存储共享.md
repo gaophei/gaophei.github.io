@@ -1,4 +1,4 @@
-**19C RAC for Centos7.9 安装手册华三超融合-无网卡绑定多路径-东大秦皇岛**
+**19C RAC for Centos7.9 安装手册华三超融合-无网卡绑定多路径-本地存储共享**
 
 ## 目录
 1 环境..............................................................................................................................................2
@@ -7394,6 +7394,34 @@ SQL> SHUTDOWN
 srvctl start database -d dbname
 
 --------------------------------------------------
+
+
+
+#完成后检查patch情况
+
+set linesize 180
+
+col action for a15
+
+col status for a15
+
+select PATCH_ID,PATCH_TYPE,ACTION,STATUS,TARGET_VERSION from dba_registry_sqlpatch;
+
+
+col status for a10
+col action for a10
+col action_time for a30
+col description for a60
+
+select patch_id,patch_type,action,status,action_time,description from dba_registry_sqlpatch;
+
+col version for a25
+col comments for a80
+
+select ACTION_TIME,VERSION,COMMENTS from dba_registry_history;
+
+
+
 ```
 
 
