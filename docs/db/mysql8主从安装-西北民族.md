@@ -527,7 +527,9 @@ binlog_group_commit_sync_no_delay_count = 0
 binlog_order_commits = off
 #设置binlog日志的保存天数,超过天数的日志会被自动删除,默认值为0,不自动清理
 #expire_logs_days = 7
-binlog_expire_logs_seconds = 604800
+#binlog_expire_logs_seconds = 604800
+#expire_logs_days = 180
+binlog_expire_logs_seconds = 15552000
 
 #binlog事务压缩传输
 binlog_transaction_compression = on
@@ -762,7 +764,7 @@ sync_binlog = 1
 binlog_group_commit_sync_delay = 0
 binlog_group_commit_sync_no_delay_count = 0
 binlog_order_commits = off
-binlog_expire_logs_seconds = 604800
+binlog_expire_logs_seconds = 15552000
 binlog_transaction_compression = on
 binlog_transaction_compression_level_zstd = 3
 slow_query_log = 1
@@ -953,7 +955,9 @@ binlog_group_commit_sync_no_delay_count = 0
 binlog_order_commits = off
 #设置binlog日志的保存天数,超过天数的日志会被自动删除,默认值为0,不自动清理
 #expire_logs_days = 7
-binlog_expire_logs_seconds = 604800
+#binlog_expire_logs_seconds = 604800
+#expire_logs_days = 180
+binlog_expire_logs_seconds = 15552000
 
 #binlog事务压缩传输
 binlog_transaction_compression = on
@@ -1188,7 +1192,7 @@ sync_binlog = 1
 binlog_group_commit_sync_delay = 0
 binlog_group_commit_sync_no_delay_count = 0
 binlog_order_commits = off
-binlog_expire_logs_seconds = 604800
+binlog_expire_logs_seconds = 15552000
 binlog_transaction_compression = on
 binlog_transaction_compression_level_zstd = 3
 slow_query_log = 1
