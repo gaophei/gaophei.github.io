@@ -5,7 +5,7 @@
 |                                                              | 主库                            | 备库                               |
 | ------------------------------------------------------------ | ------------------------------- | ---------------------------------- |
 | db_name(主备库必须一致)                                      | xydb                            | xydb                               |
-| db_unique_name(主备库必须不一致)<br />(此处如果相同，必须修改备库参数) | xydb                            | xydb                               |
+| db_unique_name(主备库必须不一致)<br />(此处如果相同，必须修改备库参数) | xydb                            | xydbdg                             |
 | service_name                                                 | xydb                            | xydb                               |
 | instance_name                                                | xydb1/xydb2                     | xydbdg                             |
 | 归档路径                                                     | +FRA                            | /u01/app/oracle/fast_recovery_area |
@@ -20,27 +20,27 @@
 
 
 
-
+#详细信息
 
 #主库
 
 ```bash
 SYS@xydb1> show parameter name
 
-NAME				     TYPE	 VALUE
+NAME				                   TYPE   	   VALUE
 ------------------------------------ ----------- ------------------------------
-cdb_cluster_name		     string
+cdb_cluster_name		         string
 cell_offloadgroup_name		     string
 db_file_name_convert		     string
-db_name 			     string	 xydb
-db_unique_name			     string	 xydb
-global_names			     boolean	 FALSE
-instance_name			     string	 xydb1
-lock_name_space 		     string
+db_name 			             string	     xydb
+db_unique_name			         string	     xydb
+global_names			         boolean	 FALSE
+instance_name			         string	     xydb1
+lock_name_space 		         string
 log_file_name_convert		     string
 pdb_file_name_convert		     string
 processor_group_name		     string
-service_names			     string	 xydb
+service_names			         string	     xydb
 
 
 SYS@xydb1> archive log list
@@ -127,18 +127,18 @@ SYS@xydbdg> show parameter name
 
 NAME				     TYPE	 VALUE
 ------------------------------------ ----------- ------------------------------
-cdb_cluster_name		     string
+cdb_cluster_name		         string
 cell_offloadgroup_name		     string
 db_file_name_convert		     string
-db_name 			     string	 xydb
-db_unique_name			     string	 xydb
-global_names			     boolean	 FALSE
-instance_name			     string	 xydbdg
-lock_name_space 		     string
+db_name 			             string	     xydb
+db_unique_name			         string	     xydb
+global_names			         boolean	 FALSE
+instance_name			         string	     xydbdg
+lock_name_space 		         string
 log_file_name_convert		     string
 pdb_file_name_convert		     string
 processor_group_name		     string
-service_names			     string	 xydb
+service_names			         string	     xydb
 
 
 
@@ -200,9 +200,6 @@ SYS@xydbdg> exit
 172.18.13.112 k8s-mysql-ole
 
 172.18.13.104 k8s-oracle-store
-
-
-
 ```
 
 
@@ -291,7 +288,6 @@ pdb_file_name_convert		     string
 processor_group_name		     string
 service_names			     string	 xydbdg
 SYS@xydbdg> 
-
 ```
 
 

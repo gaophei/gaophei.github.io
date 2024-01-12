@@ -710,6 +710,11 @@ abc
   fmt.Printf("ptr3 type is %T, ptr3 = %v, *ptr3 =%v", ptr3, ptr3, *ptr3)
 5)值类型都有对应的指针类型，形式为：*数据类型，比如：int--->*int    float32--->*float32  
   指针的指针  var ptr2 **float32 = &*ptr
+  
+    var num02 int = 100
+	var ptr01 *float32
+	ptr01 = &num02    //error: cannot use &num02 (value of type *int) as *float32 value in assignment
+	ptr01 = &(float32(num02)) //error: invalid operation: cannot take address of (float32(num02)) (value                               //of type float32)
 ```
 ### 3.5.值类型和引用类型
 ```
@@ -742,6 +747,13 @@ abc
          export GO111MODULE="on"
          go mod init modeA
          此时可以在main.go中 import "modeA/packageB"
+         #windows 使用 set GO111MODULE = on
+         
+         #或者自己手动在文件夹中创建go.mod，添加两行内容：
+         module hello
+         
+         go 1.21.4
+         
   第二种：
          export GO111MODULE="off"
          采用GOPATH中的路径，如GOPATH=$HOME/go，包路径为$HOME/go/src/go_code/project1/module
@@ -809,6 +821,80 @@ abc
   当A为True时，B不再执行判断。
 4)逻辑非 ! 如果条件为True，则逻辑为False，否则为True。
   取反
+  
+//A&&B
+package main
+
+import "fmt"
+
+func testtrue() bool {
+	fmt.Println("just for test true~~~")
+	return true
+}
+
+func testfalse() bool {
+	fmt.Println("just for test false~~~")
+	return false
+}
+
+func main() {
+	// A&&B 当A为false时，B不再计算
+	if testfalse() && testtrue() {
+		fmt.Println("ok1")
+	}
+
+	fmt.Println("------------------")
+
+	if testtrue() && testfalse() {
+		fmt.Println("ok2")
+	}
+}
+
+/*
+just for test false~~~
+------------------
+just for test true~~~
+just for test false~~~
+*/
+
+
+//A||B
+
+package main
+
+import "fmt"
+
+func testtrue() bool {
+	fmt.Println("just for test true~~~")
+	return true
+}
+
+func testfalse() bool {
+	fmt.Println("just for test false~~~")
+	return false
+}
+
+func main() {
+	// A||B ，A为true时，B不再执行
+	if testfalse() || testtrue() {
+		fmt.Println("ok3")
+	}
+
+	fmt.Println("------------------")
+
+	if testtrue() || testfalse() {
+		fmt.Println("ok4")
+	}
+}
+
+/*
+just for test false~~~
+just for test true~~~
+ok3
+------------------
+just for test true~~~
+ok4
+*/
 ```
 ### 4.5.赋值运算符
 ```
@@ -832,6 +918,43 @@ abc
 3)特点
   运算顺序从右到左
   赋值运算符的左边只能是变量，右边可以是变量、表达式、常量等
+  
+  
+// switch a,b
+
+package main
+
+import "fmt"
+
+func main() {
+
+	var a, b int = 100, 200
+	fmt.Printf("a = %d, b = %d\n", a, b)
+
+	fmt.Println("switch a,b")
+
+	a += b
+	b = a - b
+	a -= b
+
+	fmt.Printf("a = %d, b = %d\n", a, b)
+
+	fmt.Println("switch a,b again")
+
+	a, b = b, a
+
+	fmt.Printf("a = %d, b = %d\n", a, b)
+
+}
+
+/*
+a = 100, b = 200
+switch a,b
+a = 200, b = 100
+switch a,b again
+a = 100, b = 200
+*/
+
 ```
 ### 4.6.位运算符---一定要牢记：负数要先转成补码，再做位运算！
 ```
@@ -914,6 +1037,37 @@ abc
 2)fmt.Scan---在输入过程中，回车视为空白分割，最后输入完数据后的回车才作为输入结束
 3)fmt.Scanln---在输入过程中，空格作为空白分割，最后回车视为输入结束
 4)fmt.Scanf---在输入过程中，空格作为空白分割，只接收指定格式参数的输入比如：%d %s %t等和空格，不能有其他内容
+
+package main
+
+import "fmt"
+
+func main() {
+
+	var a int
+	fmt.Println("plz input a number:")
+	fmt.Scanln(&a)
+
+	fmt.Println("the number what's U input is:", a)
+
+	var b, c int
+	var d string
+	fmt.Println("plz input age, length, sexy:")
+	fmt.Scanf("%v %v %v", &b, &c, &d)
+
+	fmt.Printf("the people is %v age, %v length, is %v", b, c, d)
+
+}
+
+/*
+plz input a number:
+200
+the number what's U input is: 200
+plz input age, length, sexy:
+18 185 women
+the people is 18 age, 185 length, is women
+*/
+
 ```
 ### 4.11.进制
 ```
@@ -944,7 +1098,7 @@ abc
 
 4)十进制转其它进制
   十进制--->二进制：将该数不断除以2，直到商为0为止，然后将每步得到的余数倒过来，就是对应的二进制
-  56 = 11100
+  56 = 111000
   56/2 = 28 余 0
   28/2 = 14 余 0
   14/2 = 7  余 0
@@ -1033,6 +1187,35 @@ abc
   反码 1111 1011
   原码 1000 0100
   -1 << 2 = -4
+  
+  
+package main
+
+import "fmt"
+
+func main() {
+
+	var num01 int = 1 >> 2 // 0
+	fmt.Println("num01 = ", num01)
+
+	var num02 int = 1 << 2 // 4
+	fmt.Println("num02 = ", num02)
+	
+	var num03 int = -1 >> 2 // -1
+	fmt.Println("num03 = ", num03)
+	
+	var num04 int = -1 << 2 // -4
+	fmt.Println("num04 = ", num04)
+
+}
+
+/*
+num01 =  0
+num02 =  4
+num03 =  -1
+num04 =  -4
+*/
+
 ```
 
 ## 5.程序流程控制
