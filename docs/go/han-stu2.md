@@ -1116,6 +1116,7 @@ the people is 18 age, 185 length, is women
   356 = 0x164
   356/16 = 22 余 4
   22/16  = 1  余 6
+  1/16   = 0  余 1
 
 5)二进制转其它进制
   二进制--->八进制：将二进制数每三位一组(从低位开始组合)，转成相应的八进制数即可
@@ -1216,6 +1217,56 @@ num03 =  -1
 num04 =  -4
 */
 
+
+-------------------------------------------
+package main
+
+import "fmt"
+
+func main() {
+
+	var num01 int = 201
+
+	fmt.Printf("the number num01 is %d, 2th = %b, 8th = %#o, 16th = %#x\n", num01, num01, num01, num01)
+
+	var num02 int = 0123
+	fmt.Printf("the number num02 is %d, 2th = %b, 8th = %#o, 16th = %#x\n", num02, num02, num02, num02)
+
+	fmt.Println(2 & 3)
+	fmt.Println(2 | 3)
+	fmt.Println(13 & 7)
+	fmt.Println(5 | 4)
+	fmt.Println(-3 ^ 3)
+}
+
+/*
+the number num01 is 201, 2th = 11001001, 8th = 0311, 16th = 0xc9
+the number num02 is 83, 2th = 1010011, 8th = 0123, 16th = 0x53
+2
+3
+5
+5
+-2
+*/
+
+/*
+// -3 ^ 3 = -2
+-3的原码： [1000 0011]
+   反码:  [1111 1100]
+   补码:  [1111 1101]
+
+ 3的原码： [0000 0011]
+   反码:  [0000 0011]
+   补码:  [0000 0011]
+   
+    [1111 1101]
+  ^ [0000 0011]
+  ---> [1111 1110]
+  
+  反码：[1111 1101]
+  原码：[1000 0010]
+  ----> -2
+*/
 ```
 
 ## 5.程序流程控制
