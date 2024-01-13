@@ -1,3 +1,103 @@
+### 1.0.单分支和双分支练习题
+
+![image-20240113224922042](E:\workpc\git\gitio\gaophei.github.io\docs\go\homework\单分支和双分支.png)
+
+```go
+#5)
+
+package main
+
+import "fmt"
+
+func main() {
+	var x, y int32
+	fmt.Println("plz input the first number:")
+	fmt.Scanln(&x)
+	fmt.Println("plz input the second number:")
+	fmt.Scanln(&y)
+
+	if x+y >= 50 {
+		fmt.Println("hello world")
+	}
+
+}
+
+```
+
+
+
+```go
+#6)
+
+package main
+
+import "fmt"
+
+func main() {
+	var f1, f2 float64
+	fmt.Println("plz input the first float number:")
+	fmt.Scanln(&f1)
+
+	fmt.Println("plz input the second float number:")
+	fmt.Scanln(&f2)
+
+	if f1 > 10.0 && f2 < 20.0 {
+		fmt.Println(f1 + f2)
+	}
+
+}
+
+```
+
+
+
+```go
+#7)
+
+package main
+
+import "fmt"
+
+func main() {
+	var x, y int32
+	fmt.Println("plz input the first int32 number:")
+	fmt.Scanln(&x)
+
+	fmt.Println("plz input the second int32 number:")
+	fmt.Scanln(&y)
+
+	if (x+y)%3 == 0 && (x+y)%5 == 0 {
+		fmt.Printf("x+y = %v, and the sum can be 3 and 5 div...\n", x+y)
+	}
+}
+
+```
+
+
+
+```go
+#8)
+
+package main
+
+import "fmt"
+
+func main() {
+	var year int
+	fmt.Println("plz input a year number:")
+	fmt.Scanln(&year)
+
+	if (year%4 == 0 && year%100 != 0) || year%400 == 0 {
+		fmt.Printf("the year is %v, and is runNian\v", year)
+	} else {
+		fmt.Printf("the year is %v, and is not  runNian\v", year)
+	}
+
+}
+
+```
+
+
 
 
 
