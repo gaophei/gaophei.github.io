@@ -127,7 +127,33 @@ func main() {
 }
 ```
 
+```go
+package main
+
+import "fmt"
+
+func main() {
+	var succ int
+	fmt.Println("plz input a number:")
+	fmt.Scanln(&succ)
+
+	switch true {
+	case succ == 100:
+		fmt.Println("ok, give U BMW")
+	case 80 < succ && succ <= 99:
+		fmt.Println("ok, give U iphone7")
+	case 60 <= succ && succ <= 80:
+		fmt.Println("ok, give U iPad")
+	default:
+		fmt.Println("not ok, give U nothing")
+	}
+}
+
+```
+
 ![image-20220420213829393](homework/多分支02.png)
+
+
 
 ```go
 package main

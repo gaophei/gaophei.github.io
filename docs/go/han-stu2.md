@@ -1323,7 +1323,7 @@ Golang中定义变量时使用合法的前向引用
 ![image-20220420090549644](go-pics/双分支流程图.png)
 
 #### 5.3.3.多分支控制
-##### 5.3.3.1.基本语法：
+##### 5.3.3.1.基本语法
 ```
 	if 条件表达式1 {
 		执行代码块1
@@ -1342,14 +1342,40 @@ Golang中定义变量时使用合法的前向引用
 	//如果所有的条件表达式都不成立，那么执行else内的代码块n
 	
 	//else不是必须的
+	
 	//多分支只能有一个执行入口
+	//只输出ok1
+	
+var n int = 10
+if n > 9 {
+  fmt.Println("ok1")
+} else if n > 6 {
+  fmt.Println("ok2")
+} else if n > 3 {
+  fmt.Println("ok3")
+} else {
+  fmt.Println("ok4")
+}
 
+
+//should omit comparison to bool constant, can be simplified to !b (S1002)go-staticcheck
+
+var b bool = true 
+// if b == false
+if !b {
+   xxxxxx
+}
 ```
 ##### 5.3.3.2.多分支流程图
 
-![image-20220420163037476](/Volumes/HDD/study/GO/go-pics/多分支流程图1.png)
+![image-20240114212114011](E:\workpc\git\gitio\gaophei.github.io\docs\go\homework\多分支.png)
+
+
+
+
 
 #### 5.3.4.嵌套分支控制
+
 ```
 在一个分支结构中又完整的嵌套了另一个完成的分支结构，里面的分支结构叫内层分支，外面的分支结构叫外层分支
 ```
