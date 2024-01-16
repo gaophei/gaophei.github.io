@@ -1,6 +1,6 @@
 ### 1.0.单分支和双分支练习题
 
-![image-20240113224922042](E:\workpc\git\gitio\gaophei.github.io\docs\go\homework\单分支和双分支.png)
+![image-20240113224922042](homework\单分支和双分支.png)
 
 ```go
 #5)

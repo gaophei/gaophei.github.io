@@ -1368,7 +1368,7 @@ if !b {
 ```
 ##### 5.3.3.2.多分支流程图
 
-![image-20240114212114011](E:\workpc\git\gitio\gaophei.github.io\docs\go\homework\多分支.png)
+![image-20240114212114011](go-pics\多分支.png)
 
 
 
