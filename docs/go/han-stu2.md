@@ -1615,7 +1615,50 @@ for index, val := range str3 {
 
 //因为for-range是按照字符来遍历的，不是按照字节来遍历的
 ```
+#注意[]rune和for...range方式虽然输出内容一致，但是如果输出index时，for...range中的一个汉字占3个字节
+
+```go
+package main
+
+import "fmt"
+
+func main() {
+	var str string = "hi!北京"
+
+	//[]rune
+	fmt.Println("[]rune.........")
+	str01 := []rune(str)
+	for i := 0; i < len(str01); i++ {
+		fmt.Printf("index = %d, val = %c\n", i, str01[i])
+	}
+
+	// for...range
+	fmt.Println("for...range.........")
+	for index, val := range str {
+		fmt.Printf("index = %d,val = %c\n", index, val)
+	}
+}
+
+/*[]rune.........
+index = 0, val = h
+index = 1, val = i
+index = 2, val = !
+index = 3, val = 北
+index = 4, val = 京
+for...range.........
+index = 0,val = h
+index = 1,val = i
+index = 2,val = !
+index = 3,val = 北
+index = 6,val = 京
+*/
+
+```
+
+
+
 #### 5.4.4.while/do-while
+
 ```
 golang没有while和do-while，可以通过以下代码代替其功能
 ```
@@ -2608,6 +2651,7 @@ func lingxing02(n int) {
 				fmt.Print("*")
 			} else {
 				fmt.Print(" ")
+                
 			}
 		}
 		fmt.Println()

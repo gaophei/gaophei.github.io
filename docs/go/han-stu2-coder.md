@@ -436,7 +436,7 @@ func main() {
 ```
 ### 1.4.for循环
 
-![image-20220426171043311](/Volumes/HDD/study/GO/go-pics/for01.png)
+![image-20220426171043311](go-pics/for01.png)
 
 ```go
 package main
@@ -1099,7 +1099,68 @@ func main() {
 	*/
 }
 ```
+#2024update
+
+```go
+/*
+#先易后难，先靠边打印*
+         层数,星星数
+*        0,1
+***      1,3
+*****    2,5
+
+#先死后活 ，先打印3层或者4层，总结规律
+#3层     层数,星星数,空格数
+  *       0,1,2           i,2i+1,n-i
+ ***      1,3,1
+*****     2,5,0
+
+#4层
+   *       0,1,3          i,2i+1,n-i
+  ***      1,3,2
+ *****     2,5,1
+*******    3,7,0
+
+*/
+
+package main
+
+import "fmt"
+
+func main() {
+	var num int
+	fmt.Println("plz input a number:")
+	fmt.Scanln(&num)
+	fmt.Printf("U want to get %d level triangle...\n", num)
+
+	for i := 0; i < num; i++ {
+		for k := 0; k < num-i; k++ {
+			fmt.Print(" ")
+		}
+		for j := 0; j < 2*i+1; j++ {
+			fmt.Print("*")
+		}
+		fmt.Println()
+	}
+}
+
+
+/*
+plz input a number:
+5
+U want to get 5 level triangle...
+     *
+    ***
+   *****
+  *******
+ *********
+ */
+```
+
+
+
 #code7-九九乘法口诀
+
 ```go
 package main
 
@@ -1136,7 +1197,7 @@ func main() {
 
 ### 2.1.函数01
 
-![image-20220428223048624](/Volumes/HDD/study/GO/go-pics/流程控制作业题.png)
+![image-20220428223048624](/go-pics/流程控制作业题.png)
 
 ```go
 package main
@@ -1335,7 +1396,7 @@ func main() {
 
 ### 2.3.continu
 
-![image-20220501093109303](/Volumes/HDD/study/GO/homework/continue01.png)
+![image-20220501093109303](homework/continue01.png)
 
 #code01
 ```go
@@ -1438,7 +1499,7 @@ func main() {
 }
 ```
 
-![image-20220501102153123](/Volumes/HDD/study/GO/homework/break02.png)
+![image-20220501102153123](homework/break02.png)
 
 #code01---break
 ```go
