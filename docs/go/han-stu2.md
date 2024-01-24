@@ -2759,7 +2759,39 @@ func main() {
 
 }
 ```
+```go
+#20240121 go 1.21版本更新代码
+//time.Now() time    //返回当前时间
+//time.Now().UnixNano() int64    //返回从1970年1月1日零时零分零秒至今的纳秒数
+package main
+
+import (
+	"fmt"
+	"math/rand"
+	_ "time"
+)
+
+func main() {
+	var totalCount int
+
+	for {
+		// rand.Seed(time.Now().UnixNano())
+		i := rand.Intn(100) + 1
+		fmt.Println(i)
+		totalCount++
+		if i == 99 {
+			break
+		}
+	}
+	fmt.Println(totalCount)
+
+}
+```
+
+
+
 ##### 5.4.6.2.break介绍
+
 ```
 #break语句用于终止某个语句块的执行，用于中断当前for循环或者跳出switch语句
 #基本语法
@@ -3054,6 +3086,86 @@ func main() {
 	fmt.Println("result =", result)
 }
 ```
+
+```go
+#20240121 go 1.21版本更新代码
+package main
+
+import (
+	"bufio"
+	"fmt"
+	"os"
+	"strconv"
+	"strings"
+)
+
+func main() {
+	var result float64
+	var operator string
+
+	fmt.Println("plz input two numbers:")
+	reader := bufio.NewReader(os.Stdin)
+	line1, _ := reader.ReadString('\n')
+	numbers := strings.Fields(line1)
+	x, _ := strconv.ParseFloat(numbers[0], 64)
+	y, _ := strconv.ParseFloat(numbers[1], 64)
+
+	fmt.Println("plz input an operator:")
+	line2, _ := reader.ReadString('\n')
+	operator = strings.TrimSpace(line2)
+
+	switch operator {
+	case "+":
+		result = x + y
+	case "-":
+		result = x - y
+	case "*":
+		result = x * y
+	case "/":
+		result = x / y
+	default:
+		fmt.Println("输入操作符错误")
+	}
+
+	fmt.Println("result = ", result)
+}
+
+```
+
+```go
+#20240121 go 1.21版本更新代码，fmt.Scanf中加\n
+package main
+
+import "fmt"
+
+func main() {
+	var x, y, result float64
+	var operator byte
+
+	fmt.Println("plz input two numbers:")
+	fmt.Scanf("%v %v\n", &x, &y)
+	fmt.Println("plz input an operator:")
+	fmt.Scanf("%c\n", &operator)
+
+	switch operator {
+	case '+':
+		result = x + y
+	case '-':
+		result = x - y
+	case '*':
+		result = x * y
+	case '/':
+		result = x / y
+	default:
+		fmt.Println("输入操作符错误")
+	}
+
+	fmt.Println("result = ", result)
+}
+
+```
+
+
 ```
 #存在的问题：
 1)可以完成功能，但是代码冗余度高
@@ -3100,7 +3212,46 @@ func main() {
 }
 ```
 
+```go
+#20240121 go 1.21版本更新代码，fmt.Scanf中加\n
+package main
+
+import "fmt"
+
+func op(x, y float64, operator byte)  (result float64) {
+	switch operator {
+	case '+':
+		result = x + y
+	case '-':
+		result = x - y
+	case '*':
+		result = x * y
+	case '/':
+		result = x / y
+	default:
+		fmt.Println("operator input error")
+	}
+	return result
+}
+
+func main() {
+	var x, y, result float64
+	var operator byte
+
+	fmt.Println("plz input two numbers:")
+	fmt.Scanf("%v %v\n", &x, &y)
+	fmt.Println("plz input an operator:")
+	fmt.Scanf("%c\n", &operator)
+
+	result = op(x, y, operator)
+
+	fmt.Println("result = ", result)
+}
+
+```
+
 #### 6.1.2.函数的基本概念、基本语法
+
 ```
 1)为完成某一功能的程序指令(语句)的集合，称为函数
 2)在GO中，函数分为：自定义函数、系统函数(查看Go编程手册)
@@ -3181,6 +3332,7 @@ import (
 go build -o /Users/User/desktop/hello /Users/User/go/src/go_code/project02/main
 ```
 #使用别名后，原包名不能再使用
+
 ```go
 package main
 
@@ -3250,6 +3402,12 @@ func test(n int) {
 func main() {
 	test(4)
 }
+
+/*
+n= 2
+n= 2
+n= 3
+*/
 ```
 #内存、终端分析：
 
@@ -3274,6 +3432,10 @@ func test2(n int) {
 func main() {
 	test2(4)
 }
+
+/*
+n= 2
+*/
 ```
 
 
@@ -3282,7 +3444,79 @@ func main() {
 
 ![image-20220502180030295](go-pics/递归调用02.png)
 
+
+
+```go
+#指针01
+
+package main
+
+import "fmt"
+
+func test(n *int) {
+	if *n > 2 {
+		*n--
+		test(n)
+	}
+	fmt.Println(" test *n=", *n)
+}
+
+func main() {
+	var x int = 4
+	fmt.Println("main 01 x =", x)
+	test(&x)
+	fmt.Println("main 02 x =", x)
+
+}
+
+/*
+main 01 x = 4
+ test *n= 2
+ test *n= 2
+ test *n= 2
+*/
+
+```
+
+
+
+```go
+#指针02
+
+package main
+
+import "fmt"
+
+func test(n *int) {
+	if *n > 2 {
+		*n--
+		test(n)
+	} else {
+		fmt.Println(" test *n=", *n)
+	}
+
+}
+
+func main() {
+	var x int = 4
+	fmt.Println("main 01 x =", x)
+	test(&x)
+	fmt.Println("main 02 x =", x)
+
+}
+
+/*
+main 01 x = 4
+ test *n= 2
+main 02 x = 2
+*/
+
+```
+
+
+
 #### 6.5.3.递归调用的总结
+
 ```
 1)执行一个函数时，就创建一个新的受保护的独立空间(新函数栈)
 2)函数的局部变量是独立的，不会相互影响
@@ -3342,9 +3576,11 @@ plz input a int number:
 1,1,2,3,5,8,13,21
 */
 ```
-##### 6.5.4.2.猴子吃桃：每天吃其中的一半和多吃一个，第十天还没吃时只剩下一个，问最初一共多少个？
+##### 6.5.4.2.猴子吃桃
 
 ```go
+#每天吃其中的一半和多吃一个，第十天还没吃时只剩下一个，问最初一共多少个？
+
 package main
 
 import (
@@ -3471,19 +3707,21 @@ func main() {
 	// hnt(10, "A", "B", "C")
 }
 /*
-tests-mbp:funcdemo10 user$ go run main.go 
+# go run main.go 
 plz input the number of Hannuota:
 1
 A--->C
 移动次数: 1
-tests-mbp:funcdemo10 user$ go run main.go 
+
+# go run main.go 
 plz input the number of Hannuota:
 2
 A--->B
 A--->C
 B--->C
 移动次数: 3
-tests-mbp:funcdemo10 user$ go run main.go 
+
+#go run main.go 
 plz input the number of Hannuota:
 3
 A--->C
@@ -3509,7 +3747,11 @@ A--->C
 9)函数既然是一种数据类型，因此在GO中，函数可以作为形参，并且调用
 10)为了简化数据类型定义，GO支持自定义数据类型：
 	type 自定义数据类型 数据类型
-	typ myInt int--->main.int //自定义数据类型与原数据类型之间必须强制转换
+	type myInt int //自定义数据类型与原数据类型之间必须强制转换
+	main() { type myInt int }  //%T--->main.myInt  //main包里的myInt类型
+	package utils { type MyInt int   //%T--->utils.MyInt  //utils包里的MyInt类型
+	                var num01 MyInt }     //此时在main()中如果强制类型转换：utils.MyInt(num02)
+	
 	type mySum func(int,int) int--->mySum(10, 20)    //自定义数据类型为函数
 11)支持对函数返回值命名 func test(a, b int) (sum, sub int)
 12)使用_标识符，忽略返回值
@@ -3535,7 +3777,125 @@ A--->C
 	//args是切片slice，通过args[index]可以访问到各个值 args[0]....
 	//可变参数放在形参列表的最后
 ```
+
+
+#6)指针示意图
+
+![image-20240123092255187](go-pics\pointer-pic.png)
+
+#8)测试代码
+
+```go
+package main
+
+import "fmt"
+
+func test(x, y int) int {
+
+	fmt.Println("test func")
+	return x + y
+}
+
+func main() {
+	f1 := test
+	fmt.Printf("f1 type is %T, f1 = %v\n", f1(3, 4), f1(3, 4))
+}
+
+/*
+test func
+test func
+f1 type is int, f1 = 7
+*/
+
+```
+
+#对比代码
+
+```go
+package main
+
+import "fmt"
+
+func test(x, y int) int {
+
+	fmt.Println("test func")
+	return x + y
+}
+
+func main() {
+	f1 := test
+	fmt.Printf("f1 type is %T, f1 = %v\n", f1, f1(3, 4))
+}
+
+/*
+test func
+f1 type is func(int, int) int, f1 = 7
+*/
+
+```
+
+#比对代码2
+
+```go
+package main
+
+import "fmt"
+
+func test(x, y int) int {
+
+	fmt.Println("test func")
+	return x + y
+}
+
+func main() {
+	f1 := test
+	fmt.Printf("f1 type is %T\n", f1)
+}
+/*
+f1 type is func(int, int) int
+*/
+```
+
+
+
+#函数当形参时的调用关系
+
+```go
+package main
+
+import "fmt"
+
+func test01(n int) int {
+	fmt.Println("this is test01")
+	return n * n
+}
+
+func test02(mytest01 func(int) int, m int) int {
+	fmt.Println("this is test02")
+	return mytest01(m)
+}
+
+func main() {
+
+	hi := test02(test01, 30)
+	fmt.Println("this main()...")
+	fmt.Println("hi =", hi)
+
+}
+
+/*
+this is test02
+this is test01
+this main()...
+hi = 900
+*/
+
+```
+
+
+
 #code
+
 ```
 package main
 
@@ -3643,6 +4003,7 @@ plz input a int number:
 22
 44
 22
+484
 c的类型func(int) int, test01的类型func(int) int
 d类型main.myInt,数值10
 e类型int,数值20
