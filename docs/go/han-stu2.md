@@ -4476,6 +4476,10 @@ func main() {
 	f()
 	g()
 	g()
+    
+    l := AddSum
+	l()()
+	l()()
 }
 
 //输出结果如下：
@@ -4485,6 +4489,8 @@ func main() {
 33
 34
 35
+36
+37
 */
 ```
 
@@ -4727,6 +4733,8 @@ foo2 val = 238
 
 #通过闭包求斐波那契数
 ```go
+#20240125更新
+
 package main
 
 import "fmt"
@@ -4734,9 +4742,10 @@ import "fmt"
 func fbn() func() int {
 	a, b := 0, 1
 	return func() int {
-		tmp := b
+		// tmp := b
 		a, b = b, a+b
-		return tmp
+		// return tmp
+		return a
 	}
 }
 
@@ -4752,14 +4761,16 @@ labelA:
 	}
 
 	f1 := fbn()
-	for i := 0; i < n; i++ {
-		fmt.Printf("%v\t", f1())
+	for i := 1; i < n; i++ {
+		fmt.Printf("%v,", f1())
 	}
+	fmt.Printf("%v", f1())
+
 	fmt.Println()
 	fmt.Printf("the first %v fbn...done\n", n)
-	
+
 	fmt.Println("---------------------------------")
-	
+
 	fmt.Println("the fbn before m:")
 	var m int
 labelB:
@@ -4771,10 +4782,16 @@ labelB:
 	}
 
 	f2 := fbn()
+	first := true
 
 	fmt.Printf("the fbn before %v\n", m)
 	for i := f2(); i <= m; i = f2() {
-		fmt.Printf("%v\t", i)
+		// fmt.Printf("%v\t", i)
+		if !first {
+			fmt.Print(",")
+		}
+		fmt.Print(i)
+		first = false
 	}
 	fmt.Println()
 
@@ -4783,19 +4800,20 @@ labelB:
 /*
 the first n fbn:
 plz input a int number:
-10
-1       1       2       3       5       8       13      21      34      55
-the first 10 fbn...done
+7
+1,1,2,3,5,8,13
+the first 7 fbn...done
 ---------------------------------
 the fbn before m:
 plz input a int number
-10
-the fbn before 10
-1       1       2       3       5       8
+8
+the fbn before 8
+1,1,2,3,5,8
 */
 
 ```
 #通过闭包求斐波那契数并存入切片
+
 ```go
 package main
 

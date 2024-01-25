@@ -465,6 +465,10 @@ binlog_order_commits = off
 #binlog_expire_logs_seconds = 604800
 #expire_logs_days = 180
 binlog_expire_logs_seconds = 15552000
+#binlog_ignore_db = testdb01
+#binlog_ignore_db = testdb02
+#binlog_do_db = testdb03
+#binlog_do_db = testdb04
 
 #binlog事务压缩传输
 binlog_transaction_compression = on
@@ -887,6 +891,10 @@ binlog_order_commits = off
 #binlog_expire_logs_seconds = 604800
 #expire_logs_days = 180
 binlog_expire_logs_seconds = 15552000
+#binlog_ignore_db = testdb01
+#binlog_ignore_db = testdb02
+#binlog_do_db = testdb03
+#binlog_do_db = testdb04
 
 #binlog事务压缩传输
 binlog_transaction_compression = on
