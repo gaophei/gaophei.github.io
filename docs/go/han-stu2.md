@@ -2539,8 +2539,74 @@ func main() {
 	*/
 }
 
+
+
+
 ```
+```go
+#202401添加
+package main
+
+import (
+    "fmt"
+)
+
+func printDiamond(n int) {
+    for i := 0; i < n; i++ {
+        for j := 0; j < n-i; j++ {
+            fmt.Print(" ")
+        }
+        fmt.Print("*")
+        if i != 0 {
+            for j := 0; j < 2*i-1; j++ {
+                fmt.Print(" ")
+            }
+            fmt.Print("*")
+        }
+        fmt.Println()
+    }
+    for i := n - 1; i > 0; i-- {
+        for j := 0; j < n-i+1; j++ {
+            fmt.Print(" ")
+        }
+        fmt.Print("*")
+        if i != 1 {
+            for j := 0; j < 2*i-3; j++ {
+                fmt.Print(" ")
+            }
+            fmt.Print("*")
+        }
+        fmt.Println()
+    }
+}
+
+func main() {
+    n := 6 // replace with your value
+    printDiamond(n)
+}
+
+
+/*
+
+      *     
+     * *    
+    *   *   
+   *     *  
+  *       * 
+ *         *
+  *       * 
+   *     *
+    *   *
+     * *
+      *
+      
+*/
+```
+
+
+
 ###### 5.4.5.3.8.空心棱形上下坐标整体打印版
+
 ```go
 package main
 
@@ -2691,7 +2757,10 @@ plz input a int number:
 */
 ```
 
+
+
 ###### 5.4.5.3.10.九九乘法口诀
+
 ```go
 package main
 
@@ -4991,12 +5060,13 @@ func main() {
 	x := 1
 	//形参
 	defer func(a int) {
-		fmt.Println("a =", a)
+		fmt.Println("a =", a)     //形参
+        fmt.Println("a...x =", x) //闭包
 	}(x)
 
 	//闭包
 	defer func() {
-		fmt.Println("x =", x)
+		fmt.Println("x =", x)   //闭包
 	}()
 
 	x++
@@ -5005,6 +5075,7 @@ func main() {
 /*
 x = 2
 a = 1
+a...x = 2
 */
 
 //defer 其实是延迟执行。所以执行到 defer 的时候，其实已经加载了状态了，也就是已经传参 x 了。因为这样传参是值复制，所以，在执行的时候，a 的值就是 1 了。
@@ -5228,6 +5299,9 @@ func main() {
 4)如果全局变量和局部变量名称相同(同时声明或者定义)，在函数内编译器采用就近原则
 5)如果有了全局变量，而在某个函数里对其进行了修改，那么其他函数再次访问全局变量为修改后的全局变量
 6)程序执行流程：全局变量定义--->init()--->main()
+7)全局变量的声明，不能采用类型推导。
+  var Age int = 10   //正确
+  Name := "jack"     //错误
 ```
 #code01---全局变量和局部变量都存在时，就近原则
 ```go
