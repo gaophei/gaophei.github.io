@@ -5380,11 +5380,35 @@ func main() {
   //7
   
 2)字符串遍历，同时处理有中文的问题，先将字符串转成rune切片， r := []rune(str)
-	str2 := []rune(str1)
-	for i := 0; i < len(str2); i++ {
-		fmt.Printf("%c\n", str2[i])
+    var str01 string = "love中国"
+	str02 := []rune(str01)
+	for i := 0; i < len(str02); i++ {
+		fmt.Printf("%c\n", str02[i])
 	}
 	
+#还可以通过for...range
+    for index, val := range str01 {
+		fmt.Printf("str01[%d] = %c\n", index, val)
+	}
+	fmt.Println()
+	for index, val := range str02 {
+		fmt.Printf("str02[%d] = %c\n", index, val)
+	}
+/*
+str01[0] = l
+str01[1] = o
+str01[2] = v
+str01[3] = e
+str01[4] = 中
+str01[7] = 国
+
+str02[0] = l
+str02[1] = o
+str02[2] = v
+str02[3] = e
+str02[4] = 中
+str02[5] = 国
+*/
 3)字符串转整数，strconv.Atoi(str string) (i int, err error)
 	str3 := "12"
 	//str3 := "dog"  //格式错误 strconv.Atoi: parsing "dog": invalid syntax
@@ -5417,6 +5441,7 @@ func main() {
 	//[97 98 99 126 228 184 138 230 181 183]
 	//[]uint8
 	//一个汉字占3位
+	//[]byte{11,22,33}
 	
 6)[]byte转字符串，string([]byte{byte1, byte2 ...})
 	//var bytes01 = []byte{97, 98, 99, 228, 184, 138, 230, 181, 183}
@@ -5480,11 +5505,17 @@ func main() {
 12)返回子串在字符串第一次出现的index值，不存在则返回-1，第一个位置是0
 	//strings.Index(s, sep string) int
 	
-  fmt.Println(strings.Index("hello,golang", "go"))
+    fmt.Println(strings.Index("hello,golang", "go"))
 	fmt.Println(strings.Index("hello,golang", "dog"))
 	//6
 	//-1
 	
+    fmt.Println(strings.Index(" hello,golang", " "))
+	fmt.Println(strings.Index(" hello,golang", ""))
+	//0
+	//-1
+    
+    
 	字符串chars中的任一utf-8码值在s中第一次出现的位置，如果不存在或者chars为空字符串则返回-1
 	//func IndexAny(s, chars string) int
 
@@ -5503,6 +5534,10 @@ func main() {
 	字符串chars中的任一utf-8码值在s中最后一次出现的位置，如不存在或者chars为空字符串则返回-1
 	//func LastIndexAny(s, chars string) int
 	
+	fmt.Println(strings.LastIndex("golang,gotoschool", "go"))
+	//15
+	
+	
 14)将指定的子串替换成另外一个子串，n可以指定替换多少个，-1为全部替换
 	//strings.Replace(s, old, new string, n int) string
 
@@ -5512,6 +5547,7 @@ func main() {
 	//hello,Java,welcome to goschool~
 	//hello,Java,welcome to Javaschool~
 	
+	str07 := "A goodnews for you to go~"
 	str09 := strings.Replace(str07, "o", "", -1)
 	fmt.Println(str09)
 	//A gdnews fr yu t g~
@@ -5534,7 +5570,7 @@ func main() {
 	//[" " "x" "y" "z" " "]
 	//[""]
 	
-  fmt.Printf("%q\n", strings.Split("aliGO,toali jacky", "ali"))
+    fmt.Printf("%q\n", strings.Split("aliGO,toali jacky", "ali"))
 	fmt.Printf("%q\n", strings.Split("x,y,z", ","))
 	//["" "GO,to" " jacky"]
 	//["x" "y" "z"]
@@ -5543,7 +5579,7 @@ func main() {
 	//strings.ToLower(s string)
 	//strings.ToUpper(s string
 	
-  fmt.Println(strings.ToLower("Go Is GooD~"))
+    fmt.Println(strings.ToLower("Go Is GooD~"))
 	fmt.Println(strings.ToUpper("Go Is GooD~"))
 	
 	//go is good~
@@ -5559,7 +5595,7 @@ func main() {
 	返回将s前后端所有cutset包含的utf-8码值都去掉的字符串
 	//strings.Trim(s, cutset string) string
 	
-  fmt.Println(strings.Trim("hh haha,e hh", "a h"))
+    fmt.Println(strings.Trim("hh haha,e hh", "a h"))
 	fmt.Println(strings.Trim("hh haha,e hh", "h e"))
 	//,e
 	//aha,
@@ -5589,7 +5625,7 @@ func main() {
 	//true
 	//false
 	
-  fmt.Println(strings.HasPrefix("ftp://192.168.1.102", "ftp"))
+    fmt.Println(strings.HasPrefix("ftp://192.168.1.102", "ftp"))
 	fmt.Println(strings.HasPrefix("ftp://192.168.1.102", "http"))
 	//true
 	//false
@@ -5631,7 +5667,7 @@ func main() {
 	fmt.Println("周:", now.Weekday())
 	fmt.Println("周:", int(now.Weekday()))
 	
-  fmt.Println(now.Date())
+    fmt.Println(now.Date())
 	fmt.Println(now.Clock())
 }
 	/*
@@ -5653,7 +5689,7 @@ func main() {
 4)格式化日期时间
 	方式1：使用Printf或者Sprintf
 	
-  fmt.Printf("today is %d-%02d-%02d %02d:%02d:%02d\n", now.Year(), now.Month(), now.Day(),
+    fmt.Printf("today is %d-%02d-%02d %02d:%02d:%02d\n", now.Year(), now.Month(), now.Day(),
 		now.Hour(), now.Minute(), now.Second())
 		
 	dateStr := fmt.Sprintf("today is %d-%d-%d %d:%d:%d\n", now.Year(), now.Month(), now.Day(),
@@ -5670,7 +5706,7 @@ func main() {
 	func (t Time) Format(layout string) string
 	//2006-01-02 15:04:05 字符串中的各个数字是固定的!
 	
-  fmt.Println(time.Now().Format("2006/01/02 15:04:05"))
+    fmt.Println(time.Now().Format("2006/01/02 15:04:05"))
 	fmt.Println(time.Now().Format("2006-01-02 15:04:05"))
 	//2022/05/08 21:06:53
 	//2022-05-08 21:06:53
@@ -5776,7 +5812,7 @@ func main() {
 	num := t02.Sub(t01)
 	fmt.Println(num)
 	fmt.Println(time.Duration(a02-a01) / time.Nanosecond)
-  fmt.Println(time.Duration(a02-a01))
+    fmt.Println(time.Duration(a02-a01))
 }
 
 //5.770290473s
@@ -5861,7 +5897,7 @@ func make(Type, size IntegerType) Type
 
 内建函数make分配并初始化一个类型为切片、映射、或通道的对象。其第一个实参为类型，而非值。make的返回类型与其参数相同，而非指向它的指针。其具体结果取决于具体的类型：
 
-切片：size指定了其长度。该切片的容量等于其长度。切片支持第二个整数实参可用来指定不同的 容量；它必须不小于其长度，因此 make([]int, 0, 10) 会分配一个长度为0，容量为10的切片；
+切片：size指定了其长度。该切片的容量等于其长度。切片支持第二个整数实参可用来指定不同的容量；它必须不小于其长度，因此 make([]int, 0, 10) 会分配一个长度为0，容量为10的切片；
 
 映射：初始分配的创建取决于size，但产生的映射长度为0。size可以省略，这种情况下就会分配 一个小的起始大小；
 
