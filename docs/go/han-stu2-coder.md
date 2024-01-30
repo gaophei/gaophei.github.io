@@ -2030,7 +2030,7 @@ func main() {
 
 ![image-20220509115721353](homework/func-pkg-homework03.png)
 
-![image-20220509115956529](/Volumes/HDD/study/GO/homework/func-pkg-homework04.png)
+![image-20220509115956529](homework/func-pkg-homework04.png)
 
 ![image-20220509121116073](homework/func-pkg-homework05001.png)
 
@@ -2038,7 +2038,7 @@ func main() {
 
 
 
-![image-20220509121219371](/Volumes/HDD/study/GO/homework/func-pkg-homework06.png)
+![image-20220509121219371](homework/func-pkg-homework06.png)
 
 
 #code01--循环输入日期，并检查是否正确
@@ -2187,12 +2187,18 @@ label:
 		}
 		count++
 		sum += i
+        fmt.Printf("%v\t", i)
+        /*
 		if count <= 5 {
 			fmt.Printf("%d\t", i)
 		} else {
 			count = 0
 			fmt.Println()
 		}
+		*/
+        if count%5 == 0 {
+            fmt.Println()
+        }
 	}
 	fmt.Println()
 	fmt.Printf("100内素数总和为:%d\n", sum)
@@ -2210,6 +2216,71 @@ func main() {
 67      71      73      79      83
 97
 100内素数总和为:1060
+*/
+```
+
+```go
+#202401
+package main
+
+import "fmt"
+
+func aloneNum(n int) {
+	count, sum := 0, 0
+label1:
+	for i := 2; i <= n; i++ {
+		for k := 2; k < i; k++ {
+			if i%k == 0 {
+				continue label1
+			}
+		}
+
+		fmt.Printf("%v\t", i)
+		sum += i
+		count++
+		if count%5 == 0 {
+			fmt.Println()
+		}
+	}
+
+	fmt.Println()
+	fmt.Println("sum = ", sum)
+	fmt.Println()
+
+}
+
+func main() {
+	var num int
+
+	for {
+		fmt.Println("plz input a number:")
+		fmt.Scanln(&num)
+		if num <= 1 {
+			fmt.Println("U input a wrong number, plz input again")
+			continue
+		}
+		aloneNum(num)
+	}
+
+}
+
+/*
+plz input a number:
+10 
+2       3       5       7
+sum =  17
+
+plz input a number:
+100
+2       3       5       7       11
+13      17      19      23      29
+31      37      41      43      47
+53      59      61      67      71
+73      79      83      89      97
+
+sum =  1060
+
+plz input a number:
 */
 ```
 

@@ -6175,7 +6175,7 @@ done...
 ```
 1)数组的定义
 	var 数组名 [数组大小]数据类型
-	//var a[5]int
+	//var a [5]int
 
 2)案例
 ```
@@ -6301,7 +6301,7 @@ score[3] = 99.00
 */
 ```
 #### 7.3.2.数组初始化方式
-```
+```go
 数组的定义
 	var 数组名 [数组大小]数据类型
 	
@@ -6309,8 +6309,9 @@ score[3] = 99.00
 1) var a1 [3]int = [3]int{3, 4, 5}
 2) var a2 = [3]int{10, 20, 30}
 3) var a3 = [...]int{100, 200, 300}
-4) var a4 = [...]int{0:50, 1:60, 2:70}
-5) a5 := [...]string{1: "tom", 0: "jack", 2: "lucy"} 
+4) var a4 = [...]int{0:50, 1:60, 2:70}  //[50 60 70]
+5) var a5 = [...]int{0:50, 1:60, 4:70}  //[50 60 0 70]
+6) a6 := [...]string{1: "tom", 0: "jack", 2: "lucy"} 
 ```
 ```go
 package main
@@ -6692,6 +6693,39 @@ func main() {
 	fmt.Printf("%c\n", arr01)
 }
 ```
+
+```go
+#202401更新
+package main
+
+import "fmt"
+
+func main() {
+	//创建一个byte类型的26个元素的数组，分别放置'A'---'Z'。使用for循环访问所有元素并打印出来
+	var arr [26]byte
+
+	for i := 0; i < len(arr); i++ {
+		arr[i] = 'A' + byte(i)
+
+	}
+
+	first := true
+	for _, v := range arr {
+		if !first {
+			fmt.Printf(",")
+		}
+		fmt.Printf("%c", v)
+		first = false
+	}
+	fmt.Println()
+}
+
+/*
+A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z
+*/
+
+```
+
 ```
 2)请求出一个数组的最大值，并得到对应的下标
 ```
@@ -6703,7 +6737,7 @@ import "fmt"
 func main() {
 	// var arr01 = [5]int{13, 8, 20, 33, 7}
 	var arr01 [5]int
-	fmt.Println("plz input 5 numbers:")
+	fmt.Println("plz input 5 numbers,输入一个数字后，按回车后输入下一个数字:")
 	for i := 0; i < 5; i++ {
 		fmt.Scanln(&arr01[i])
 	}
@@ -6721,7 +6755,7 @@ func main() {
 }
 
 /*
-plz input 5 numbers:
+plz input 5 numbers,输入一个数字后，按回车后输入下一个数字:
 22
 44
 100
