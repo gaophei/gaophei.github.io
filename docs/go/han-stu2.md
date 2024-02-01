@@ -17,6 +17,7 @@ fmt.Printf("slice01 addr=%p, slice01 content=%v\n", slice01, slice01)
 fmt.Printf("baseArr[1] addr=%p", &baseArr[1])
 
 //slice01 addr  ?  sliece01[0] addr
+// ==
 ```
 ## 1.学习思路
 
@@ -6911,14 +6912,14 @@ slice := arr01[1:3]  //[3 5]  len(slice)=2 cap(slice)=4
 3)slice是一个引用，所以可以通过切片修改原来数组里的值
 	slice[1] = 10
 	// arr01 = [1 3 10 7 9]
-	//sliece = [3 10]
+	// sliece = [3 10]
 ```
 ```go
 var arr01 [5]int = [...]int{1, 3, 5, 7, 9}
 slice := arr01[1:3]
 slice[1] = 10
-fmt.Printf("arr01=%v", arr01)
-fmt.Printf("slice=%v", slice)
+fmt.Printf("arr01=%v\n", arr01)
+fmt.Printf("slice=%v\n", slice)
 ```
 ### 7.9.切片的使用
 #### 7.9.1.切片的三种定义方式
@@ -7017,7 +7018,8 @@ import "fmt"
 
 func main() {
 	var slice01 []bool
-	slice02 := make([]bool, 0, 0)
+	// slice02 := make([]bool, 0, 0)
+    slice02 := make([]bool, 0)
 	slice03 := []string{}
 	fmt.Printf("slice01 content= %v, addr = %p, len=%d, cap= %d\n", slice01, slice01, len(slice01), cap(slice01))
 	fmt.Printf("slice02 content= %v, addr = %p, len=%d, cap= %d\n", slice02, slice02, len(slice02), cap(slice02))
@@ -7199,7 +7201,7 @@ slice = append([]byte("hello "), "world"...)
 	dst和src两个切片的数据空间是独立的，只是复制其中的元素，也就是说copy方法是不会建立两个切片的联系的
 	var arr01 = [5]int{1, 2, 3, 4, 5}
 	slice01 := arr01[1:3]  //2, 3
-	slice02 : = make([]int 5)
+	slice02 : = make([]int, 5)
 	copy(slice02, slice01) // slice02 ===> 2, 3, 0, 0, 0
 	
 	slice03 := make([]byte, 3)
