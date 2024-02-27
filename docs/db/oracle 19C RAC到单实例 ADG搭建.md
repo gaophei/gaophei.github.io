@@ -948,6 +948,7 @@ cp listener.ora listener.ora.bak
 vi listener.ora
 
 #添加以下内容
+#如果主库中有pdb，那么这里也必须添加
 
 SID_LIST_LISTENER =
   (SID_LIST =
@@ -958,6 +959,12 @@ SID_LIST_LISTENER =
     )
     (SID_DESC =
       (GLOBAL_DBNAME = xydbdg_dgmgrl)
+      (ORACLE_HOME = /u01/app/oracle/product/19.0.0/db_1)
+      (SID_NAME = xydbdg)
+    )
+    
+      (SID_DESC =
+      (GLOBAL_DBNAME = portal)
       (ORACLE_HOME = /u01/app/oracle/product/19.0.0/db_1)
       (SID_NAME = xydbdg)
     )
@@ -3758,6 +3765,7 @@ select name,value,time_computed,datum_time from v$dataguard_stats;
 
 #检查日志接受方式
 select process,client_process,sequence#, THREAD# ，status from v$managed_standby;
+select name,role,instance,thread#,sequence#,action from gv$dataguard_process;
 
 
 
@@ -4344,7 +4352,459 @@ SYS@xydbdg>
 
 
 
-### 3.1.ADG做switchover切换测试
+### 3.1.ADG做手动switchover切换测试
+
+#### 3.1.0.switchover_status概念
+
+```
+A 如果switchover_status为TO_PRIMARY 说明标记恢复可以直接转换为primary库;
+  alter database commit to switchover to primary ；
+
+B 如果switchover_status为SESSION ACTIVE 就应该断开活动会话
+alter database commit to switchover to primary with session shutdown; 
+
+C 如果switchover_status为NOT ALLOWED 说明切换标记还没收到，此时不能执行转换。
+
+D、状态由LOG SWITCH GAP变成了RESOLVABLE GAP，从字面理解是主备库之间存在GAP，于是执行： alter system switch logfile；手动切换归档即可（LLL）
+
+E、当主库的SWITCHOVER_STATUS状态为FAILED DESTINATION时，是因为备库不在mount状态下，在备库中：startup mount
+
+F、当主库的SWITCHOVER_STATUS状态为RESOLVABLE GAP时，可以shutdown和startup备库，问题可解决。
+
+
+
+---------------------------------------
+
+The switchover_status column of v$database can have the following values:
+
+Not Allowed:-Either this is a standby database and the primary database has not been switched first, or this is a primary database and there are no standby databases
+
+Session Active:- Indicates that there are active SQL sessions attached to the primary or standby database that need to be disconnected before the switchover operation is permitted
+
+Switchover Pending:- This is a standby database and the primary database switchover request has been received but not processed.
+
+Switchover Latent:- The switchover was in pending mode, but did not complete and went back to the primary database
+
+To Primary:- This is a standby database, with no active sessions, that is allowed to switch over to a primary database
+
+To Standby:- This is a primary database, with no active sessions, that is allowed to switch over to a standby database
+
+Recovery Needed:- This is a standby database that has not received the switchover request
+```
+
+
+
+#### 3.1.1.主备切换---通过11g adg命令
+
+##### 3.1.1.1.原主库操作
+
+```sql
+#查看当前库的状态
+select OPEN_MODE,PROTECTION_MODE,PROTECTION_LEVEL,SWITCHOVER_STATUS from gv$database;
+
+#查看库的角色，和可以切换到的角色
+select database_role,switchover_status from gv$database;
+
+alter system archive log current;
+
+#对主库进行切换，rac集群关闭第二个节点(也可以不关闭)。（如果SWITCHOVER_STATUS的值为TO STANDBY或者为SESSIONS ACTIVE都可以切换至备库）
+alter database commit to switchover to physical standby with session shutdown;
+
+#此时原主库的两个实例都关闭了
+ps -x
+srvctl status database -d xydb
+
+
+#等待原备库切换为主库后(状态为FAILED DESTINATION)
+srvctl start database -d xydb
+
+srvctl status database -d xydb
+
+select OPEN_MODE,DATABASE_ROLE,PROTECTION_MODE,PROTECTION_LEVEL,SWITCHOVER_STATUS from gv$database;
+
+#此时原主库状态为READ ONLY/RECOVERY NEEDED
+
+#原主库开启实时查询同步
+ALTER DATABASE RECOVER MANAGED STANDBY DATABASE DISCONNECT FROM SESSION;
+
+#此时原主库状态为READ ONLY/NOT ALLOWED
+
+select OPEN_MODE,DATABASE_ROLE,PROTECTION_MODE,PROTECTION_LEVEL,SWITCHOVER_STATUS from gv$database;
+
+select process,client_process,sequence#, THREAD# ，status from v$managed_standby;
+```
+
+
+
+#logs
+
+```sql
+SYS@xydb1> select OPEN_MODE,PROTECTION_MODE,PROTECTION_LEVEL,SWITCHOVER_STATUS from v$database;
+
+OPEN_MODE	     PROTECTION_MODE	  PROTECTION_LEVEL     SWITCHOVER_STATUS
+-------------------- -------------------- -------------------- --------------------
+READ WRITE	     MAXIMUM PERFORMANCE  MAXIMUM PERFORMANCE  TO STANDBY
+
+SYS@xydb1> select OPEN_MODE,PROTECTION_MODE,PROTECTION_LEVEL,SWITCHOVER_STATUS from gv$database;
+
+OPEN_MODE	     PROTECTION_MODE	  PROTECTION_LEVEL     SWITCHOVER_STATUS
+-------------------- -------------------- -------------------- --------------------
+READ WRITE	     MAXIMUM PERFORMANCE  MAXIMUM PERFORMANCE  TO STANDBY
+READ WRITE	     MAXIMUM PERFORMANCE  MAXIMUM PERFORMANCE  TO STANDBY
+
+SYS@xydb1> select database_role,switchover_status from v$database;
+
+DATABASE_ROLE	 SWITCHOVER_STATUS
+---------------- --------------------
+PRIMARY 	 TO STANDBY
+
+SYS@xydb1> select database_role,switchover_status from gv$database;
+
+DATABASE_ROLE	 SWITCHOVER_STATUS
+---------------- --------------------
+PRIMARY 	 TO STANDBY
+PRIMARY 	 TO STANDBY
+
+SYS@xydb1> 
+
+#开始切换
+SYS@xydb1> alter database commit to  switchover to physical standby with session shutdown;
+
+Database altered.
+
+SYS@xydb1> select status from v$instance;
+select status from v$instance
+*
+ERROR at line 1:
+ORA-01034: ORACLE not available
+Process ID: 26706
+Session ID: 1989 Serial number: 60268
+
+SYS@xydb1> exit
+
+[oracle@k8s-rac01 ~]$ ps -x
+  PID TTY      STAT   TIME COMMAND
+11101 pts/0    S+     0:00 sqlplus   as sysdba
+11102 ?        Ss     0:00 oraclexydb1 (DESCRIPTION=(LOCAL=YES)(ADDRESS=(PROTOCOL=beq)))
+20751 pts/1    S      0:00 -bash
+21765 pts/1    R+     0:00 ps -x
+26536 pts/0    S      0:00 -bash
+
+[oracle@k8s-rac01 ~]$ srvctl status database -d xydb
+Instance xydb1 is not running on node k8s-rac01
+Instance xydb2 is not running on node k8s-rac02
+
+#原备库切换为主库后
+[oracle@k8s-rac01 ~]$ srvctl start database -d xydb
+[oracle@k8s-rac01 ~]$ srvctl status database -d xydb
+Instance xydb1 is running on node k8s-rac01
+Instance xydb2 is running on node k8s-rac02
+[oracle@k8s-rac01 ~]$ 
+
+SYS@xydb1> select OPEN_MODE,DATABASE_ROLE,PROTECTION_MODE,PROTECTION_LEVEL,SWITCHOVER_STATUS from gv$database;
+
+OPEN_MODE	     DATABASE_ROLE    PROTECTION_MODE	   PROTECTION_LEVEL	SWITCHOVER_STATUS
+-------------------- ---------------- -------------------- -------------------- --------------------
+READ ONLY	     PHYSICAL STANDBY MAXIMUM PERFORMANCE  MAXIMUM PERFORMANCE	RECOVERY NEEDED
+READ ONLY	     PHYSICAL STANDBY MAXIMUM PERFORMANCE  MAXIMUM PERFORMANCE	RECOVERY NEEDED
+
+#开启同步
+SYS@xydb1> ALTER DATABASE RECOVER MANAGED STANDBY DATABASE DISCONNECT FROM SESSION;
+
+Database altered.
+
+SYS@xydb1> select OPEN_MODE,DATABASE_ROLE,PROTECTION_MODE,PROTECTION_LEVEL,SWITCHOVER_STATUS from gv$database;
+
+OPEN_MODE	     DATABASE_ROLE    PROTECTION_MODE	   PROTECTION_LEVEL	SWITCHOVER_STATUS
+-------------------- ---------------- -------------------- -------------------- --------------------
+READ ONLY WITH APPLY PHYSICAL STANDBY MAXIMUM PERFORMANCE  MAXIMUM PERFORMANCE	NOT ALLOWED
+READ ONLY WITH APPLY PHYSICAL STANDBY MAXIMUM PERFORMANCE  MAXIMUM PERFORMANCE	NOT ALLOWED
+
+SYS@xydb1> 
+
+
+```
+
+
+
+
+
+##### 3.1.1.2.原备库操作
+
+```sql
+select OPEN_MODE,PROTECTION_MODE,PROTECTION_LEVEL,SWITCHOVER_STATUS from v$database;
+
+#查看备库是否可以切换至主库（SWITCHOVER_STATUS的值为TO PRIMARY或者SESSIONS ACTIVE都可以切换至主库）
+select switchover_status from v$database;
+
+#将备库切换到主库并打开
+ALTER DATABASE COMMIT TO SWITCHOVER TO PRIMARY WITH SESSION SHUTDOWN;
+
+#此时原备库状态为mounted/not allowed
+
+select OPEN_MODE,PROTECTION_MODE,PROTECTION_LEVEL,SWITCHOVER_STATUS from v$database;
+
+#变更为Open状态
+alter database open;
+
+#此时原备库状态为READ WRITE/FAILED DESTINATION
+
+#原主库此时再次startup后
+
+#此时原备库状态为READ WRITE/TO STANDBY
+
+#查看切换完成后的状态
+select open_mode,database_role,switchover_status from v$database;
+select OPEN_MODE,DATABASE_ROLE,PROTECTION_MODE,PROTECTION_LEVEL,SWITCHOVER_STATUS from v$database;
+
+#查看pdb
+show pdbs;
+
+alter pluggable database  all open;
+show pdbs;
+```
+
+
+
+#logs
+
+```sql
+#主库切换前
+SYS@xydbdg> select switchover_status from v$database;
+
+SWITCHOVER_STATUS
+--------------------
+NOT ALLOWED
+
+SYS@xydbdg> select OPEN_MODE,PROTECTION_MODE,PROTECTION_LEVEL,SWITCHOVER_STATUS from v$database;
+
+OPEN_MODE	     PROTECTION_MODE	  PROTECTION_LEVEL     SWITCHOVER_STATUS
+-------------------- -------------------- -------------------- --------------------
+READ ONLY WITH APPLY MAXIMUM PERFORMANCE  MAXIMUM PERFORMANCE  NOT ALLOWED
+
+SYS@xydbdg> 
+
+#主库切换后
+SYS@xydbdg> select switchover_status from v$database;
+
+SWITCHOVER_STATUS
+--------------------
+TO PRIMARY
+
+SYS@xydbdg> select OPEN_MODE,PROTECTION_MODE,PROTECTION_LEVEL,SWITCHOVER_STATUS from v$database;
+
+OPEN_MODE	     PROTECTION_MODE	  PROTECTION_LEVEL     SWITCHOVER_STATUS
+-------------------- -------------------- -------------------- --------------------
+READ ONLY WITH APPLY MAXIMUM PERFORMANCE  MAXIMUM PERFORMANCE  TO PRIMARY
+
+
+#原备库切换为主库
+SYS@xydbdg> alter database commit to switchover to primary with session shutdown;
+
+Database altered.
+
+SYS@xydbdg> select status from v$instance;
+
+STATUS
+------------
+MOUNTED
+
+SYS@xydbdg> select OPEN_MODE,PROTECTION_MODE,PROTECTION_LEVEL,SWITCHOVER_STATUS from v$database;
+
+OPEN_MODE	     PROTECTION_MODE	  PROTECTION_LEVEL     SWITCHOVER_STATUS
+-------------------- -------------------- -------------------- --------------------
+MOUNTED 	     MAXIMUM PERFORMANCE  UNPROTECTED	       NOT ALLOWED
+
+SYS@xydbdg> alter database open;
+
+Database altered.
+
+SYS@xydbdg> 
+SYS@xydbdg> select OPEN_MODE,PROTECTION_MODE,PROTECTION_LEVEL,SWITCHOVER_STATUS from v$database;
+
+OPEN_MODE	     PROTECTION_MODE	  PROTECTION_LEVEL     SWITCHOVER_STATUS
+-------------------- -------------------- -------------------- --------------------
+READ WRITE	     MAXIMUM PERFORMANCE  MAXIMUM PERFORMANCE  FAILED DESTINATION
+
+SYS@xydbdg> 
+
+#原主库再次startup后
+SYS@xydbdg>  select OPEN_MODE,PROTECTION_MODE,PROTECTION_LEVEL,SWITCHOVER_STATUS from v$database;
+
+OPEN_MODE	     PROTECTION_MODE	  PROTECTION_LEVEL     SWITCHOVER_STATUS
+-------------------- -------------------- -------------------- --------------------
+READ WRITE	     MAXIMUM PERFORMANCE  MAXIMUM PERFORMANCE  TO STANDBY
+
+SYS@xydbdg> select OPEN_MODE,DATABASE_ROLE,PROTECTION_MODE,PROTECTION_LEVEL,SWITCHOVER_STATUS from v$database;
+
+OPEN_MODE	     DATABASE_ROLE    PROTECTION_MODE	   PROTECTION_LEVEL	SWITCHOVER_STATUS
+-------------------- ---------------- -------------------- -------------------- --------------------
+READ WRITE	     PRIMARY	      MAXIMUM PERFORMANCE  MAXIMUM PERFORMANCE	TO STANDBY
+
+SYS@xydbdg> 
+
+#查看pdb并启动
+SYS@xydbdg> show pdbs;
+
+    CON_ID CON_NAME			  OPEN MODE  RESTRICTED
+---------- ------------------------------ ---------- ----------
+	 2 PDB$SEED			  READ ONLY  NO
+	 3 STUWORK			  MOUNTED
+	 4 PORTAL			  MOUNTED
+SYS@xydbdg> alter pluggable database all open;
+
+Pluggable database altered.
+
+SYS@xydbdg> show pdbs;
+
+    CON_ID CON_NAME			  OPEN MODE  RESTRICTED
+---------- ------------------------------ ---------- ----------
+	 2 PDB$SEED			  READ ONLY  NO
+	 3 STUWORK			  READ WRITE NO
+	 4 PORTAL			  READ WRITE NO
+SYS@xydbdg> 
+
+```
+
+
+
+
+
+##### 3.1.1.3.新主备检查
+
+#检查状态
+
+```sql
+#新主库，即原备库
+select OPEN_MODE,DATABASE_ROLE,PROTECTION_MODE,PROTECTION_LEVEL,SWITCHOVER_STATUS from v$database;
+
+#原主库，即新备库
+select OPEN_MODE,DATABASE_ROLE,PROTECTION_MODE,PROTECTION_LEVEL,SWITCHOVER_STATUS from gv$database;
+```
+
+
+
+#创建pdb及数据进行测试
+
+#创建pdb
+
+```oracle
+create pluggable database dataassets admin user pdbadmin identified by oracle roles=(dba) FILE_NAME_CONVERT = ('+DATA', '/u01/app/oracle/oradata/xydbdg');
+
+alter pluggable database dataassets open;
+alter pluggable database all save state instances=all;
+
+
+
+alter session set container=dataassets;
+
+create tablespace pdb1user datafile '+DATA' size 1G autoextend on next 1G maxsize 31G extent management local segment space management auto;
+
+alter tablespace pdb1user add datafile '+DATA' size 1G autoextend on next 1G maxsize 31G;
+
+
+create user user1 identified by user1 default tablespace pdb1user account unlock;
+
+grant dba to user1;
+grant select any table to user1;
+```
+#连接方式
+```bash
+srvctl add service -d xydb -s s_dataassets -r xydb1,xydb2,xydb3 -P basic -e select -m basic -z 180 -w 5 -pdb dataassets
+
+srvctl start service -d xydb -s s_dataassets
+srvctl status service -d xydb -s s_dataassets
+
+sqlplus pdbadmin/J3my3xl4c12ed@172.16.134.9:1521/s_dataassets
+```
+
+
+
+#logs
+
+#检查状态
+
+```sql
+#新主库
+SYS@xydbdg> select OPEN_MODE,DATABASE_ROLE,PROTECTION_MODE,PROTECTION_LEVEL,SWITCHOVER_STATUS from v$database;
+
+OPEN_MODE	     DATABASE_ROLE    PROTECTION_MODE	   PROTECTION_LEVEL	SWITCHOVER_STATUS
+-------------------- ---------------- -------------------- -------------------- --------------------
+READ WRITE	     PRIMARY	      MAXIMUM PERFORMANCE  MAXIMUM PERFORMANCE	TO STANDBY
+
+
+
+#原主库
+SYS@xydb1> select OPEN_MODE,DATABASE_ROLE,PROTECTION_MODE,PROTECTION_LEVEL,SWITCHOVER_STATUS from gv$database;
+
+OPEN_MODE	     DATABASE_ROLE    PROTECTION_MODE	   PROTECTION_LEVEL	SWITCHOVER_STATUS
+-------------------- ---------------- -------------------- -------------------- --------------------
+READ ONLY WITH APPLY PHYSICAL STANDBY MAXIMUM PERFORMANCE  MAXIMUM PERFORMANCE	NOT ALLOWED
+READ ONLY WITH APPLY PHYSICAL STANDBY MAXIMUM PERFORMANCE  MAXIMUM PERFORMANCE	NOT ALLOWED
+
+
+```
+
+
+
+#新主库创建pdb测试
+
+```sql
+SYS@xydbdg> show pdbs;
+
+    CON_ID CON_NAME			  OPEN MODE  RESTRICTED
+---------- ------------------------------ ---------- ----------
+	 2 PDB$SEED			  READ ONLY  NO
+	 3 STUWORK			  READ WRITE NO
+	 4 PORTAL			  READ WRITE NO
+SYS@xydbdg> create pluggable database dataassets admin user pdbadmin identified by oracle roles=(dba);
+create pluggable database dataassets admin user pdbadmin identified by oracle roles=(dba)
+                                                                                        *
+ERROR at line 1:
+ORA-65016: FILE_NAME_CONVERT must be specified
+
+
+
+SYS@xydbdg> create pluggable database dataassets admin user pdbadmin identified by oracle roles=(dba) FILE_NAME_CONVERT = ('+DATA', '/u01/app/oracle/oradata/xydbdg');
+create pluggable database dataassets admin user pdbadmin identified by oracle roles=(dba) FILE_NAME_CONVERT = ('+DATA', '/u01/app/oracle/oradata/xydbdg')
+*
+ERROR at line 1:
+ORA-19505: failed to identify file "/u01/app/oracle/oradata/xydbdg/datafile/xydb/0a6c993cc83542d9e063610d12ac4a80/tempfile/temp.268.1153251145"
+ORA-27037: unable to obtain file status
+Linux-x86_64 Error: 2: No such file or directory
+Additional information: 7
+
+
+#此时发现是pdb$seed的临时文件没有在原备库创建，先创建其目录，然后重启原备库(先主库)后，自动生成该tempfile
+SYS@xydbdg> !mkdir -p /u01/app/oracle/oradata/xydbdg/datafile/xydb/0a6c993cc83542d9e063610d12ac4a80/tempfile/
+
+SYS@xydbdg> shutdown immediate;
+Database closed.
+Database dismounted.
+ORACLE instance shut down.
+
+
+SYS@xydbdg> startup;
+ORACLE instance started.
+
+Total System Global Area 1.6106E+10 bytes
+Fixed Size		   18625040 bytes
+Variable Size		 2181038080 bytes
+Database Buffers	 1.3892E+10 bytes
+Redo Buffers		   14925824 bytes
+Database mounted.
+Database opened.
+SYS@xydbdg> 
+
+SYS@xydbdg> !ls -l /u01/app/oracle/oradata/xydbdg/datafile/xydb/0a6c993cc83542d9e063610d12ac4a80/tempfile/
+total 1024
+-rw-r----- 1 oracle oinstall 185606144 Feb  2 17:36 temp.268.1153251145
+
+SYS@xydbdg> 
+
+
+
+```
 
 
 
@@ -4352,11 +4812,1413 @@ SYS@xydbdg>
 
 
 
+#### 3.1.2.主备再次切换-通过19c adg命令
+
+##### 3.1.2.1.切换操作
+
+```sql
+#当前主库是单实例xydbdg，备库是rac库xydb
+
+#查看当前主库的状态
+select OPEN_MODE,DATABASE_ROLE,PROTECTION_MODE,PROTECTION_LEVEL,SWITCHOVER_STATUS from v$database;
+
+#查看当备库的状态
+select OPEN_MODE,DATABASE_ROLE,PROTECTION_MODE,PROTECTION_LEVEL,SWITCHOVER_STATUS from gv$database;
 
 
-### 3.2.ADG做failover切换测试
+#主库执行切换
+alter database switchover to xydb verify;
+alter database switchover to xydb;
+
+#执行命令之后，原主库xydbdg将会关闭，原备库xydb会重新启动到mount状态，且变成新主库角色；
+#此时需要手工在新主库xydb上执行命令，打开数据库，k8s-rac01/k8s-rac02都需要执行
+alter database open;
 
 
+#然后手工将原主库xydbdg进行startup，承担新备库角色，并开启实时应用：
+startup
+recover managed standby database disconnect;
+
+#注意：19c ADG 在未配置DG Broker的情况下，也很简单实现了主备角色互换，只需手工处理下开库的动作。
+#此外，与11g ADG不同，现在MRP进程默认就是开启实时应用（前提是准备工作做好），也就是说：
+
+#备库MRP实时开启默认无需指定 using current logfile 关键字。
+#默认即是，如果不想实时，指定 using archived logfile 关键字。
+
+
+
+#查看当前主库的状态
+select OPEN_MODE,DATABASE_ROLE,PROTECTION_MODE,PROTECTION_LEVEL,SWITCHOVER_STATUS from gv$database;
+
+#查看当备库的状态
+select OPEN_MODE,DATABASE_ROLE,PROTECTION_MODE,PROTECTION_LEVEL,SWITCHOVER_STATUS from v$database;
+
+select process,client_process,sequence#, THREAD# ，status from v$managed_standby;
+```
+
+
+
+#logs
+
+```sql
+#主库状态
+SYS@xydbdg> select OPEN_MODE,DATABASE_ROLE,PROTECTION_MODE,PROTECTION_LEVEL,SWITCHOVER_STATUS from v$database;
+
+OPEN_MODE	     DATABASE_ROLE    PROTECTION_MODE	   PROTECTION_LEVEL	SWITCHOVER_STATUS
+-------------------- ---------------- -------------------- -------------------- --------------------
+READ WRITE	     PRIMARY	      MAXIMUM PERFORMANCE  MAXIMUM PERFORMANCE	TO STANDBY
+
+#备库状态
+SYS@xydb1> select OPEN_MODE,DATABASE_ROLE,PROTECTION_MODE,PROTECTION_LEVEL,SWITCHOVER_STATUS from gv$database;
+
+OPEN_MODE	     DATABASE_ROLE    PROTECTION_MODE	   PROTECTION_LEVEL	SWITCHOVER_STATUS
+-------------------- ---------------- -------------------- -------------------- --------------------
+READ ONLY WITH APPLY PHYSICAL STANDBY MAXIMUM PERFORMANCE  MAXIMUM PERFORMANCE	NOT ALLOWED
+READ ONLY WITH APPLY PHYSICAL STANDBY MAXIMUM PERFORMANCE  MAXIMUM PERFORMANCE	NOT ALLOWED
+
+#主库执行切换
+SYS@xydbdg> alter database switchover to xydb verify;
+
+Database altered.
+
+SYS@xydbdg> alter database switchover to xydb;
+
+Database altered.
+
+SYS@xydbdg> select instance_status from v$instance;
+select instance_status from v$instance
+*
+ERROR at line 1:
+ORA-01034: ORACLE not available
+Process ID: 13294
+Session ID: 2265 Serial number: 26490
+
+
+#执行命令之后，原主库xydbdg将会关闭，原备库xydb会重新启动到mount状态，且变成新主库角色；
+#此时需要手工在新主库xydb上执行命令，打开数据库
+[grid@k8s-rac01 ~]$ crsctl status resource ora.xydb.db -t
+--------------------------------------------------------------------------------
+Name           Target  State        Server                   State details       
+--------------------------------------------------------------------------------
+Cluster Resources
+--------------------------------------------------------------------------------
+ora.xydb.db
+      1        ONLINE  INTERMEDIATE k8s-rac01                Mounted (Closed),HOM
+                                                             E=/u01/app/oracle/pr
+                                                             oduct/19.0.0/db_1,ST
+                                                             ABLE
+      2        ONLINE  INTERMEDIATE k8s-rac02                Mounted (Closed),HOM
+                                                             E=/u01/app/oracle/pr
+                                                             oduct/19.0.0/db_1,ST
+                                                             ABLE
+
+
+#k8s-rac01
+SYS@xydb1> select status from v$instance;
+
+STATUS
+------------
+MOUNTED
+
+SYS@xydb1> alter database open; 
+
+Database altered.
+
+
+#k8s-rac02
+SYS@xydb2> select status from v$instance;
+
+STATUS
+------------
+MOUNTED
+
+SYS@xydb2> alter database open; 
+
+Database altered.
+
+SYS@xydb2> select OPEN_MODE,DATABASE_ROLE,PROTECTION_MODE,PROTECTION_LEVEL,SWITCHOVER_STATUS from gv$database;
+
+OPEN_MODE	     DATABASE_ROLE    PROTECTION_MODE	   PROTECTION_LEVEL	SWITCHOVER_STATUS
+-------------------- ---------------- -------------------- -------------------- --------------------
+READ WRITE	     PRIMARY	      MAXIMUM PERFORMANCE  MAXIMUM PERFORMANCE	FAILED DESTINATION
+READ WRITE	     PRIMARY	      MAXIMUM PERFORMANCE  MAXIMUM PERFORMANCE	FAILED DESTINATION
+
+
+
+#然后手工将原主库xydbdg进行startup，承担新备库角色，并开启实时应用：
+[oracle@k8s-oracle-store ~]$ sqlplus / as sysdba
+
+SQL*Plus: Release 19.0.0.0.0 - Production on Fri Feb 2 18:43:03 2024
+Version 19.21.0.0.0
+
+Copyright (c) 1982, 2022, Oracle.  All rights reserved.
+
+Connected to an idle instance.
+
+SYS@xydbdg> startup;
+ORACLE instance started.
+
+Total System Global Area 1.6106E+10 bytes
+Fixed Size		   18625040 bytes
+Variable Size		 2181038080 bytes
+Database Buffers	 1.3892E+10 bytes
+Redo Buffers		   14925824 bytes
+Database mounted.
+Database opened.
+SYS@xydbdg> select OPEN_MODE,DATABASE_ROLE,PROTECTION_MODE,PROTECTION_LEVEL,SWITCHOVER_STATUS from v$database;
+
+OPEN_MODE	     DATABASE_ROLE    PROTECTION_MODE	   PROTECTION_LEVEL	SWITCHOVER_STATUS
+-------------------- ---------------- -------------------- -------------------- --------------------
+READ ONLY	     PHYSICAL STANDBY MAXIMUM PERFORMANCE  MAXIMUM PERFORMANCE	RECOVERY NEEDED
+
+SYS@xydbdg> recover managed standby database disconnect;
+Media recovery complete.
+SYS@xydbdg> select OPEN_MODE,DATABASE_ROLE,PROTECTION_MODE,PROTECTION_LEVEL,SWITCHOVER_STATUS from v$database;
+
+OPEN_MODE	     DATABASE_ROLE    PROTECTION_MODE	   PROTECTION_LEVEL	SWITCHOVER_STATUS
+-------------------- ---------------- -------------------- -------------------- --------------------
+READ ONLY WITH APPLY PHYSICAL STANDBY MAXIMUM PERFORMANCE  MAXIMUM PERFORMANCE	NOT ALLOWED
+
+SYS@xydbdg> 
+
+#此时新主库也恢复正常
+SYS@xydb2> select OPEN_MODE,DATABASE_ROLE,PROTECTION_MODE,PROTECTION_LEVEL,SWITCHOVER_STATUS from gv$database;
+
+OPEN_MODE	     DATABASE_ROLE    PROTECTION_MODE	   PROTECTION_LEVEL	SWITCHOVER_STATUS
+-------------------- ---------------- -------------------- -------------------- --------------------
+READ WRITE	     PRIMARY	      MAXIMUM PERFORMANCE  MAXIMUM PERFORMANCE	TO STANDBY
+READ WRITE	     PRIMARY	      MAXIMUM PERFORMANCE  MAXIMUM PERFORMANCE	TO STANDBY
+
+SYS@xydb2> 
+
+
+#注意：19c ADG 在未配置DG Broker的情况下，也很简单实现了主备角色互换，只需手工处理下开库的动作。
+#此外，与11g ADG不同，现在MRP进程默认就是开启实时应用（前提是准备工作做好），也就是说：
+
+#备库MRP实时开启默认无需指定 using current logfile 关键字。
+#默认即是，如果不想实时，指定 using archived logfile 关键字。
+
+
+
+#查看当前主库的状态
+select OPEN_MODE,DATABASE_ROLE,PROTECTION_MODE,PROTECTION_LEVEL,SWITCHOVER_STATUS from gv$database;
+
+#查看当备库的状态
+select OPEN_MODE,DATABASE_ROLE,PROTECTION_MODE,PROTECTION_LEVEL,SWITCHOVER_STATUS from v$database;
+
+select process,client_process,sequence#, THREAD# ，status from v$managed_standby;
+select name,role,instance,thread#,sequence#,action from gv$dataguard_process;
+```
+
+
+
+##### 3.1.2.2.新主备检查
+
+#主备库状态检查
+
+```sql
+#查看当前主库的状态
+select OPEN_MODE,DATABASE_ROLE,PROTECTION_MODE,PROTECTION_LEVEL,SWITCHOVER_STATUS from gv$database;
+
+#查看当备库的状态
+select OPEN_MODE,DATABASE_ROLE,PROTECTION_MODE,PROTECTION_LEVEL,SWITCHOVER_STATUS from v$database;
+
+select process,client_process,sequence#, THREAD# ，status from v$managed_standby;
+
+ select name,role,instance,thread#,sequence#,action from gv$dataguard_process;
+```
+
+#创建pdb及数据进行测试
+
+#创建pdb
+
+```oracle
+create pluggable database dataassets admin user pdbadmin identified by oracle roles=(dba);
+
+alter pluggable database dataassets open;
+alter pluggable database all save state instances=all;
+
+
+
+alter session set container=dataassets;
+
+create tablespace pdb1user datafile '+DATA' size 1G autoextend on next 1G maxsize 31G extent management local segment space management auto;
+
+alter tablespace pdb1user add datafile '+DATA' size 1G autoextend on next 1G maxsize 31G;
+
+
+create user user1 identified by user1 default tablespace pdb1user account unlock;
+
+grant dba to user1;
+grant select any table to user1;
+```
+#连接方式
+```bash
+srvctl add service -d xydb -s s_dataassets -r xydb1,xydb2 -P basic -e select -m basic -z 180 -w 5 -pdb dataassets
+
+srvctl start service -d xydb -s s_dataassets
+srvctl status service -d xydb -s s_dataassets
+
+sqlplus pdbadmin/J3my3xl4c12ed@172.16.134.9:1521/s_dataassets
+
+--创建表
+
+create table dgtest (
+       id number(9) not null primary key,
+       classname varchar2(40) not null
+       );
+
+	   
+insert into dgtest values(28,'class one');
+
+commit;
+
+
+```
+
+
+
+#logs
+
+#检查状态
+
+```sql
+#查看当前主库的状态
+SYS@xydb2> select OPEN_MODE,DATABASE_ROLE,PROTECTION_MODE,PROTECTION_LEVEL,SWITCHOVER_STATUS from gv$database;
+
+OPEN_MODE	     DATABASE_ROLE    PROTECTION_MODE	   PROTECTION_LEVEL	SWITCHOVER_STATUS
+-------------------- ---------------- -------------------- -------------------- --------------------
+READ WRITE	     PRIMARY	      MAXIMUM PERFORMANCE  MAXIMUM PERFORMANCE	TO STANDBY
+READ WRITE	     PRIMARY	      MAXIMUM PERFORMANCE  MAXIMUM PERFORMANCE	TO STANDBY
+
+
+#查看当备库的状态
+SYS@xydbdg> select OPEN_MODE,DATABASE_ROLE,PROTECTION_MODE,PROTECTION_LEVEL,SWITCHOVER_STATUS from v$database;
+
+OPEN_MODE	     DATABASE_ROLE    PROTECTION_MODE	   PROTECTION_LEVEL	SWITCHOVER_STATUS
+-------------------- ---------------- -------------------- -------------------- --------------------
+READ ONLY WITH APPLY PHYSICAL STANDBY MAXIMUM PERFORMANCE  MAXIMUM PERFORMANCE	NOT ALLOWED
+
+SYS@xydbdg> 
+
+
+SYS@xydbdg> select process,client_process,sequence#, THREAD# ，status from v$managed_standby;
+
+PROCESS   CLIENT_P  SEQUENCE#	 THREAD# STATUS
+--------- -------- ---------- ---------- ------------
+ARCH	  ARCH		    0	       0 CONNECTED
+DGRD	  N/A		    0	       0 ALLOCATED
+DGRD	  N/A		    0	       0 ALLOCATED
+ARCH	  ARCH		    0	       0 CONNECTED
+ARCH	  ARCH		    0	       0 CONNECTED
+ARCH	  ARCH		    0	       0 CONNECTED
+RFS	  LGWR		  401	       2 IDLE
+RFS	  Archival	    0	       2 IDLE
+RFS	  LGWR		  428	       1 IDLE
+RFS	  UNKNOWN	    0	       0 IDLE
+RFS	  Archival	    0	       1 IDLE
+RFS	  UNKNOWN	    0	       0 IDLE
+MRP0	  N/A		  401	       2 APPLYING_LOG
+
+13 rows selected.
+
+SYS@xydbdg> 
+
+SYS@xydbdg> select name,role,instance,thread#,sequence#,action from gv$dataguard_process;
+
+NAME  ROLE			 INSTANCE    THREAD#  SEQUENCE# ACTION
+----- ------------------------ ---------- ---------- ---------- ------------
+TMON  redo transport monitor		0	   0	      0 IDLE
+LGWR  log writer			0	   0	      0 IDLE
+TT00  gap manager			0	   0	      0 IDLE
+TT01  redo transport timer		0	   0	      0 IDLE
+ARC0  archive local			0	   0	      0 IDLE
+ARC1  archive redo			0	   0	      0 IDLE
+ARC2  archive redo			0	   0	      0 IDLE
+ARC3  archive redo			0	   0	      0 IDLE
+rfs   RFS ping				0	   2	    401 IDLE
+rfs   RFS async 			0	   2	    401 IDLE
+rfs   RFS ping				0	   1	    428 IDLE
+rfs   RFS async 			0	   1	    428 IDLE
+MRP0  managed recovery			0	   0	      0 IDLE
+PR00  recovery logmerger		0	   2	    401 APPLYING_LOG
+PR01  recovery apply slave		0	   0	      0 IDLE
+PR02  recovery apply slave		0	   0	      0 IDLE
+PR03  recovery apply slave		0	   0	      0 IDLE
+PR04  recovery apply slave		0	   0	      0 IDLE
+PR05  recovery apply slave		0	   0	      0 IDLE
+PR06  recovery apply slave		0	   0	      0 IDLE
+PR07  recovery apply slave		0	   0	      0 IDLE
+PR08  recovery apply slave		0	   0	      0 IDLE
+PR09  recovery apply slave		0	   0	      0 IDLE
+PR0A  recovery apply slave		0	   0	      0 IDLE
+PR0B  recovery apply slave		0	   0	      0 IDLE
+PR0C  recovery apply slave		0	   0	      0 IDLE
+PR0D  recovery apply slave		0	   0	      0 IDLE
+PR0E  recovery apply slave		0	   0	      0 IDLE
+PR0F  recovery apply slave		0	   0	      0 IDLE
+PR0G  recovery apply slave		0	   0	      0 IDLE
+
+30 rows selected.
+
+SYS@xydbdg> 
+
+
+```
+
+#新主库创建pdb测试
+
+```sql
+#rac库因为有参数设定，所以不需要指定FILE_NAME_CONVERT
+SYS@xydb1> show parameter db_create_file_dest;
+
+NAME				     TYPE	 VALUE
+------------------------------------ ----------- ------------------------------
+db_create_file_dest		     string	 +DATA
+
+#create pluggable database dataassets admin user pdbadmin identified by oracle roles=(dba) FILE_NAME_CONVERT = ('+DATA', '+DATA');
+
+SYS@xydb1> create pluggable database dataassets admin user pdbadmin identified by oracle roles=(dba);
+Pluggable database created.
+
+SYS@xydb1> show pdbs;
+
+    CON_ID CON_NAME			  OPEN MODE  RESTRICTED
+---------- ------------------------------ ---------- ----------
+	 2 PDB$SEED			  READ ONLY  NO
+	 3 STUWORK			  READ WRITE NO
+	 4 PORTAL			  READ WRITE NO
+	 5 DATAASSETS			  MOUNTED
+
+
+SYS@xydb1> alter pluggable database dataassets open;
+
+Pluggable database altered.
+
+SYS@xydb1> alter pluggable database all save state instances=all;
+
+Pluggable database altered.
+
+SYS@xydb1> show pdbs;
+
+    CON_ID CON_NAME			  OPEN MODE  RESTRICTED
+---------- ------------------------------ ---------- ----------
+	 2 PDB$SEED			  READ ONLY  NO
+	 3 STUWORK			  READ WRITE NO
+	 4 PORTAL			  READ WRITE NO
+	 5 DATAASSETS			  READ WRITE NO
+SYS@xydb1> alter session set container=dataassets;
+
+Session altered.
+
+SYS@xydb1> select file_name from dba_data_files;
+
+FILE_NAME
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
++DATA/XYDB/1064B454582A4AA4E063610D12AC9D59/DATAFILE/system.292.1159901297
++DATA/XYDB/1064B454582A4AA4E063610D12AC9D59/DATAFILE/sysaux.284.1159901297
++DATA/XYDB/1064B454582A4AA4E063610D12AC9D59/DATAFILE/undotbs1.285.1159901297
+
+SYS@xydb1> select file_name from dba_temp_files;
+
+FILE_NAME
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
++DATA/XYDB/1064B454582A4AA4E063610D12AC9D59/TEMPFILE/temp.293.1159901313
+
+SYS@xydb1> 
+
+#首先在备库xydbdg中创建新pdb dataassets的tempfile文件的目录
+[oracle@k8s-oracle-store tempfile]$ cd /u01/app/oracle/oradata/xydbdg/datafile/xydb/1064b454582a4aa4e063610d12ac9d59/
+
+[oracle@k8s-oracle-store tempfile]$ mkdir -p tempfile
+
+#此时备库pdb都是Mount阶段，将其open
+SYS@xydbdg> show pdbs;
+
+    CON_ID CON_NAME			  OPEN MODE  RESTRICTED
+---------- ------------------------------ ---------- ----------
+	 2 PDB$SEED			  READ ONLY  NO
+	 3 STUWORK			  MOUNTED
+	 4 PORTAL			  MOUNTED
+	 5 DATAASSETS			  MOUNTED
+SYS@xydbdg> alter pluggable database all open;
+
+Pluggable database altered.
+
+SYS@xydbdg> show pdbs;
+
+    CON_ID CON_NAME			  OPEN MODE  RESTRICTED
+---------- ------------------------------ ---------- ----------
+	 2 PDB$SEED			  READ ONLY  NO
+	 3 STUWORK			  READ ONLY  NO
+	 4 PORTAL			  READ ONLY  NO
+	 5 DATAASSETS			  READ ONLY  NO
+
+#在此过程中alter_xydbdg.log中发现报错内容：
+DATAASSETS(5):*********************************************************************
+DATAASSETS(5):WARNING: The following temporary tablespaces in container(DATAASSETS)
+DATAASSETS(5):         contain no files.
+DATAASSETS(5):         This condition can occur when a backup controlfile has
+DATAASSETS(5):         been restored.  It may be necessary to add files to these
+DATAASSETS(5):         tablespaces.  That can be done using the SQL statement:
+DATAASSETS(5): 
+DATAASSETS(5):         ALTER TABLESPACE <tablespace_name> ADD TEMPFILE
+DATAASSETS(5): 
+DATAASSETS(5):         Alternatively, if these temporary tablespaces are no longer
+DATAASSETS(5):         needed, then they can be dropped.
+DATAASSETS(5):           Empty temporary tablespace: TEMP
+DATAASSETS(5):*********************************************************************
+
+#备库中先不添加tempfile，主库创建数据表空间及用户数据，进行测试下
+SYS@xydb1> show pdbs;
+
+    CON_ID CON_NAME			  OPEN MODE  RESTRICTED
+---------- ------------------------------ ---------- ----------
+	 2 PDB$SEED			  READ ONLY  NO
+	 3 STUWORK			  READ WRITE NO
+	 4 PORTAL			  READ WRITE NO
+	 5 DATAASSETS			  READ WRITE NO
+SYS@xydb1> alter session set container=dataassets;
+
+Session altered.
+
+SYS@xydb1> create tablespace pdb1user datafile '+DATA' size 1G autoextend on next 1G maxsize 31G extent management local segment space management auto;
+
+Tablespace created.
+
+SYS@xydb1> create user user1 identified by user1 default tablespace pdb1user account unlock;
+
+User created.
+
+SYS@xydb1> grant dba to user1;
+
+Grant succeeded.
+
+SYS@xydb1> grant select any table to user1;
+
+Grant succeeded.
+
+SYS@xydb1>  exit
+Disconnected from Oracle Database 19c Enterprise Edition Release 19.0.0.0.0 - Production
+Version 19.21.0.0.0
+
+#为了外部访问，rac添加service s_dataassets
+[oracle@k8s-rac01 ~]$ srvctl add service -d xydb -s s_dataassets -r xydb1,xydb2 -P basic -e select -m basic -z 180 -w 5 -pdb dataassets
+[oracle@k8s-rac01 ~]$ srvctl start service -d xydb -s s_dataassets
+[oracle@k8s-rac01 ~]$ srvctl status service -d xydb -s s_dataassets
+Service s_dataassets is running on instance(s) xydb1,xydb2
+
+[oracle@k8s-rac01 ~]$ sqlplus user1/user1@rac-scan:1521/dataassets
+
+SQL*Plus: Release 19.0.0.0.0 - Production on Fri Feb 2 19:08:38 2024
+Version 19.21.0.0.0
+
+Copyright (c) 1982, 2022, Oracle.  All rights reserved.
+
+
+Connected to:
+Oracle Database 19c Enterprise Edition Release 19.0.0.0.0 - Production
+Version 19.21.0.0.0
+
+USER1@rac-scan:1521/dataassets> 
+
+USER1@rac-scan:1521/dataassets> create table dgtest (
+       id number(9) not null primary key,
+       classname varchar2(40) not null
+       );  
+
+Table created.
+
+USER1@rac-scan:1521/dataassets> insert into dgtest values(28,'class one');
+
+1 row created.
+
+USER1@rac-scan:1521/dataassets> commit;
+
+Commit complete.
+
+USER1@rac-scan:1521/dataassets> select * from dgtest;
+
+	ID CLASSNAME
+---------- ----------------------------------------
+	28 class one
+
+USER1@rac-scan:1521/dataassets> 
+
+
+#此时通过备库查询dgtest表
+SYS@xydbdg> show pdbs;
+
+    CON_ID CON_NAME			  OPEN MODE  RESTRICTED
+---------- ------------------------------ ---------- ----------
+	 2 PDB$SEED			  READ ONLY  NO
+	 3 STUWORK			  READ ONLY  NO
+	 4 PORTAL			  READ ONLY  NO
+	 5 DATAASSETS			  READ ONLY  NO
+SYS@xydbdg> show pdbs;
+
+    CON_ID CON_NAME			  OPEN MODE  RESTRICTED
+---------- ------------------------------ ---------- ----------
+	 2 PDB$SEED			  READ ONLY  NO
+	 3 STUWORK			  READ ONLY  NO
+	 4 PORTAL			  READ ONLY  NO
+	 5 DATAASSETS			  READ ONLY  NO
+SYS@xydbdg> alter session set container=DATAASSETS;
+
+Session altered.
+
+SYS@xydbdg> select * from user1.dgtest;
+
+	ID CLASSNAME
+---------- ----------------------------------------
+	28 class one
+
+SYS@xydbdg> 
+
+#为了外部访问，备库添加监听的静态注册
+
+[oracle@k8s-oracle-store admin]$ cat listener.ora
+# listener.ora Network Configuration File: /u01/app/oracle/product/19.0.0/db_1/network/admin/listener.ora
+# Generated by Oracle configuration tools.
+
+LISTENER =
+  (DESCRIPTION_LIST =
+    (DESCRIPTION =
+      (ADDRESS = (PROTOCOL = TCP)(HOST = k8s-oracle-store)(PORT = 1521))
+      (ADDRESS = (PROTOCOL = IPC)(KEY = EXTPROC1521))
+    )
+  )
+
+SID_LIST_LISTENER =
+  (SID_LIST =
+    (SID_DESC =
+      (GLOBAL_DBNAME = xydbdg)
+      (ORACLE_HOME = /u01/app/oracle/product/19.0.0/db_1)
+      (SID_NAME = xydbdg)
+    )
+    (SID_DESC =
+      (GLOBAL_DBNAME = xydbdg_dgmgrl)
+      (ORACLE_HOME = /u01/app/oracle/product/19.0.0/db_1)
+      (SID_NAME = xydbdg)
+    )
+
+    (SID_DESC =
+      (GLOBAL_DBNAME = dataassets)
+      (ORACLE_HOME = /u01/app/oracle/product/19.0.0/db_1)
+      (SID_NAME = xydbdg)
+    )
+  )
+
+
+[oracle@k8s-oracle-store admin]$ lsnrctl stop
+
+LSNRCTL for Linux: Version 19.0.0.0.0 - Production on 02-FEB-2024 20:33:03
+
+Copyright (c) 1991, 2023, Oracle.  All rights reserved.
+
+Connecting to (DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)(HOST=k8s-oracle-store)(PORT=1521)))
+The command completed successfully
+
+
+[oracle@k8s-oracle-store admin]$ lsnrctl start
+
+LSNRCTL for Linux: Version 19.0.0.0.0 - Production on 02-FEB-2024 20:33:06
+
+Copyright (c) 1991, 2023, Oracle.  All rights reserved.
+
+Starting /u01/app/oracle/product/19.0.0/db_1/bin/tnslsnr: please wait...
+
+TNSLSNR for Linux: Version 19.0.0.0.0 - Production
+System parameter file is /u01/app/oracle/product/19.0.0/db_1/network/admin/listener.ora
+Log messages written to /u01/app/oracle/diag/tnslsnr/k8s-oracle-store/listener/alert/log.xml
+Listening on: (DESCRIPTION=(ADDRESS=(PROTOCOL=tcp)(HOST=k8s-oracle-store)(PORT=1521)))
+Listening on: (DESCRIPTION=(ADDRESS=(PROTOCOL=ipc)(KEY=EXTPROC1521)))
+
+Connecting to (DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)(HOST=k8s-oracle-store)(PORT=1521)))
+STATUS of the LISTENER
+------------------------
+Alias                     LISTENER
+Version                   TNSLSNR for Linux: Version 19.0.0.0.0 - Production
+Start Date                02-FEB-2024 20:33:06
+Uptime                    0 days 0 hr. 0 min. 0 sec
+Trace Level               off
+Security                  ON: Local OS Authentication
+SNMP                      OFF
+Listener Parameter File   /u01/app/oracle/product/19.0.0/db_1/network/admin/listener.ora
+Listener Log File         /u01/app/oracle/diag/tnslsnr/k8s-oracle-store/listener/alert/log.xml
+Listening Endpoints Summary...
+  (DESCRIPTION=(ADDRESS=(PROTOCOL=tcp)(HOST=k8s-oracle-store)(PORT=1521)))
+  (DESCRIPTION=(ADDRESS=(PROTOCOL=ipc)(KEY=EXTPROC1521)))
+Services Summary...
+Service "dataassets" has 1 instance(s).
+  Instance "xydbdg", status UNKNOWN, has 1 handler(s) for this service...
+Service "xydbdg" has 1 instance(s).
+  Instance "xydbdg", status UNKNOWN, has 1 handler(s) for this service...
+Service "xydbdg_dgmgrl" has 1 instance(s).
+  Instance "xydbdg", status UNKNOWN, has 1 handler(s) for this service...
+The command completed successfully
+[oracle@k8s-oracle-store admin]$ 
+
+
+SYS@xydbdg> select con_name,name,network_name from v$active_services
+  2  ;
+
+CON_NAME	NAME								 NETWORK_NAME
+--------------- ---------------------------------------------------------------- --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+PORTAL		portal								 portal
+PORTAL		s_portal							 s_portal
+STUWORK 	stuwork 							 stuwork
+CDB$ROOT	xydbdgXDB							 xydbdgXDB
+CDB$ROOT	SYS$BACKGROUND
+CDB$ROOT	SYS$USERS
+STUWORK 	s_stuwork							 s_stuwork
+CDB$ROOT	xydbdg								 xydbdg
+DATAASSETS	dataassets							 dataassets
+
+9 rows selected.
+
+
+SYS@xydbdg>  exit
+Disconnected from Oracle Database 19c Enterprise Edition Release 19.0.0.0.0 - Production
+Version 19.21.0.0.0
+
+
+[oracle@k8s-oracle-store admin]$ sqlplus user1/user1@172.18.13.104:1521/dataassets
+
+SQL*Plus: Release 19.0.0.0.0 - Production on Fri Feb 2 20:41:27 2024
+Version 19.21.0.0.0
+
+Copyright (c) 1982, 2022, Oracle.  All rights reserved.
+
+Last Successful login time: Fri Feb 02 2024 19:21:52 +08:00
+
+Connected to:
+Oracle Database 19c Enterprise Edition Release 19.0.0.0.0 - Production
+Version 19.21.0.0.0
+
+USER1@172.18.13.104:1521/dataassets> show con_name;
+
+CON_NAME
+------------------------------
+DATAASSETS
+USER1@172.18.13.104:1521/dataassets> exit
+Disconnected from Oracle Database 19c Enterprise Edition Release 19.0.0.0.0 - Production
+Version 19.21.0.0.0
+[oracle@k8s-oracle-store admin]$ 
+
+```
+
+
+
+
+
+
+### 3.2.ADG做手动failover切换测试
+
+#### 3.2.0.主库开启flashback
+
+#命令
+
+```sql
+show parameter db_recovery
+select flashback_on from v$database;
+
+alter database flashback on;
+select flashback_on from v$database;
+```
+
+
+
+#步骤
+
+```sql
+#主库查询
+SYS@xydb1> show parameter db_recovery
+
+NAME				     TYPE	 VALUE
+------------------------------------ ----------- ------------------------------
+db_recovery_file_dest		     string	 +FRA
+db_recovery_file_dest_size	     big integer 204668M
+
+SYS@xydb1> select flashback_on from v$database;
+
+FLASHBACK_ON
+------------------
+NO
+
+SYS@xydb1> 
+
+#备库查询
+SYS@xydbdg> show parameter db_recovery
+
+NAME				     TYPE	 VALUE
+------------------------------------ ----------- ------------------------------
+db_recovery_file_dest		     string	 /u01/app/oracle/fast_recovery_area
+db_recovery_file_dest_size	     big integer 20G
+
+SYS@xydbdg> select flashback_on from v$database;
+FLASHBACK_ON
+------------------
+NO
+
+
+#主库开启flashback
+SYS@xydb1> alter database flashback on;
+
+Database altered.
+
+SYS@xydb1> select flashback_on from v$database;
+
+FLASHBACK_ON
+------------------
+YES
+
+SYS@xydb1> 
+
+
+#备库并未开启
+SYS@xydbdg>  select flashback_on from v$database;
+
+FLASHBACK_ON
+------------------
+NO
+
+SYS@xydbdg> 
+
+#此时主备库状态
+select OPEN_MODE,DATABASE_ROLE,PROTECTION_MODE,PROTECTION_LEVEL,SWITCHOVER_STATUS from gv$database;
+
+#主库
+SYS@xydb2> select OPEN_MODE,DATABASE_ROLE,PROTECTION_MODE,PROTECTION_LEVEL,SWITCHOVER_STATUS from gv$database;
+
+OPEN_MODE	     DATABASE_ROLE    PROTECTION_MODE	   PROTECTION_LEVEL	SWITCHOVER_STATUS
+-------------------- ---------------- -------------------- -------------------- --------------------
+READ WRITE	     PRIMARY	      MAXIMUM PERFORMANCE  MAXIMUM PERFORMANCE	TO STANDBY
+READ WRITE	     PRIMARY	      MAXIMUM PERFORMANCE  MAXIMUM PERFORMANCE	TO STANDBY
+
+#备库
+SYS@xydbdg> select OPEN_MODE,DATABASE_ROLE,PROTECTION_MODE,PROTECTION_LEVEL,SWITCHOVER_STATUS from gv$database;
+
+OPEN_MODE	     DATABASE_ROLE    PROTECTION_MODE	   PROTECTION_LEVEL	SWITCHOVER_STATUS
+-------------------- ---------------- -------------------- -------------------- --------------------
+READ ONLY WITH APPLY PHYSICAL STANDBY MAXIMUM PERFORMANCE  MAXIMUM PERFORMANCE	NOT ALLOWED
+
+```
+
+
+
+#### 3.2.1.备库failover，变主库
+
+#步骤
+
+```sql
+#模拟主库故障，主库启动至mount阶段---可选
+srvctl start database -h
+srvctl stop database -db xydb
+srvctl start database -db xydb -startoption mount
+
+#如果只启动xydb1实例一，那么可以执行以下命令：
+#SQL> ALTER SYSTEM FLUSH REDO TO 'xydbdg';
+
+#备库查询状态---可选
+SQL> SELECT UNIQUE THREAD# AS THREAD, MAX(SEQUENCE#) OVER (PARTITION BY thread#) AS LAST from V$ARCHIVED_LOG;
+
+
+SQL> SELECT THREAD#, LOW_SEQUENCE#, HIGH_SEQUENCE# FROM V$ARCHIVE_GAP;
+
+#假设物理主库宕机，无法启动，紧急启用备库。直接在备库上操作，将备库转换为主库角色。备库上执行下面四条命令即可
+
+SQL > alter database recover managed standby database cancel;
+SQL > alter database recover managed standby database finish;
+SQL > alter database commit to switchover to primary with session shutdown;
+SQL > alter database open;
+
+```
+
+```sql
+#具体操作
+#模拟主库故障，主库启动至mount阶段
+[oracle@k8s-rac01 ~]$ srvctl start database -h
+
+Starts the database.
+
+Usage: srvctl start database -db <db_unique_name> [-startoption <start_options>] [-startconcurrency <start_concurrency>] [-node <node> | -serverpool "<serverpool_list>"] [-eval] [-verbose]
+    -db <db_unique_name>           Unique name for the database
+    -startoption <start_options>   Options to startup command (e.g. OPEN, MOUNT, or "READ ONLY")
+    -startconcurrency <start_concurrency> Number of instances to be started simultaneously (or 0 for empty start_concurrency value)
+    -node <node>                   Node on which to start the database
+    -serverpool "<serverpool_list>" Comma separated list of database server pool names
+    -eval                          Evaluates the effects of event without making any changes to the system
+    -verbose                       Verbose output
+    -help                          Print usage
+    
+[oracle@k8s-rac01 ~]$ srvctl stop database -db xydb
+[oracle@k8s-rac01 ~]$ srvctl start database -db xydb -startoption mount
+
+[oracle@k8s-rac01 ~]$ sqlplus / as sysdba
+
+SYS@xydb1> select status from v$instance;
+
+STATUS
+------------
+MOUNTED
+
+#必须只有一个实例xydb1(或xydb2)启动至Mount状态时，才能执行命令ALTER SYSTEM FLUSH REDO TO 'xydbdg';
+
+SYS@xydb1> ALTER SYSTEM FLUSH REDO TO 'xydbdg';
+ALTER SYSTEM FLUSH REDO TO 'xydbdg'
+*
+ERROR at line 1:
+ORA-38777: database must not be started in any other instance
+
+
+SYS@xydb1> 
+
+#备库查询
+SYS@xydbdg> select OPEN_MODE,DATABASE_ROLE,PROTECTION_MODE,PROTECTION_LEVEL,SWITCHOVER_STATUS,GUARD_STATUS,FORCE_LOGGING from gv$database;
+
+OPEN_MODE	     DATABASE_ROLE    PROTECTION_MODE	   PROTECTION_LEVEL	SWITCHOVER_STATUS    GUARD_S FORCE_LOGGING
+-------------------- ---------------- -------------------- -------------------- -------------------- ------- ---------------------------------------
+READ ONLY WITH APPLY PHYSICAL STANDBY MAXIMUM PERFORMANCE  MAXIMUM PERFORMANCE	NOT ALLOWED	     NONE    YES
+
+SYS@xydbdg> SELECT UNIQUE THREAD# AS THREAD, MAX(SEQUENCE#) OVER (PARTITION BY thread#) AS LAST from V$ARCHIVED_LOG;
+
+    THREAD	 LAST
+---------- ----------
+	 2	  489
+	 1	  531
+
+SYS@xydbdg> SELECT THREAD#, LOW_SEQUENCE#, HIGH_SEQUENCE# FROM V$ARCHIVE_GAP;
+
+no rows selected
+
+
+#直接备库failover切换
+
+#无GAP后，备库停止日志应用
+SYS@xydbdg> alter database recover managed standby database cancel;
+
+Database altered.
+
+#完成所有已经接收日志的应用
+SYS@xydbdg> alter database recover managed standby database finish;
+
+Database altered.
+
+#直接备库转换为主库
+SYS@xydbdg> alter database commit to switchover to primary with session shutdown;
+
+Database altered.
+
+SYS@xydbdg> select status from v$instance;
+
+STATUS
+------------
+MOUNTED
+
+
+ 
+#打开新主库(即原备库)
+SYS@xydbdg> alter database open;
+
+Database altered.
+
+SYS@xydbdg> select status from v$instance;
+
+STATUS
+------------
+OPEN
+
+SYS@xydbdg> select OPEN_MODE,DATABASE_ROLE,PROTECTION_MODE,PROTECTION_LEVEL,SWITCHOVER_STATUS,GUARD_STATUS,FORCE_LOGGING from gv$database;
+
+OPEN_MODE	     DATABASE_ROLE    PROTECTION_MODE	   PROTECTION_LEVEL	SWITCHOVER_STATUS    GUARD_S FORCE_LOGGING
+-------------------- ---------------- -------------------- -------------------- -------------------- ------- ---------------------------------------
+READ WRITE	     PRIMARY	      MAXIMUM PERFORMANCE  MAXIMUM PERFORMANCE	FAILED DESTINATION   NONE    YES
+
+#现在备库成为了主库角色，failover切换完成；
+```
+
+
+
+#### 3.2.2.原主库(RAC库)恢复成为现主库的备库的三种方法
+##### 3.2.2.1.通过重新搭建ADG，让rac库成为现主库的备库
+
+##### 3.2.2.2.通过flashback，让rac库成为现主库的备库
+
+#基本步骤
+
+```sql
+-- Flashing Back a Failed Primary Database into a Physical Standby Database
+#1. 查询原备库转换成主库时的SCN   -->> xydbdg上操作
+
+SYS@xydbdg> select to_char(standby_became_primary_scn) from v$database;
+
+TO_CHAR(STANDBY_BECAME_PRIMARY_SCN)
+----------------------------------------
+29964459
+
+
+#2. Flash back原主库  -->> 即：RAC节点
+#先关闭rac数据库，再开启到mount阶段
+#应该是只启动一个实例即xydb1至mount阶段，不能两个实例都到mount阶段
+[oracle@k8s-rac01 ~]$ srvctl stop database -db xydb
+[oracle@k8s-rac01 ~]$ srvctl start database -db xydb -startoption mount
+
+[oracle@k8s-rac01 ~]$ sqlplus / as sysdba
+
+SQL*Plus: Release 19.0.0.0.0 - Production on Sat Feb 17 16:45:46 2024
+Version 19.21.0.0.0
+
+Copyright (c) 1982, 2022, Oracle.  All rights reserved.
+
+
+Connected to:
+Oracle Database 19c Enterprise Edition Release 19.0.0.0.0 - Production
+Version 19.21.0.0.0
+
+SYS@xydb1> select status from v$instance;
+
+STATUS
+------------
+MOUNTED
+
+SYS@xydb1> flashback database to scn 29964459;
+
+Flashback complete.
+
+      -->> 注意，前提是 `flashback_on` 的特性必须开启，`alter database flashback on;`
+
+
+#3. 将原主库转换为备库  -->> RAC节点 上操作
+
+SYS@xydb1> select OPEN_MODE,DATABASE_ROLE,PROTECTION_MODE,PROTECTION_LEVEL,SWITCHOVER_STATUS,GUARD_STATUS,FORCE_LOGGING from gv$database;
+
+OPEN_MODE	     DATABASE_ROLE    PROTECTION_MODE	   PROTECTION_LEVEL	SWITCHOVER_STATUS    GUARD_S FORCE_LOGGING
+-------------------- ---------------- -------------------- -------------------- -------------------- ------- ---------------------------------------
+MOUNTED 	     PRIMARY	      MAXIMUM PERFORMANCE  UNPROTECTED		NOT ALLOWED	     NONE    YES
+MOUNTED 	     PRIMARY	      MAXIMUM PERFORMANCE  UNPROTECTED		NOT ALLOWED	     NONE    YES
+
+
+SYS@xydb1> alter database convert to physical standby;
+alter database convert to physical standby
+*
+ERROR at line 1:
+ORA-38777: database must not be started in any other instance
+
+
+SYS@xydb1> select status from v$instance;
+
+STATUS
+------------
+MOUNTED
+
+#先关闭k8s-rac02，再在k8s-rac01上执行
+SYS@xydb2> select status from v$instance;
+
+STATUS
+------------
+MOUNTED
+
+
+SYS@xydb2> shutdown immediate;
+ORA-01109: database not open
+
+
+Database dismounted.
+ORACLE instance shut down.
+SYS@xydb2> 
+
+SYS@xydb1> select OPEN_MODE,DATABASE_ROLE,PROTECTION_MODE,PROTECTION_LEVEL,SWITCHOVER_STATUS,GUARD_STATUS,FORCE_LOGGING from gv$database;
+
+OPEN_MODE	     DATABASE_ROLE    PROTECTION_MODE	   PROTECTION_LEVEL	SWITCHOVER_STATUS    GUARD_S FORCE_LOGGING
+-------------------- ---------------- -------------------- -------------------- -------------------- ------- ---------------------------------------
+MOUNTED 	     PRIMARY	      MAXIMUM PERFORMANCE  UNPROTECTED		NOT ALLOWED	     NONE    YES
+
+SYS@xydb1> alter database convert to physical standby;
+
+Database altered.
+
+SYS@xydb1> select status from v$instance;
+
+STATUS
+------------
+MOUNTED
+
+SYS@xydb1> select OPEN_MODE,DATABASE_ROLE,PROTECTION_MODE,PROTECTION_LEVEL,SWITCHOVER_STATUS,GUARD_STATUS,FORCE_LOGGING from gv$database;
+
+OPEN_MODE	     DATABASE_ROLE    PROTECTION_MODE	   PROTECTION_LEVEL	SWITCHOVER_STATUS    GUARD_S FORCE_LOGGING
+-------------------- ---------------- -------------------- -------------------- -------------------- ------- ---------------------------------------
+MOUNTED 	     PHYSICAL STANDBY MAXIMUM PERFORMANCE  MAXIMUM PERFORMANCE	RECOVERY NEEDED      NONE    YES
+
+
+[oracle@k8s-rac01 ~]$ srvctl stop database -db xydb
+[oracle@k8s-rac01 ~]$ srvctl start database -db xydb
+
+[oracle@k8s-rac01 ~]$ sqlplus / as sysdba
+
+SQL*Plus: Release 19.0.0.0.0 - Production on Sat Feb 17 16:59:55 2024
+Version 19.21.0.0.0
+
+Copyright (c) 1982, 2022, Oracle.  All rights reserved.
+
+
+Connected to:
+Oracle Database 19c Enterprise Edition Release 19.0.0.0.0 - Production
+Version 19.21.0.0.0
+
+SYS@xydb1> select OPEN_MODE,DATABASE_ROLE,PROTECTION_MODE,PROTECTION_LEVEL,SWITCHOVER_STATUS,GUARD_STATUS,FORCE_LOGGING from gv$database;
+
+OPEN_MODE	     DATABASE_ROLE    PROTECTION_MODE	   PROTECTION_LEVEL	SWITCHOVER_STATUS    GUARD_S FORCE_LOGGING
+-------------------- ---------------- -------------------- -------------------- -------------------- ------- ---------------------------------------
+READ ONLY	     PHYSICAL STANDBY MAXIMUM PERFORMANCE  MAXIMUM PERFORMANCE	RECOVERY NEEDED      NONE    YES
+READ ONLY	     PHYSICAL STANDBY MAXIMUM PERFORMANCE  MAXIMUM PERFORMANCE	RECOVERY NEEDED      NONE    YES
+
+、
+#4. 现备库上启用Redo Apply  -->> RAC节点 上操作
+
+SYS@xydb1> ALTER DATABASE RECOVER MANAGED STANDBY DATABASE DISCONNECT;
+
+Database altered.
+
+SYS@xydb1> select OPEN_MODE,DATABASE_ROLE,PROTECTION_MODE,PROTECTION_LEVEL,SWITCHOVER_STATUS,GUARD_STATUS,FORCE_LOGGING from gv$database;
+
+OPEN_MODE	     DATABASE_ROLE    PROTECTION_MODE	   PROTECTION_LEVEL	SWITCHOVER_STATUS    GUARD_S FORCE_LOGGING
+-------------------- ---------------- -------------------- -------------------- -------------------- ------- ---------------------------------------
+READ ONLY WITH APPLY PHYSICAL STANDBY MAXIMUM PERFORMANCE  MAXIMUM PERFORMANCE	NOT ALLOWED	     NONE    YES
+READ ONLY WITH APPLY PHYSICAL STANDBY MAXIMUM PERFORMANCE  MAXIMUM PERFORMANCE	NOT ALLOWED	     NONE    YES
+
+SYS@xydbdg> select OPEN_MODE,DATABASE_ROLE,PROTECTION_MODE,PROTECTION_LEVEL,SWITCHOVER_STATUS,GUARD_STATUS,FORCE_LOGGING from gv$database;
+
+OPEN_MODE	     DATABASE_ROLE    PROTECTION_MODE	   PROTECTION_LEVEL	SWITCHOVER_STATUS    GUARD_S FORCE_LOGGING
+-------------------- ---------------- -------------------- -------------------- -------------------- ------- ---------------------------------------
+READ WRITE	     PRIMARY	      MAXIMUM PERFORMANCE  MAXIMUM PERFORMANCE	TO STANDBY	     NONE    YES
+
+
+#基本OK！
+```
+
+
+
+##### 3.2.2.3.通过rman备份
+
+#步骤
+
+```sql
+-- Converting a Failed Primary into a Standby Database Using RMAN Backups
+
+1. 查询原备库转换成主库时的SCN  -->> xydbdg 上操作
+
+      SQL> select to_char(standby_became_primary_scn) from v$database;
+
+2. 恢复原主库(单实例xydb1至mount阶段)      -->> 即：RAC节点
+
+       RMAN > run
+               { set until scn xxxxxx;  
+                  restore database;            
+                  recover database;
+                }
+
+3. 将原主库转换为备库  -->> 即：RAC节点
+
+       SQL> alter database convert to physical standby;
+       
+       srvctl stop database -db xydb
+       srvctl start database -db xydb
+
+4. 现备库上启用Redo Apply       -->> 即：RAC节点
+
+       SQL> alter database recover managed standby database disconnect from session;
+
+基本OK！
+```
+
+#操作过程
+
+```sql
+-- Converting a Failed Primary into a Standby Database Using RMAN Backups
+
+#1. 查询原备库转换成主库时的SCN  -->> xydbdg 上操作
+
+SYS@xydbdg> select to_char(standby_became_primary_scn) from v$database;
+
+TO_CHAR(STANDBY_BECAME_PRIMARY_SCN)
+----------------------------------------
+30182763
+
+
+#2. 恢复原主库(单实例xydb1至mount阶段)      -->> 即：RAC节点
+[oracle@k8s-rac01 ~]$ rman target /
+
+Recovery Manager: Release 19.0.0.0.0 - Production on Sat Feb 17 17:20:07 2024
+Version 19.21.0.0.0
+
+Copyright (c) 1982, 2019, Oracle and/or its affiliates.  All rights reserved.
+
+connected to target database: XYDB (DBID=2062989406, not open)
+
+RMAN> select status from v$instance;
+
+using target database control file instead of recovery catalog
+STATUS      
+------------
+MOUNTED     
+
+RMAN> run
+               { set until scn 30182763;  
+                  restore database;            
+                  recover database;
+                }
+
+executing command: SET until clause
+
+Starting restore at 2024-02-17 17:20:24
+flashing back control file to SCN 30182763
+allocated channel: ORA_DISK_1
+channel ORA_DISK_1: SID=572 instance=xydb1 device type=DISK
+
+skipping datafile 5; already restored to file +DATA/XYDB/86B637B62FE07A65E053F706E80A27CA/DATAFILE/system.265.1153251113
+skipping datafile 6; already restored to file +DATA/XYDB/86B637B62FE07A65E053F706E80A27CA/DATAFILE/sysaux.266.1153251113
+skipping datafile 8; already restored to file +DATA/XYDB/86B637B62FE07A65E053F706E80A27CA/DATAFILE/undotbs1.267.1153251113
+channel ORA_DISK_1: starting datafile backup set restore
+channel ORA_DISK_1: specifying datafile(s) to restore from backup set
+channel ORA_DISK_1: restoring datafile 00022 to +DATA/XYDB/1064B454582A4AA4E063610D12AC9D59/DATAFILE/pdb1user.294.1159902173
+channel ORA_DISK_1: reading from backup piece +FRA/XYDB/1064B454582A4AA4E063610D12AC9D59/BACKUPSET/2024_02_16/nnndf0_tag20240216t003031_0.268.1161045033
+channel ORA_DISK_1: piece handle=+FRA/XYDB/1064B454582A4AA4E063610D12AC9D59/BACKUPSET/2024_02_16/nnndf0_tag20240216t003031_0.268.1161045033 tag=TAG20240216T003031
+channel ORA_DISK_1: restored backup piece 1
+channel ORA_DISK_1: restore complete, elapsed time: 00:00:15
+channel ORA_DISK_1: starting datafile backup set restore
+channel ORA_DISK_1: specifying datafile(s) to restore from backup set
+channel ORA_DISK_1: restoring datafile 00004 to +DATA/XYDB/DATAFILE/undotbs1.259.1153250701
+channel ORA_DISK_1: restoring datafile 00009 to +DATA/XYDB/DATAFILE/undotbs2.269.1153251451
+channel ORA_DISK_1: reading from backup piece +FRA/XYDB/BACKUPSET/2024_02_16/nnndf0_tag20240216t003031_0.292.1161045059
+channel ORA_DISK_1: piece handle=+FRA/XYDB/BACKUPSET/2024_02_16/nnndf0_tag20240216t003031_0.292.1161045059 tag=TAG20240216T003031
+channel ORA_DISK_1: restored backup piece 1
+channel ORA_DISK_1: restore complete, elapsed time: 00:00:15
+channel ORA_DISK_1: starting datafile backup set restore
+channel ORA_DISK_1: specifying datafile(s) to restore from backup set
+channel ORA_DISK_1: restoring datafile 00003 to +DATA/XYDB/DATAFILE/sysaux.258.1153250677
+channel ORA_DISK_1: reading from backup piece +FRA/XYDB/BACKUPSET/2024_02_16/nnndf0_tag20240216t003031_0.339.1161045033
+channel ORA_DISK_1: piece handle=+FRA/XYDB/BACKUPSET/2024_02_16/nnndf0_tag20240216t003031_0.339.1161045033 tag=TAG20240216T003031
+channel ORA_DISK_1: restored backup piece 1
+channel ORA_DISK_1: restore complete, elapsed time: 00:01:15
+channel ORA_DISK_1: starting datafile backup set restore
+channel ORA_DISK_1: specifying datafile(s) to restore from backup set
+channel ORA_DISK_1: restoring datafile 00019 to +DATA/XYDB/1064B454582A4AA4E063610D12AC9D59/DATAFILE/system.292.1159901297
+channel ORA_DISK_1: restoring datafile 00023 to +DATA/XYDB/1064B454582A4AA4E063610D12AC9D59/DATAFILE/undo_2.295.1159902455
+channel ORA_DISK_1: reading from backup piece +FRA/XYDB/1064B454582A4AA4E063610D12AC9D59/BACKUPSET/2024_02_16/nnndf0_tag20240216t003031_0.334.1161045035
+channel ORA_DISK_1: piece handle=+FRA/XYDB/1064B454582A4AA4E063610D12AC9D59/BACKUPSET/2024_02_16/nnndf0_tag20240216t003031_0.334.1161045035 tag=TAG20240216T003031
+channel ORA_DISK_1: restored backup piece 1
+channel ORA_DISK_1: restore complete, elapsed time: 00:00:45
+channel ORA_DISK_1: starting datafile backup set restore
+channel ORA_DISK_1: specifying datafile(s) to restore from backup set
+channel ORA_DISK_1: restoring datafile 00020 to +DATA/XYDB/1064B454582A4AA4E063610D12AC9D59/DATAFILE/sysaux.284.1159901297
+channel ORA_DISK_1: restoring datafile 00021 to +DATA/XYDB/1064B454582A4AA4E063610D12AC9D59/DATAFILE/undotbs1.285.1159901297
+channel ORA_DISK_1: reading from backup piece +FRA/XYDB/1064B454582A4AA4E063610D12AC9D59/BACKUPSET/2024_02_16/nnndf0_tag20240216t003031_0.301.1161045081
+channel ORA_DISK_1: piece handle=+FRA/XYDB/1064B454582A4AA4E063610D12AC9D59/BACKUPSET/2024_02_16/nnndf0_tag20240216t003031_0.301.1161045081 tag=TAG20240216T003031
+channel ORA_DISK_1: restored backup piece 1
+channel ORA_DISK_1: restore complete, elapsed time: 00:00:15
+channel ORA_DISK_1: starting datafile backup set restore
+channel ORA_DISK_1: specifying datafile(s) to restore from backup set
+channel ORA_DISK_1: restoring datafile 00001 to +DATA/XYDB/DATAFILE/system.257.1153250631
+channel ORA_DISK_1: restoring datafile 00007 to +DATA/XYDB/DATAFILE/users.260.1153250703
+channel ORA_DISK_1: reading from backup piece +FRA/XYDB/BACKUPSET/2024_02_16/nnndf0_tag20240216t003031_0.321.1161045033
+channel ORA_DISK_1: piece handle=+FRA/XYDB/BACKUPSET/2024_02_16/nnndf0_tag20240216t003031_0.321.1161045033 tag=TAG20240216T003031
+channel ORA_DISK_1: restored backup piece 1
+channel ORA_DISK_1: restore complete, elapsed time: 00:01:16
+channel ORA_DISK_1: starting datafile backup set restore
+channel ORA_DISK_1: specifying datafile(s) to restore from backup set
+channel ORA_DISK_1: restoring datafile 00016 to +DATA/XYDB/0ACA091340E201B7E063620D12ACBBBA/DATAFILE/sysaux.280.1153652419
+channel ORA_DISK_1: reading from backup piece +FRA/XYDB/0ACA091340E201B7E063620D12ACBBBA/BACKUPSET/2024_02_16/nnndf0_tag20240216t003031_0.294.1161045113
+channel ORA_DISK_1: piece handle=+FRA/XYDB/0ACA091340E201B7E063620D12ACBBBA/BACKUPSET/2024_02_16/nnndf0_tag20240216t003031_0.294.1161045113 tag=TAG20240216T003031
+channel ORA_DISK_1: restored backup piece 1
+channel ORA_DISK_1: restore complete, elapsed time: 00:00:15
+channel ORA_DISK_1: starting datafile backup set restore
+channel ORA_DISK_1: specifying datafile(s) to restore from backup set
+channel ORA_DISK_1: restoring datafile 00010 to +DATA/XYDB/0A6CD91492EE7956E063620D12AC6018/DATAFILE/system.274.1153252181
+channel ORA_DISK_1: reading from backup piece +FRA/XYDB/0A6CD91492EE7956E063620D12AC6018/BACKUPSET/2024_02_16/nnndf0_tag20240216t003031_0.289.1161045083
+channel ORA_DISK_1: piece handle=+FRA/XYDB/0A6CD91492EE7956E063620D12AC6018/BACKUPSET/2024_02_16/nnndf0_tag20240216t003031_0.289.1161045083 tag=TAG20240216T003031
+channel ORA_DISK_1: restored backup piece 1
+channel ORA_DISK_1: restore complete, elapsed time: 00:00:45
+channel ORA_DISK_1: starting datafile backup set restore
+channel ORA_DISK_1: specifying datafile(s) to restore from backup set
+channel ORA_DISK_1: restoring datafile 00011 to +DATA/XYDB/0A6CD91492EE7956E063620D12AC6018/DATAFILE/sysaux.275.1153252181
+channel ORA_DISK_1: restoring datafile 00014 to +DATA/XYDB/0A6CD91492EE7956E063620D12AC6018/DATAFILE/users.278.1153252229
+channel ORA_DISK_1: reading from backup piece +FRA/XYDB/0A6CD91492EE7956E063620D12AC6018/BACKUPSET/2024_02_16/nnndf0_tag20240216t003031_0.333.1161045127
+channel ORA_DISK_1: piece handle=+FRA/XYDB/0A6CD91492EE7956E063620D12AC6018/BACKUPSET/2024_02_16/nnndf0_tag20240216t003031_0.333.1161045127 tag=TAG20240216T003031
+channel ORA_DISK_1: restored backup piece 1
+channel ORA_DISK_1: restore complete, elapsed time: 00:00:15
+channel ORA_DISK_1: starting datafile backup set restore
+channel ORA_DISK_1: specifying datafile(s) to restore from backup set
+channel ORA_DISK_1: restoring datafile 00012 to +DATA/XYDB/0A6CD91492EE7956E063620D12AC6018/DATAFILE/undotbs1.273.1153252181
+channel ORA_DISK_1: restoring datafile 00013 to +DATA/XYDB/0A6CD91492EE7956E063620D12AC6018/DATAFILE/undo_2.277.1153252217
+channel ORA_DISK_1: reading from backup piece +FRA/XYDB/0A6CD91492EE7956E063620D12AC6018/BACKUPSET/2024_02_16/nnndf0_tag20240216t003031_0.320.1161045143
+channel ORA_DISK_1: piece handle=+FRA/XYDB/0A6CD91492EE7956E063620D12AC6018/BACKUPSET/2024_02_16/nnndf0_tag20240216t003031_0.320.1161045143 tag=TAG20240216T003031
+channel ORA_DISK_1: restored backup piece 1
+channel ORA_DISK_1: restore complete, elapsed time: 00:00:07
+channel ORA_DISK_1: starting datafile backup set restore
+channel ORA_DISK_1: specifying datafile(s) to restore from backup set
+channel ORA_DISK_1: restoring datafile 00015 to +DATA/XYDB/0ACA091340E201B7E063620D12ACBBBA/DATAFILE/system.281.1153652419
+channel ORA_DISK_1: reading from backup piece +FRA/XYDB/0ACA091340E201B7E063620D12ACBBBA/BACKUPSET/2024_02_16/nnndf0_tag20240216t003031_0.342.1161045097
+channel ORA_DISK_1: piece handle=+FRA/XYDB/0ACA091340E201B7E063620D12ACBBBA/BACKUPSET/2024_02_16/nnndf0_tag20240216t003031_0.342.1161045097 tag=TAG20240216T003031
+channel ORA_DISK_1: restored backup piece 1
+channel ORA_DISK_1: restore complete, elapsed time: 00:00:45
+channel ORA_DISK_1: starting datafile backup set restore
+channel ORA_DISK_1: specifying datafile(s) to restore from backup set
+channel ORA_DISK_1: restoring datafile 00017 to +DATA/XYDB/0ACA091340E201B7E063620D12ACBBBA/DATAFILE/undotbs1.279.1153652419
+channel ORA_DISK_1: reading from backup piece +FRA/XYDB/0ACA091340E201B7E063620D12ACBBBA/BACKUPSET/2024_02_16/nnndf0_tag20240216t003031_0.280.1161045147
+channel ORA_DISK_1: piece handle=+FRA/XYDB/0ACA091340E201B7E063620D12ACBBBA/BACKUPSET/2024_02_16/nnndf0_tag20240216t003031_0.280.1161045147 tag=TAG20240216T003031
+channel ORA_DISK_1: restored backup piece 1
+channel ORA_DISK_1: restore complete, elapsed time: 00:00:03
+channel ORA_DISK_1: starting datafile backup set restore
+channel ORA_DISK_1: specifying datafile(s) to restore from backup set
+channel ORA_DISK_1: restoring datafile 00018 to +DATA/XYDB/0ACA091340E201B7E063620D12ACBBBA/DATAFILE/undo_2.283.1153652669
+channel ORA_DISK_1: reading from backup piece +FRA/XYDB/0ACA091340E201B7E063620D12ACBBBA/BACKUPSET/2024_02_16/nnndf0_tag20240216t003031_0.308.1161045147
+channel ORA_DISK_1: piece handle=+FRA/XYDB/0ACA091340E201B7E063620D12ACBBBA/BACKUPSET/2024_02_16/nnndf0_tag20240216t003031_0.308.1161045147 tag=TAG20240216T003031
+channel ORA_DISK_1: restored backup piece 1
+channel ORA_DISK_1: restore complete, elapsed time: 00:00:03
+Finished restore at 2024-02-17 17:26:42
+
+Starting recover at 2024-02-17 17:26:43
+using channel ORA_DISK_1
+
+starting media recovery
+
+archived log for thread 1 with sequence 525 is already on disk as file +FRA/XYDB/ARCHIVELOG/2024_02_16/thread_1_seq_525.297.1161045151
+archived log for thread 1 with sequence 526 is already on disk as file +FRA/XYDB/ARCHIVELOG/2024_02_16/thread_1_seq_526.284.1161045161
+archived log for thread 1 with sequence 527 is already on disk as file +FRA/XYDB/ARCHIVELOG/2024_02_16/thread_1_seq_527.265.1161045163
+archived log for thread 1 with sequence 528 is already on disk as file +FRA/XYDB/ARCHIVELOG/2024_02_16/thread_1_seq_528.293.1161104445
+archived log for thread 1 with sequence 529 is already on disk as file +FRA/XYDB/ARCHIVELOG/2024_02_16/thread_1_seq_529.299.1161123709
+archived log for thread 1 with sequence 530 is already on disk as file +FRA/XYDB/ARCHIVELOG/2024_02_17/thread_1_seq_530.313.1161131443
+archived log for thread 1 with sequence 531 is already on disk as file +FRA/XYDB/ARCHIVELOG/2024_02_17/thread_1_seq_531.341.1161176937
+archived log for thread 1 with sequence 532 is already on disk as file +FRA/XYDB/ARCHIVELOG/2024_02_17/thread_1_seq_532.267.1161190565
+archived log for thread 2 with sequence 482 is already on disk as file +FRA/XYDB/ARCHIVELOG/2024_02_16/thread_2_seq_482.331.1161045157
+archived log for thread 2 with sequence 483 is already on disk as file +FRA/XYDB/ARCHIVELOG/2024_02_16/thread_2_seq_483.305.1161045163
+archived log for thread 2 with sequence 484 is already on disk as file +FRA/XYDB/ARCHIVELOG/2024_02_16/thread_2_seq_484.269.1161111617
+archived log for thread 2 with sequence 485 is already on disk as file +FRA/XYDB/ARCHIVELOG/2024_02_17/thread_2_seq_485.279.1161131473
+archived log for thread 2 with sequence 486 is already on disk as file +FRA/XYDB/ARCHIVELOG/2024_02_17/thread_2_seq_486.282.1161131489
+archived log for thread 2 with sequence 487 is already on disk as file +FRA/XYDB/ARCHIVELOG/2024_02_17/thread_2_seq_487.345.1161131493
+archived log for thread 2 with sequence 488 is already on disk as file +FRA/XYDB/ARCHIVELOG/2024_02_17/thread_2_seq_488.302.1161131517
+archived log for thread 2 with sequence 489 is already on disk as file +FRA/XYDB/ARCHIVELOG/2024_02_17/thread_2_seq_489.324.1161176935
+archived log for thread 2 with sequence 490 is already on disk as file +FRA/XYDB/ARCHIVELOG/2024_02_17/thread_2_seq_490.270.1161190565
+archived log for thread 1 with sequence 1 is already on disk as file +FRA/XYDB/ARCHIVELOG/2024_02_17/thread_1_seq_1.298.1161190567
+archived log for thread 1 with sequence 2 is already on disk as file +FRA/XYDB/ARCHIVELOG/2024_02_17/thread_1_seq_2.326.1161191027
+archived log for thread 1 with sequence 3 is already on disk as file +FRA/XYDB/ARCHIVELOG/2024_02_17/thread_1_seq_3.328.1161191247
+archived log for thread 1 with sequence 4 is already on disk as file +FRA/XYDB/ARCHIVELOG/2024_02_17/thread_1_seq_4.288.1161191723
+archived log for thread 2 with sequence 1 is already on disk as file +FRA/XYDB/ARCHIVELOG/2024_02_17/thread_2_seq_1.285.1161190567
+archived log for thread 2 with sequence 2 is already on disk as file +FRA/XYDB/ARCHIVELOG/2024_02_17/thread_2_seq_2.307.1161191269
+archived log for thread 2 with sequence 3 is already on disk as file +FRA/XYDB/ARCHIVELOG/2024_02_17/thread_2_seq_3.275.1161191725
+channel ORA_DISK_1: starting archived log restore to default destination
+channel ORA_DISK_1: restoring archived log
+archived log thread=2 sequence=481
+channel ORA_DISK_1: reading from backup piece +FRA/XYDB/BACKUPSET/2024_02_16/annnf0_tag20240216t003231_0.340.1161045151
+channel ORA_DISK_1: piece handle=+FRA/XYDB/BACKUPSET/2024_02_16/annnf0_tag20240216t003231_0.340.1161045151 tag=TAG20240216T003231
+channel ORA_DISK_1: restored backup piece 1
+channel ORA_DISK_1: restore complete, elapsed time: 00:00:01
+archived log file name=+FRA/XYDB/ARCHIVELOG/2024_02_17/thread_2_seq_481.263.1161192409 thread=2 sequence=481
+archived log file name=+FRA/XYDB/ARCHIVELOG/2024_02_16/thread_1_seq_525.297.1161045151 thread=1 sequence=525
+archived log file name=+FRA/XYDB/ARCHIVELOG/2024_02_16/thread_2_seq_482.331.1161045157 thread=2 sequence=482
+archived log file name=+FRA/XYDB/ARCHIVELOG/2024_02_16/thread_1_seq_526.284.1161045161 thread=1 sequence=526
+archived log file name=+FRA/XYDB/ARCHIVELOG/2024_02_16/thread_2_seq_483.305.1161045163 thread=2 sequence=483
+archived log file name=+FRA/XYDB/ARCHIVELOG/2024_02_16/thread_1_seq_527.265.1161045163 thread=1 sequence=527
+archived log file name=+FRA/XYDB/ARCHIVELOG/2024_02_16/thread_2_seq_484.269.1161111617 thread=2 sequence=484
+archived log file name=+FRA/XYDB/ARCHIVELOG/2024_02_16/thread_1_seq_528.293.1161104445 thread=1 sequence=528
+archived log file name=+FRA/XYDB/ARCHIVELOG/2024_02_16/thread_1_seq_529.299.1161123709 thread=1 sequence=529
+archived log file name=+FRA/XYDB/ARCHIVELOG/2024_02_17/thread_2_seq_485.279.1161131473 thread=2 sequence=485
+archived log file name=+FRA/XYDB/ARCHIVELOG/2024_02_17/thread_1_seq_530.313.1161131443 thread=1 sequence=530
+archived log file name=+FRA/XYDB/ARCHIVELOG/2024_02_17/thread_2_seq_486.282.1161131489 thread=2 sequence=486
+archived log file name=+FRA/XYDB/ARCHIVELOG/2024_02_17/thread_1_seq_531.341.1161176937 thread=1 sequence=531
+archived log file name=+FRA/XYDB/ARCHIVELOG/2024_02_17/thread_2_seq_487.345.1161131493 thread=2 sequence=487
+archived log file name=+FRA/XYDB/ARCHIVELOG/2024_02_17/thread_2_seq_488.302.1161131517 thread=2 sequence=488
+archived log file name=+FRA/XYDB/ARCHIVELOG/2024_02_17/thread_2_seq_489.324.1161176935 thread=2 sequence=489
+archived log file name=+FRA/XYDB/ARCHIVELOG/2024_02_17/thread_2_seq_490.270.1161190565 thread=2 sequence=490
+archived log file name=+FRA/XYDB/ARCHIVELOG/2024_02_17/thread_1_seq_532.267.1161190565 thread=1 sequence=532
+archived log file name=+FRA/XYDB/ARCHIVELOG/2024_02_17/thread_1_seq_1.298.1161190567 thread=1 sequence=1
+archived log file name=+FRA/XYDB/ARCHIVELOG/2024_02_17/thread_2_seq_1.285.1161190567 thread=2 sequence=1
+archived log file name=+FRA/XYDB/ARCHIVELOG/2024_02_17/thread_1_seq_2.326.1161191027 thread=1 sequence=2
+Finished recover at 2024-02-17 17:27:24
+
+RMAN> 
+
+
+#3. 将原主库转换为备库  -->> 即：RAC节点
+
+SYS@xydb1> select status from v$instance;
+
+STATUS
+------------
+MOUNTED
+
+SYS@xydb1> alter database convert to physical standby;
+
+Database altered.
+
+SYS@xydb1> select status from v$instance;
+
+STATUS
+------------
+MOUNTED
+
+SYS@xydb1> exit
+Disconnected from Oracle Database 19c Enterprise Edition Release 19.0.0.0.0 - Production
+Version 19.21.0.0.0
+
+[oracle@k8s-rac01 ~]$ srvctl stop database -db xydb
+[oracle@k8s-rac01 ~]$ srvctl start database -db xydb
+
+#4. 现备库上启用Redo Apply       -->> 即：RAC节点
+
+SYS@xydb1> alter database recover managed standby database disconnect from session;
+
+Database altered.
+
+SYS@xydb1> 
+
+SYS@xydb1> select OPEN_MODE,DATABASE_ROLE,PROTECTION_MODE,PROTECTION_LEVEL,SWITCHOVER_STATUS,GUARD_STATUS,FORCE_LOGGING from gv$database;
+
+OPEN_MODE	     DATABASE_ROLE    PROTECTION_MODE	   PROTECTION_LEVEL	SWITCHOVER_STATUS    GUARD_S FORCE_LOGGING
+-------------------- ---------------- -------------------- -------------------- -------------------- ------- ---------------------------------------
+READ ONLY WITH APPLY PHYSICAL STANDBY MAXIMUM PERFORMANCE  MAXIMUM PERFORMANCE	SWITCHOVER PENDING   NONE    YES
+READ ONLY WITH APPLY PHYSICAL STANDBY MAXIMUM PERFORMANCE  MAXIMUM PERFORMANCE	SWITCHOVER PENDING   NONE    YES
+
+SYS@xydb1> 
+
+
+SYS@xydbdg>  select OPEN_MODE,DATABASE_ROLE,PROTECTION_MODE,PROTECTION_LEVEL,SWITCHOVER_STATUS,GUARD_STATUS,FORCE_LOGGING from gv$database;
+
+OPEN_MODE	     DATABASE_ROLE    PROTECTION_MODE	   PROTECTION_LEVEL	SWITCHOVER_STATUS    GUARD_S FORCE_LOGGING
+-------------------- ---------------- -------------------- -------------------- -------------------- ------- ---------------------------------------
+READ WRITE	     PRIMARY	      MAXIMUM PERFORMANCE  MAXIMUM PERFORMANCE	TO STANDBY	     NONE    YES
+
+SYS@xydbdg> alter system switch logfile;
+
+System altered.
+
+SYS@xydbdg> select OPEN_MODE,DATABASE_ROLE,PROTECTION_MODE,PROTECTION_LEVEL,SWITCHOVER_STATUS,GUARD_STATUS,FORCE_LOGGING from gv$database;
+
+OPEN_MODE	     DATABASE_ROLE    PROTECTION_MODE	   PROTECTION_LEVEL	SWITCHOVER_STATUS    GUARD_S FORCE_LOGGING
+-------------------- ---------------- -------------------- -------------------- -------------------- ------- ---------------------------------------
+READ WRITE	     PRIMARY	      MAXIMUM PERFORMANCE  MAXIMUM PERFORMANCE	TO STANDBY	     NONE    YES
+
+SYS@xydbdg> 
+
+SYS@xydb1> select OPEN_MODE,DATABASE_ROLE,PROTECTION_MODE,PROTECTION_LEVEL,SWITCHOVER_STATUS,GUARD_STATUS,FORCE_LOGGING from gv$database;
+
+OPEN_MODE	     DATABASE_ROLE    PROTECTION_MODE	   PROTECTION_LEVEL	SWITCHOVER_STATUS    GUARD_S FORCE_LOGGING
+-------------------- ---------------- -------------------- -------------------- -------------------- ------- ---------------------------------------
+READ ONLY WITH APPLY PHYSICAL STANDBY MAXIMUM PERFORMANCE  MAXIMUM PERFORMANCE	NOT ALLOWED	     NONE    YES
+READ ONLY WITH APPLY PHYSICAL STANDBY MAXIMUM PERFORMANCE  MAXIMUM PERFORMANCE	NOT ALLOWED	     NONE    YES
+
+SYS@xydb1> 
+
+
+#基本OK！
+```
+
+
+
+### 3.2.3.通过switchover，进行主备切换
+
+#同3.1.2.主备再次切换-通过19c adg命令
 
 
 
@@ -4364,3 +6226,1259 @@ SYS@xydbdg>
 
 
 
+
+
+
+
+## 5.通过dg_broker进行切换测试
+
+
+
+## 7.ADG RU升级
+### 7.1.升级流程
+
+#主库rac-19.21/备库单实例-19.21
+
+```
+#升级顺序
+#可以先升级备库，然后主备切换后，再升级新备库
+```
+
+
+
+### 7.2.主库打19.22RU
+
+#补丁列表
+
+|                             Name                             |  Download Link   |
+| :----------------------------------------------------------: | :--------------: |
+|           Database Release Update 19.22.0.0.240116           | <Patch 35943157> |
+|     Grid Infrastructure Release Update 19.22.0.0.240116      | <Patch 35940989> |
+|             OJVM Release Update 19.22.0.0.240116             | <Patch 35926646> |
+|  (there were no OJVM Release Update Revisions for Jan 2024)  |                  |
+| Microsoft Windows 32-Bit & x86-64 Bundle Patch 19.22.0.0.240116 | <Patch 35962832> |
+
+#You must use the OPatch utility version 12.2.0.1.40 or later to apply this patch.
+
+
+
+```
+#补丁位置：---k8s-rac01/k8s-rac02都一样
+[oracle@k8s-rac01 opt]$ ls
+19.20patch  19.21patch  opa  oracle  oracle.ahf  ORCLfmap
+[oracle@k8s-rac01 opt]$ cd 19.21patch/
+[oracle@k8s-rac01 19.21patch]$ ll
+total 5031608
+-rw-r--r-- 1 root root 3084439097 Nov 18 23:00 p35642822_190000_Linux-x86-64.zip
+-rw-r--r-- 1 root root 1815725977 Nov 18 23:00 p35643107_190000_Linux-x86-64.zip
+-rw-r--r-- 1 root root  127350205 Nov 18 23:00 p35648110_190000_Linux-x86-64.zip
+-rw-r--r-- 1 root root  124843817 Nov 18 23:00 p6880880_190000_Linux-x86-64.zip
+
+```
+
+
+
+#### 7.2.1.检查集群状态
+
+```bash
+crsctl status resource -t
+```
+
+#集群正常
+
+```bash
+[grid@k8s-rac01 ~]$ cd $ORACLE_HOME/OPatch
+[grid@k8s-rac01 OPatch]$ ./opatch lspatches   
+35553096;TOMCAT RELEASE UPDATE 19.0.0.0.0 (35553096)
+35332537;ACFS RELEASE UPDATE 19.20.0.0.0 (35332537)
+35320149;OCW RELEASE UPDATE 19.20.0.0.0 (35320149)
+35320081;Database Release Update : 19.20.0.0.230718 (35320081)
+33575402;DBWLM RELEASE UPDATE 19.0.0.0.0 (33575402)
+
+OPatch succeeded.
+
+[grid@k8s-rac01 OPatch]$ crsctl status resource -t
+--------------------------------------------------------------------------------
+Name           Target  State        Server                   State details       
+--------------------------------------------------------------------------------
+Local Resources
+--------------------------------------------------------------------------------
+ora.LISTENER.lsnr
+               ONLINE  ONLINE       k8s-rac01                STABLE
+               ONLINE  ONLINE       k8s-rac02                STABLE
+ora.chad
+               ONLINE  ONLINE       k8s-rac01                STABLE
+               ONLINE  ONLINE       k8s-rac02                STABLE
+ora.net1.network
+               ONLINE  ONLINE       k8s-rac01                STABLE
+               ONLINE  ONLINE       k8s-rac02                STABLE
+ora.ons
+               ONLINE  ONLINE       k8s-rac01                STABLE
+               ONLINE  ONLINE       k8s-rac02                STABLE
+--------------------------------------------------------------------------------
+Cluster Resources
+--------------------------------------------------------------------------------
+ora.ASMNET1LSNR_ASM.lsnr(ora.asmgroup)
+      1        ONLINE  ONLINE       k8s-rac01                STABLE
+      2        ONLINE  ONLINE       k8s-rac02                STABLE
+      3        ONLINE  OFFLINE                               STABLE
+ora.DATA.dg(ora.asmgroup)
+      1        ONLINE  ONLINE       k8s-rac01                STABLE
+      2        ONLINE  ONLINE       k8s-rac02                STABLE
+      3        OFFLINE OFFLINE                               STABLE
+ora.FRA.dg(ora.asmgroup)
+      1        ONLINE  ONLINE       k8s-rac01                STABLE
+      2        ONLINE  ONLINE       k8s-rac02                STABLE
+      3        OFFLINE OFFLINE                               STABLE
+ora.LISTENER_SCAN1.lsnr
+      1        ONLINE  ONLINE       k8s-rac01                STABLE
+ora.OCR.dg(ora.asmgroup)
+      1        ONLINE  ONLINE       k8s-rac01                STABLE
+      2        ONLINE  ONLINE       k8s-rac02                STABLE
+      3        OFFLINE OFFLINE                               STABLE
+ora.asm(ora.asmgroup)
+      1        ONLINE  ONLINE       k8s-rac01                Started,STABLE
+      2        ONLINE  ONLINE       k8s-rac02                Started,STABLE
+      3        OFFLINE OFFLINE                               STABLE
+ora.asmnet1.asmnetwork(ora.asmgroup)
+      1        ONLINE  ONLINE       k8s-rac01                STABLE
+      2        ONLINE  ONLINE       k8s-rac02                STABLE
+      3        OFFLINE OFFLINE                               STABLE
+ora.cvu
+      1        ONLINE  ONLINE       k8s-rac01                STABLE
+ora.k8s-rac01.vip
+      1        ONLINE  ONLINE       k8s-rac01                STABLE
+ora.k8s-rac02.vip
+      1        ONLINE  ONLINE       k8s-rac02                STABLE
+ora.qosmserver
+      1        ONLINE  ONLINE       k8s-rac01                STABLE
+ora.scan1.vip
+      1        ONLINE  ONLINE       k8s-rac01                STABLE
+ora.xydb.db
+      1        ONLINE  ONLINE       k8s-rac01                Open,HOME=/u01/app/o
+                                                             racle/product/19.0.0
+                                                             /db_1,STABLE
+      2        ONLINE  ONLINE       k8s-rac02                Open,HOME=/u01/app/o
+                                                             racle/product/19.0.0
+                                                             /db_1,STABLE
+ora.xydb.s_stuwork.svc
+      1        ONLINE  ONLINE       k8s-rac01                STABLE
+      2        ONLINE  ONLINE       k8s-rac02                STABLE
+--------------------------------------------------------------------------------
+
+```
+
+
+
+#### 7.2.2.更新grid opatch 两个节点 root执行
+
+```bash
+#备份opatch
+mv /u01/app/19.0.0/grid/OPatch /u01/app/19.0.0/grid/OPatch_20bak    
+
+#更新opatch
+unzip -q /opt/19.21patch/p6880880_190000_Linux-x86-64.zip -d /u01/app/19.0.0/grid/  
+
+chmod -R 755 /u01/app/19.0.0/grid/OPatch
+
+chown -R grid:oinstall /u01/app/19.0.0/grid/OPatch
+
+#更新后检查opatch的版本至少12.2.0.1.37
+su - grid
+
+[grid@k8s-rac01 ~]$ cd $ORACLE_HOME/OPatch
+[grid@k8s-rac01 OPatch]$ ./opatch version   
+
+OPatch Version: 12.2.0.1.37
+OPatch succeeded.
+```
+
+
+
+#### 7.2.3.更新oracle opatch 两个节点 root执行
+
+```bash
+#备份opatch
+mv /u01/app/oracle/product/19.0.0/db_1/OPatch /u01/app/oracle/product/19.0.0/db_1/OPatch.20bak     
+
+unzip -q /opt/19.21patch/p6880880_190000_Linux-x86-64.zip -d /u01/app/oracle/product/19.0.0/db_1/ 
+
+chmod -R 755 /u01/app/oracle/product/19.0.0/db_1/OPatch
+
+chown -R oracle:oinstall /u01/app/oracle/product/19.0.0/db_1/OPatch
+```
+
+ 
+
+#### 7.2.4.解压patch包 两个节点 root执行
+
+```bash
+#这一个包 包含了全部的patch
+unzip /opt/19.21patch/p35642822_190000_Linux-x86-64.zip -d /opt/19.21patch/
+
+chown -R grid:oinstall /opt/19.21patch/35642822
+
+chmod -R 755 /opt/19.21patch/35642822
+
+#此时可以查看35642822文件夹下的 README.html，里面有详细的RU步骤
+```
+
+
+
+#### 7.2.5.兼容性检查
+
+```bash
+#OPatch兼容性检查 两个节点 grid用户
+
+ su - grid
+
+/u01/app/19.0.0/grid/OPatch/opatch lsinventory -detail -oh /u01/app/19.0.0/grid/
+
+#OPatch兼容性检查 两个节点 oracle用户
+
+ su - oracle
+
+/u01/app/oracle/product/19.0.0/db_1/OPatch/opatch lsinventory -detail -oh /u01/app/oracle/product/19.0.0/db_1/
+```
+
+
+
+#### 7.2.6.补丁冲突检查 k8s-rac01/k8s-rac02两个节点都执行
+
+```bash
+#子目录的五个patch在grid用户下分别执行检查
+
+su - grid
+
+$ORACLE_HOME/OPatch/opatch prereq CheckConflictAgainstOHWithDetail -phBaseDir /opt/19.21patch/35642822/35643107
+
+$ORACLE_HOME/OPatch/opatch prereq CheckConflictAgainstOHWithDetail -phBaseDir /opt/19.21patch/35642822/35655527
+
+$ORACLE_HOME/OPatch/opatch prereq CheckConflictAgainstOHWithDetail -phBaseDir /opt/19.21patch/35642822/35652062
+
+$ORACLE_HOME/OPatch/opatch prereq CheckConflictAgainstOHWithDetail -phBaseDir /opt/19.21patch/35642822/35553096
+
+$ORACLE_HOME/OPatch/opatch prereq CheckConflictAgainstOHWithDetail -phBaseDir /opt/19.21patch/35642822/33575402
+
+
+#子目录的一个patch在oracle用户下执行检查
+
+su - oracle
+
+
+$ORACLE_HOME/OPatch/opatch prereq CheckConflictAgainstOHWithDetail -phBaseDir /opt/19.21patch/35642822/35643107
+
+$ORACLE_HOME/OPatch/opatch prereq CheckConflictAgainstOHWithDetail -phBaseDir /opt/19.21patch/35642822/35655527
+```
+
+
+
+#### 7.2.7.空间检查 k8s-rac01/k8s-rac02两个节点都执行
+
+```bash
+#grid用户执行
+
+su - grid
+
+touch /tmp/1921patch_list_gihome.txt
+
+cat >>  /tmp/1921patch_list_gihome.txt <<EOF
+/opt/19.21patch/35642822/35643107
+/opt/19.21patch/35642822/35655527
+/opt/19.21patch/35642822/35652062
+/opt/19.21patch/35642822/35553096
+/opt/19.21patch/35642822/33575402
+EOF
+
+
+$ORACLE_HOME/OPatch/opatch prereq CheckSystemSpace -phBaseFile /tmp/1921patch_list_gihome.txt
+
+
+#oracle用户执行
+
+su - oracle
+
+touch /tmp/1921patch_list_dbhome.txt
+
+cat > /tmp/1921patch_list_dbhome.txt <<EOF
+/opt/19.21patch/35642822/35643107
+/opt/19.21patch/35642822/35655527
+EOF
+
+$ORACLE_HOME/OPatch/opatch prereq CheckSystemSpace -phBaseFile /tmp/1921patch_list_dbhome.txt
+```
+
+
+
+#### 7.2.8.补丁分析检查  root用户两个节点都要分别执行 
+
+```bash
+su - root
+
+#k8s-rac01:
+#k8s-rac01大约2分钟40秒，全部成功(最长有过4分17秒)
+
+/u01/app/19.0.0/grid/OPatch/opatchauto apply /opt/19.21patch/35642822 -analyze
+
+#k8s-rac02:
+#k8s-rac02大约2分钟40秒，全部成功(最长有过3分48秒)
+#可能会有部分失败
+
+/u01/app/19.0.0/grid/OPatch/opatchauto apply /opt/19.21patch/35642822 -analyze
+
+-----------------------------
+Reason: Failed during Analysis: CheckSystemCommandsAvailable Failed, [ Prerequisite Status: FAILED, Prerequisite output:
+The details are:
+
+Missing command :fuser]
+---------------------------
+
+
+#解决办法：
+yum install -y psmisc
+
+#k8s-rac02再次检查：
+#k8s-rac02大约2分钟40秒，全部成功
+/u01/app/19.0.0/grid/OPatch/opatchauto apply /opt/19.21patch/35642822 -analyze       
+```
+
+#报错分析解决
+
+```bash
+[root@k8s-rac01 OPatch]# /u01/app/19.0.0/grid/OPatch/opatchauto apply /opt/19.21patch/35642822 -analyze 
+OPatchauto session is initiated at Wed Nov 22 18:02:38 2023
+
+System initialization log file is /u01/app/19.0.0/grid/cfgtoollogs/opatchautodb/systemconfig2023-11-22_06-02-46PM.log.
+
+Session log file is /u01/app/19.0.0/grid/cfgtoollogs/opatchauto/opatchauto2023-11-22_06-03-20PM.log
+The id for this session is BY6I
+
+Wrong OPatch software installed in following homes:
+Host:k8s-rac01, Home:/u01/app/oracle/product/19.0.0/db_1
+
+Host:k8s-rac02, Home:/u01/app/oracle/product/19.0.0/db_1
+
+OPATCHAUTO-72088: OPatch version check failed.
+OPATCHAUTO-72088: OPatch software version in homes selected for patching are different.
+OPATCHAUTO-72088: Please install same OPatch software in all homes.
+OPatchAuto failed.
+
+OPatchauto session completed at Wed Nov 22 18:03:51 2023
+Time taken to complete the session 1 minute, 6 seconds
+
+ opatchauto failed with error code 42
+
+[root@k8s-rac02 OPatch]# /u01/app/19.0.0/grid/OPatch/opatchauto apply /opt/19.21patch/35642822 -analyze 
+OPatchauto session is initiated at Wed Nov 22 18:02:38 2023
+
+System initialization log file is /u01/app/19.0.0/grid/cfgtoollogs/opatchautodb/systemconfig2023-11-22_06-02-44PM.log.
+
+Session log file is /u01/app/19.0.0/grid/cfgtoollogs/opatchauto/opatchauto2023-11-22_06-03-14PM.log
+The id for this session is YA4Q
+
+Wrong OPatch software installed in following homes:
+Host:k8s-rac01, Home:/u01/app/oracle/product/19.0.0/db_1
+
+Host:k8s-rac02, Home:/u01/app/oracle/product/19.0.0/db_1
+
+OPATCHAUTO-72088: OPatch version check failed.
+OPATCHAUTO-72088: OPatch software version in homes selected for patching are different.
+OPATCHAUTO-72088: Please install same OPatch software in all homes.
+OPatchAuto failed.
+
+OPatchauto session completed at Wed Nov 22 18:03:38 2023
+Time taken to complete the session 0 minute, 54 seconds
+
+ opatchauto failed with error code 42
+
+
+[root@k8s-rac01 OPatch]# tail -100f /u01/app/19.0.0/grid/cfgtoollogs/opatchauto/opatchauto2023-11-22_06-03-20PM.log
+2023-11-22 18:03:50,374 INFO  [1] com.oracle.glcm.patch.auto.db.product.validation.validators.OPatchVersionValidator -  OH  hostname  OH.getPath() /u01/app/oracle/product/19.0.0/db_1
+2023-11-22 18:03:51,025 WARNING [1] com.oracle.glcm.patch.auto.db.product.validation.validators.OPatchVersionValidator - OPatch Version Check failed for Home /u01/app/oracle/product/19.0.0/db_1 on host k8s-rac01
+2023-11-22 18:03:51,025 WARNING [1] com.oracle.glcm.patch.auto.db.product.validation.validators.OPatchVersionValidator - OPatch Version Check failed for Home /u01/app/oracle/product/19.0.0/db_1 on host k8s-rac02
+2023-11-22 18:03:51,025 INFO  [1] com.oracle.cie.common.util.reporting.CommonReporter - Reporting console output : Message{id='null', message='
+Wrong OPatch software installed in following homes:'}
+2023-11-22 18:03:51,025 INFO  [1] com.oracle.cie.common.util.reporting.CommonReporter - Reporting console output : Message{id='null', message='Host:k8s-rac01, Home:/u01/app/oracle/product/19.0.0/db_1
+'}
+2023-11-22 18:03:51,026 INFO  [1] com.oracle.cie.common.util.reporting.CommonReporter - Reporting console output : Message{id='null', message='Host:k8s-rac02, Home:/u01/app/oracle/product/19.0.0/db_1
+'}
+2023-11-22 18:03:51,027 INFO  [1] com.oracle.glcm.patch.auto.db.product.validation.DBValidationController - Validation failed due to :OPATCHAUTO-72088: OPatch version check failed.
+OPATCHAUTO-72088: OPatch software version in homes selected for patching are different.
+OPATCHAUTO-72088: Please install same OPatch software in all homes.
+2023-11-22 18:03:51,028 INFO  [1] com.oracle.glcm.patch.auto.db.product.validation.validators.OOPPatchTargetValidator - OOP patch target validation skipped
+2023-11-22 18:03:51,190 INFO  [1] com.oracle.glcm.patch.auto.db.integration.model.productsupport.DBBaseProductSupport - Space available after session: 236574 MB
+2023-11-22 18:03:51,267 INFO  [1] com.oracle.glcm.patch.auto.db.framework.core.oplan.IOUtils - Change the permission of the file /u01/app/19.0.0/grid/opatchautocfg/db/sessioninfo/patchingsummary.xmlto 775
+2023-11-22 18:03:51,343 SEVERE [1] com.oracle.glcm.patch.auto.OPatchAuto - OPatchAuto failed.
+com.oracle.glcm.patch.auto.OPatchAutoException: OPATCHAUTO-72088: OPatch version check failed.
+OPATCHAUTO-72088: OPatch software version in homes selected for patching are different.
+OPATCHAUTO-72088: Please install same OPatch software in all homes.
+        at com.oracle.glcm.patch.auto.db.integration.model.productsupport.DBBaseProductSupport.loadTopology(DBBaseProductSupport.java:236)
+        at com.oracle.glcm.patch.auto.db.integration.model.productsupport.DBProductSupport.loadTopology(DBProductSupport.java:69)
+        at com.oracle.glcm.patch.auto.OPatchAuto.loadTopology(OPatchAuto.java:1732)
+        at com.oracle.glcm.patch.auto.OPatchAuto.prepareOrchestration(OPatchAuto.java:730)
+        at com.oracle.glcm.patch.auto.OPatchAuto.orchestrate(OPatchAuto.java:397)
+        at com.oracle.glcm.patch.auto.OPatchAuto.orchestrate(OPatchAuto.java:344)
+        at com.oracle.glcm.patch.auto.OPatchAuto.main(OPatchAuto.java:212)
+2023-11-22 18:03:51,344 INFO  [1] com.oracle.cie.common.util.reporting.CommonReporter - Reporting console output : Message{id='null', message='OPATCHAUTO-72088: OPatch version check failed.
+OPATCHAUTO-72088: OPatch software version in homes selected for patching are different.
+OPATCHAUTO-72088: Please install same OPatch software in all homes.'}
+2023-11-22 18:03:51,344 INFO  [1] com.oracle.cie.common.util.reporting.CommonReporter - Reporting console output : Message{id='null', message='OPatchAuto failed.'}
+
+[root@k8s-rac02 OPatch]# tail -100f /u01/app/19.0.0/grid/cfgtoollogs/opatchauto/opatchauto2023-11-22_06-03-14PM.log
+2023-11-22 18:03:38,228 INFO  [1] com.oracle.glcm.patch.auto.db.product.validation.validators.OPatchVersionValidator -  OH  hostname  OH.getPath() /u01/app/oracle/product/19.0.0/db_1
+2023-11-22 18:03:38,731 WARNING [1] com.oracle.glcm.patch.auto.db.product.validation.validators.OPatchVersionValidator - OPatch Version Check failed for Home /u01/app/oracle/product/19.0.0/db_1 on host k8s-rac01
+2023-11-22 18:03:38,732 WARNING [1] com.oracle.glcm.patch.auto.db.product.validation.validators.OPatchVersionValidator - OPatch Version Check failed for Home /u01/app/oracle/product/19.0.0/db_1 on host k8s-rac02
+2023-11-22 18:03:38,732 INFO  [1] com.oracle.cie.common.util.reporting.CommonReporter - Reporting console output : Message{id='null', message='
+Wrong OPatch software installed in following homes:'}
+2023-11-22 18:03:38,732 INFO  [1] com.oracle.cie.common.util.reporting.CommonReporter - Reporting console output : Message{id='null', message='Host:k8s-rac01, Home:/u01/app/oracle/product/19.0.0/db_1
+'}
+2023-11-22 18:03:38,733 INFO  [1] com.oracle.cie.common.util.reporting.CommonReporter - Reporting console output : Message{id='null', message='Host:k8s-rac02, Home:/u01/app/oracle/product/19.0.0/db_1
+'}
+2023-11-22 18:03:38,735 INFO  [1] com.oracle.glcm.patch.auto.db.product.validation.DBValidationController - Validation failed due to :OPATCHAUTO-72088: OPatch version check failed.
+OPATCHAUTO-72088: OPatch software version in homes selected for patching are different.
+OPATCHAUTO-72088: Please install same OPatch software in all homes.
+2023-11-22 18:03:38,735 INFO  [1] com.oracle.glcm.patch.auto.db.product.validation.validators.OOPPatchTargetValidator - OOP patch target validation skipped
+2023-11-22 18:03:38,777 INFO  [1] com.oracle.glcm.patch.auto.db.integration.model.productsupport.DBBaseProductSupport - Space available after session: 242439 MB
+2023-11-22 18:03:38,793 INFO  [1] com.oracle.glcm.patch.auto.db.framework.core.oplan.IOUtils - Change the permission of the file /u01/app/19.0.0/grid/opatchautocfg/db/sessioninfo/patchingsummary.xmlto 775
+2023-11-22 18:03:38,810 SEVERE [1] com.oracle.glcm.patch.auto.OPatchAuto - OPatchAuto failed.
+com.oracle.glcm.patch.auto.OPatchAutoException: OPATCHAUTO-72088: OPatch version check failed.
+OPATCHAUTO-72088: OPatch software version in homes selected for patching are different.
+OPATCHAUTO-72088: Please install same OPatch software in all homes.
+        at com.oracle.glcm.patch.auto.db.integration.model.productsupport.DBBaseProductSupport.loadTopology(DBBaseProductSupport.java:236)
+        at com.oracle.glcm.patch.auto.db.integration.model.productsupport.DBProductSupport.loadTopology(DBProductSupport.java:69)
+        at com.oracle.glcm.patch.auto.OPatchAuto.loadTopology(OPatchAuto.java:1732)
+        at com.oracle.glcm.patch.auto.OPatchAuto.prepareOrchestration(OPatchAuto.java:730)
+        at com.oracle.glcm.patch.auto.OPatchAuto.orchestrate(OPatchAuto.java:397)
+        at com.oracle.glcm.patch.auto.OPatchAuto.orchestrate(OPatchAuto.java:344)
+        at com.oracle.glcm.patch.auto.OPatchAuto.main(OPatchAuto.java:212)
+2023-11-22 18:03:38,811 INFO  [1] com.oracle.cie.common.util.reporting.CommonReporter - Reporting console output : Message{id='null', message='OPATCHAUTO-72088: OPatch version check failed.
+OPATCHAUTO-72088: OPatch software version in homes selected for patching are different.
+OPATCHAUTO-72088: Please install same OPatch software in all homes.'}
+2023-11-22 18:03:38,811 INFO  [1] com.oracle.cie.common.util.reporting.CommonReporter - Reporting console output : Message{id='null', message='OPatchAuto failed.'}
+
+
+#调查分析：grid用户和oracle用户用的opatch不是一个版本
+#原来grid用户用的是19.20的opatch，版本是；12.2.0.1.39；而oracle用户用的是19.20的opatch，版本是；12.2.0.1.37
+#全部改为19.21的opatch后，通过！
+```
+
+
+
+#### 7.2.9.grid 升级 root两个节点都要分别执行 --grid upgrade
+
+```bash
+su - root
+
+#k8s-rac01约15分钟(最长有过80分36秒)
+/u01/app/19.0.0/grid/OPatch/opatchauto apply /opt/19.21patch/35642822 -oh /u01/app/19.0.0/grid   
+
+#k8s-rac02约20分钟(最长有过60分36秒)
+/u01/app/19.0.0/grid/OPatch/opatchauto apply /opt/19.21patch/35642822 -oh /u01/app/19.0.0/grid   
+#报错后可以再次执行
+
+
+#升级后的状态
+su - grid
+cd $ORACLE_HOME/OPatch
+
+[grid@k8s-rac01 OPatch]$ ./opatch lspatches
+35655527;OCW RELEASE UPDATE 19.21.0.0.0 (35655527)
+35652062;ACFS RELEASE UPDATE 19.21.0.0.0 (35652062)
+35643107;Database Release Update : 19.21.0.0.231017 (35643107)
+35553096;TOMCAT RELEASE UPDATE 19.0.0.0.0 (35553096)
+33575402;DBWLM RELEASE UPDATE 19.0.0.0.0 (33575402)
+
+OPatch succeeded.
+
+
+[grid@k8s-rac02 OPatch]$ ./opatch lspatches
+35655527;OCW RELEASE UPDATE 19.21.0.0.0 (35655527)
+35652062;ACFS RELEASE UPDATE 19.21.0.0.0 (35652062)
+35643107;Database Release Update : 19.21.0.0.231017 (35643107)
+35553096;TOMCAT RELEASE UPDATE 19.0.0.0.0 (35553096)
+33575402;DBWLM RELEASE UPDATE 19.0.0.0.0 (33575402)
+
+OPatch succeeded.
+
+```
+
+#错误处理
+
+```bash
+#(0)
+#不能在/root或/目录下执行，否则报错：
+[root@k8s-rac02 ~]# /u01/app/19.0.0/grid/OPatch/opatchauto apply /opt/19.20patch/35319490 -oh /u01/app/19.0.0/grid   
+
+Invalid current directory.  Please run opatchauto from other than '/root' or '/' directory.
+And check if the home owner user has write permission set for the current directory.
+opatchauto returns with error code = 2
+------------------------------------------------------------------------
+#(1)
+#GI因为共享磁盘的UUID变化，没起来
+
+CRS-2676: Start of 'ora.crf' on 'k8s-rac02' succeeded
+CRS-2672: Attempting to start 'ora.cssdmonitor' on 'k8s-rac02'
+CRS-1705: Found 1 configured voting files but 2 voting files are required, terminating to ensure data integrity; details at (:CSSNM00021:) in /u01/app/grid/diag/crs/k8s-rac02/crs/trace/ocssd.trc
+CRS-2883: Resource 'ora.cssd' failed during Clusterware stack start.
+CRS-4406: Oracle High Availability Services synchronous start failed.
+CRS-41053: checking Oracle Grid Infrastructure for file permission issues
+PRVH-0116 : Path "/u01/app/19.0.0/grid/crs/install/cmdllroot.sh" with permissions "rw-r--r--" does not have execute permissions for the owner, file's group, and others on node "k8s-rac02".
+PRVG-2031 : Owner of file "/u01/app/19.0.0/grid/crs/install/cmdllroot.sh" did not match the expected value on node "k8s-rac02". [Expected = "grid(11012)" ; Found = "root(0)"]
+PRVG-2032 : Group of file "/u01/app/19.0.0/grid/crs/install/cmdllroot.sh" did not match the expected value on node "k8s-rac02". [Expected = "oinstall(11001)" ; Found = "root(0)"]
+CRS-4000: Command Start failed, or completed with errors.
+2023/11/19 07:42:47 CLSRSC-117: Failed to start Oracle Clusterware stack 
+
+After fixing the cause of failure Run opatchauto resume
+
+]
+OPATCHAUTO-68061: The orchestration engine failed.
+OPATCHAUTO-68061: The orchestration engine failed with return code 1
+OPATCHAUTO-68061: Check the log for more details.
+OPatchAuto failed.
+
+OPatchauto session completed at Sun Nov 19 07:42:50 2023
+Time taken to complete the session 2 minutes, 35 seconds
+
+ opatchauto failed with error code 42
+------------------------------------------------------------------------
+
+#(2)
+#修复后，发现因为olr无法手动备份，导致报错；估计还是上面共享磁盘的问题
+
+Performing postpatch operations on CRS - starting CRS service on home /u01/app/19.0.0/grid
+Postpatch operation log file location: /u01/app/grid/crsdata/k8s-rac02/crsconfig/crs_postpatch_apply_inplace_k8s-rac02_2023-11-19_09-07-00AM.log
+Failed to start CRS service on home /u01/app/19.0.0/grid
+
+Execution of [GIStartupAction] patch action failed, check log for more details. Failures:
+Patch Target : k8s-rac02->/u01/app/19.0.0/grid Type[crs]
+Details: [
+---------------------------Patching Failed---------------------------------
+Command execution failed during patching in home: /u01/app/19.0.0/grid, host: k8s-rac02.
+Command failed:  /u01/app/19.0.0/grid/perl/bin/perl -I/u01/app/19.0.0/grid/perl/lib -I/u01/app/19.0.0/grid/opatchautocfg/db/dbtmp/bootstrap_k8s-rac02/patchwork/crs/install -I/u01/app/19.0.0/grid/opatchautocfg/db/dbtmp/bootstrap_k8s-rac02/patchwork/xag /u01/app/19.0.0/grid/opatchautocfg/db/dbtmp/bootstrap_k8s-rac02/patchwork/crs/install/rootcrs.pl -postpatch
+Command failure output: 
+Using configuration parameter file: /u01/app/19.0.0/grid/opatchautocfg/db/dbtmp/bootstrap_k8s-rac02/patchwork/crs/install/crsconfig_params
+The log of current session can be found at:
+  /u01/app/grid/crsdata/k8s-rac02/crsconfig/crs_postpatch_apply_inplace_k8s-rac02_2023-11-19_09-07-00AM.log
+2023/11/19 09:07:16 CLSRSC-329: Replacing Clusterware entries in file 'oracle-ohasd.service'
+Oracle Clusterware active version on the cluster is [19.0.0.0.0]. The cluster upgrade state is [NORMAL]. The cluster active patch level is [3976270074].
+CRS-2672: Attempting to start 'ora.drivers.acfs' on 'k8s-rac02'
+CRS-2676: Start of 'ora.drivers.acfs' on 'k8s-rac02' succeeded
+2023/11/19 09:10:09 CLSRSC-180: An error occurred while executing the command 'ocrconfig -local -manualbackup' 
+
+After fixing the cause of failure Run opatchauto resume
+
+]
+OPATCHAUTO-68061: The orchestration engine failed.
+OPATCHAUTO-68061: The orchestration engine failed with return code 1
+OPATCHAUTO-68061: Check the log for more details.
+OPatchAuto failed.
+
+OPatchauto session completed at Sun Nov 19 09:10:12 2023
+Time taken to complete the session 25 minutes, 5 seconds
+
+ opatchauto failed with error code 42
+[root@k8s-rac02 35319490]# 
+
+#发现错误是2023/11/19 09:10:09 CLSRSC-180: An error occurred while executing the command 'ocrconfig -local -manualbackup' 
+#手动执行，发现确实报错
+[root@k8s-rac02 ~]# /u01/app/19.0.0/grid/bin/ocrconfig -local -showbackup manual
+
+k8s-rac02     2023/11/18 18:35:48     /u01/app/grid/crsdata/k8s-rac02/olr/backup_20231118_183548.olr     724960844     
+[root@k8s-rac02 ~]# ll /u01/app/grid/crsdata/k8s-rac02/olr
+total 495048
+-rw-r--r-- 1 root root       1101824 Nov 18 18:49 autobackup_20231118_184948.olr
+-rw-r--r-- 1 root root       1024000 Nov 18 18:35 backup_20231118_183548.olr
+-rw------- 1 root oinstall 503484416 Nov 19 11:54 k8s-rac02_19.olr
+-rw-r--r-- 1 root root     503484416 Nov 19 08:46 k8s-rac02_19.olr.bkp.patch
+[root@k8s-rac02 ~]# /u01/app/19.0.0/grid/bin/ocrconfig -local -manualbackup
+PROTL-23: failed to back up Oracle Local Registry
+PROCL-60: The Oracle Local Registry backup file '/u01/app/grid/crsdata/k8s-rac02/olr/backup_20231119_121545.olr' is corrupt.
+
+[root@k8s-rac02 ~]# /u01/app/19.0.0/grid/bin/ocrcheck -local
+Status of Oracle Local Registry is as follows :
+	 Version                  :          4
+	 Total space (kbytes)     :     491684
+	 Used space (kbytes)      :      83168
+	 Available space (kbytes) :     408516
+	 ID                       :   40730997
+	 Device/File Name         : /u01/app/grid/crsdata/k8s-rac02/olr/k8s-rac02_19.olr
+                                    Device/File integrity check succeeded
+
+	 Local registry integrity check succeeded
+
+	 Logical corruption check failed
+
+
+#但在k8s-rac01上手动备份没问题
+[root@k8s-rac01 ContentsXML]# ocrconfig -local -manualbackup
+
+k8s-rac01     2023/11/19 12:12:49     /u01/app/grid/crsdata/k8s-rac01/olr/backup_20231119_121249.olr     3976270074     
+
+k8s-rac01     2023/11/19 01:25:37     /u01/app/grid/crsdata/k8s-rac01/olr/backup_20231119_012537.olr     3976270074     
+
+k8s-rac01     2023/11/18 18:27:53     /u01/app/grid/crsdata/k8s-rac01/olr/backup_20231118_182753.olr     724960844     
+[root@k8s-rac01 ContentsXML]# ll /u01/app/grid/crsdata/k8s-rac01/olr/
+total 498160
+-rw-r--r-- 1 root root       1114112 Nov 18 18:39 autobackup_20231118_183942.olr
+-rw-r--r-- 1 root root       1024000 Nov 18 18:27 backup_20231118_182753.olr
+-rw------- 1 root root       1150976 Nov 19 01:25 backup_20231119_012537.olr
+-rw------- 1 root root       1593344 Nov 19 12:12 backup_20231119_121249.olr
+-rw------- 1 root oinstall 503484416 Nov 19 12:12 k8s-rac01_19.olr
+-rw-r--r-- 1 root root     503484416 Nov 19 00:11 k8s-rac01_19.olr.bkp.patch
+[root@k8s-rac01 ~]#  /u01/app/19.0.0/grid/bin/ocrcheck -local
+Status of Oracle Local Registry is as follows :
+	 Version                  :          4
+	 Total space (kbytes)     :     491684
+	 Used space (kbytes)      :      83444
+	 Available space (kbytes) :     408240
+	 ID                       : 1567972045
+	 Device/File Name         : /u01/app/grid/crsdata/k8s-rac01/olr/k8s-rac01_19.olr
+                                    Device/File integrity check succeeded
+
+	 Local registry integrity check succeeded
+
+	 Logical corruption check succeeded
+
+
+#k8s-rac02，如果此时关闭cluster，将无法启动，特别是ora.asm/ora.OCR.dg(ora.asmgroup)/ora.DATA.dg(ora.asmgroup)/ora.FRA.dg(ora.asmgroup)等无法启动，但是vip/LISTENER等其他组件正常
+
+[root@k8s-rac02 dispatcher.d]# /u01/app/19.0.0/grid/bin/crsctl start crs -wait
+CRS-4123: Starting Oracle High Availability Services-managed resources
+CRS-2672: Attempting to start 'ora.evmd' on 'k8s-rac02'
+CRS-2672: Attempting to start 'ora.mdnsd' on 'k8s-rac02'
+CRS-2676: Start of 'ora.mdnsd' on 'k8s-rac02' succeeded
+CRS-2676: Start of 'ora.evmd' on 'k8s-rac02' succeeded
+CRS-2672: Attempting to start 'ora.gpnpd' on 'k8s-rac02'
+CRS-2676: Start of 'ora.gpnpd' on 'k8s-rac02' succeeded
+CRS-2672: Attempting to start 'ora.gipcd' on 'k8s-rac02'
+CRS-2676: Start of 'ora.gipcd' on 'k8s-rac02' succeeded
+CRS-2672: Attempting to start 'ora.crf' on 'k8s-rac02'
+CRS-2672: Attempting to start 'ora.cssdmonitor' on 'k8s-rac02'
+CRS-2676: Start of 'ora.cssdmonitor' on 'k8s-rac02' succeeded
+CRS-2672: Attempting to start 'ora.cssd' on 'k8s-rac02'
+CRS-2672: Attempting to start 'ora.diskmon' on 'k8s-rac02'
+CRS-2676: Start of 'ora.diskmon' on 'k8s-rac02' succeeded
+CRS-2676: Start of 'ora.crf' on 'k8s-rac02' succeeded
+CRS-2676: Start of 'ora.cssd' on 'k8s-rac02' succeeded
+CRS-2679: Attempting to clean 'ora.cluster_interconnect.haip' on 'k8s-rac02'
+CRS-2672: Attempting to start 'ora.ctssd' on 'k8s-rac02'
+CRS-2681: Clean of 'ora.cluster_interconnect.haip' on 'k8s-rac02' succeeded
+CRS-2672: Attempting to start 'ora.cluster_interconnect.haip' on 'k8s-rac02'
+CRS-2676: Start of 'ora.cluster_interconnect.haip' on 'k8s-rac02' succeeded
+CRS-2676: Start of 'ora.ctssd' on 'k8s-rac02' succeeded
+CRS-2672: Attempting to start 'ora.asm' on 'k8s-rac02'
+CRS-2676: Start of 'ora.asm' on 'k8s-rac02' succeeded
+CRS-2672: Attempting to start 'ora.storage' on 'k8s-rac02'
+CRS-2676: Start of 'ora.storage' on 'k8s-rac02' succeeded
+CRS-2672: Attempting to start 'ora.crsd' on 'k8s-rac02'
+CRS-2676: Start of 'ora.crsd' on 'k8s-rac02' succeeded
+CRS-6017: Processing resource auto-start for servers: k8s-rac02
+CRS-2672: Attempting to start 'ora.LISTENER.lsnr' on 'k8s-rac02'
+CRS-2672: Attempting to start 'ora.ons' on 'k8s-rac02'
+CRS-2672: Attempting to start 'ora.chad' on 'k8s-rac02'
+CRS-2676: Start of 'ora.chad' on 'k8s-rac02' succeeded
+CRS-2676: Start of 'ora.LISTENER.lsnr' on 'k8s-rac02' succeeded
+CRS-33672: Attempting to start resource group 'ora.asmgroup' on server 'k8s-rac02'
+CRS-2672: Attempting to start 'ora.asmnet1.asmnetwork' on 'k8s-rac02'
+CRS-2676: Start of 'ora.asmnet1.asmnetwork' on 'k8s-rac02' succeeded
+CRS-2672: Attempting to start 'ora.ASMNET1LSNR_ASM.lsnr' on 'k8s-rac02'
+CRS-2676: Start of 'ora.ASMNET1LSNR_ASM.lsnr' on 'k8s-rac02' succeeded
+CRS-2679: Attempting to clean 'ora.asm' on 'k8s-rac02'
+CRS-2676: Start of 'ora.ons' on 'k8s-rac02' succeeded
+CRS-2681: Clean of 'ora.asm' on 'k8s-rac02' succeeded
+CRS-2672: Attempting to start 'ora.asm' on 'k8s-rac02'
+CRS-2674: Start of 'ora.asm' on 'k8s-rac02' failed
+CRS-2679: Attempting to clean 'ora.asm' on 'k8s-rac02'
+CRS-2681: Clean of 'ora.asm' on 'k8s-rac02' succeeded
+CRS-2672: Attempting to start 'ora.asm' on 'k8s-rac02'
+CRS-5017: The resource action "ora.asm start" encountered the following error: 
+CRS-5048: Failure communicating with CRS to access a resource profile or perform an action on a resource
+. For details refer to "(:CLSN00107:)" in "/u01/app/grid/diag/crs/k8s-rac02/crs/trace/crsd_oraagent_grid.trc".
+CRS-2674: Start of 'ora.asm' on 'k8s-rac02' failed
+CRS-2679: Attempting to clean 'ora.asm' on 'k8s-rac02'
+CRS-2681: Clean of 'ora.asm' on 'k8s-rac02' succeeded
+CRS-2672: Attempting to start 'ora.xydb.db' on 'k8s-rac02'
+CRS-5017: The resource action "ora.xydb.db start" encountered the following error: 
+ORA-00600: internal error code, arguments: [kgfz_getDiskAccessMode:ntyp], [0], [], [], [], [], [], [], [], [], [], []
+. For details refer to "(:CLSN00107:)" in "/u01/app/grid/diag/crs/k8s-rac02/crs/trace/crsd_oraagent_oracle.trc".
+CRS-2674: Start of 'ora.xydb.db' on 'k8s-rac02' failed
+CRS-2672: Attempting to start 'ora.asm' on 'k8s-rac02'
+CRS-5017: The resource action "ora.asm start" encountered the following error: 
+CRS-5048: Failure communicating with CRS to access a resource profile or perform an action on a resource
+. For details refer to "(:CLSN00107:)" in "/u01/app/grid/diag/crs/k8s-rac02/crs/trace/crsd_oraagent_grid.trc".
+CRS-2674: Start of 'ora.asm' on 'k8s-rac02' failed
+CRS-2679: Attempting to clean 'ora.asm' on 'k8s-rac02'
+CRS-2681: Clean of 'ora.asm' on 'k8s-rac02' succeeded
+CRS-2672: Attempting to start 'ora.xydb.db' on 'k8s-rac02'
+CRS-5017: The resource action "ora.xydb.db start" encountered the following error: 
+ORA-00600: internal error code, arguments: [kgfz_getDiskAccessMode:ntyp], [0], [], [], [], [], [], [], [], [], [], []
+. For details refer to "(:CLSN00107:)" in "/u01/app/grid/diag/crs/k8s-rac02/crs/trace/crsd_oraagent_oracle.trc".
+CRS-2674: Start of 'ora.xydb.db' on 'k8s-rac02' failed
+CRS-2672: Attempting to start 'ora.asm' on 'k8s-rac02'
+CRS-5017: The resource action "ora.asm start" encountered the following error: 
+CRS-5048: Failure communicating with CRS to access a resource profile or perform an action on a resource
+. For details refer to "(:CLSN00107:)" in "/u01/app/grid/diag/crs/k8s-rac02/crs/trace/crsd_oraagent_grid.trc".
+CRS-2674: Start of 'ora.asm' on 'k8s-rac02' failed
+CRS-2679: Attempting to clean 'ora.asm' on 'k8s-rac02'
+CRS-2681: Clean of 'ora.asm' on 'k8s-rac02' succeeded
+CRS-2672: Attempting to start 'ora.xydb.db' on 'k8s-rac02'
+CRS-5017: The resource action "ora.xydb.db start" encountered the following error: 
+ORA-00600: internal error code, arguments: [kgfz_getDiskAccessMode:ntyp], [0], [], [], [], [], [], [], [], [], [], []
+. For details refer to "(:CLSN00107:)" in "/u01/app/grid/diag/crs/k8s-rac02/crs/trace/crsd_oraagent_oracle.trc".
+CRS-2674: Start of 'ora.xydb.db' on 'k8s-rac02' failed
+===== Summary of resource auto-start failures follows =====
+CRS-2807: Resource 'ora.asmgroup' failed to start automatically.
+CRS-2807: Resource 'ora.xydb.db' failed to start automatically.
+CRS-2807: Resource 'ora.xydb.s_stuwork.svc' failed to start automatically.
+CRS-6016: Resource auto-start has completed for server k8s-rac02
+CRS-6024: Completed start of Oracle Cluster Ready Services-managed resources
+CRS-4123: Oracle High Availability Services has been started.
+[root@k8s-rac02 dispatcher.d]# /u01/app/19.0.0/grid/bin/crsctl start crs -wait
+CRS-6706: Oracle Clusterware Release patch level ('3976270074') does not match Software patch level ('724960844'). Oracle Clusterware cannot be started.
+CRS-4000: Command Start failed, or completed with errors.
+[root@k8s-rac02 dispatcher.d]# /u01/app/19.0.0/grid/bin/crsctl start crs -wait
+CRS-6706: Oracle Clusterware Release patch level ('3976270074') does not match Software patch level ('724960844'). Oracle Clusterware cannot be started.
+CRS-4000: Command Start failed, or completed with errors.
+[root@k8s-rac02 dispatcher.d]# /u01/app/19.0.0/grid/bin/crsctl status resource -t
+--------------------------------------------------------------------------------
+Name           Target  State        Server                   State details       
+--------------------------------------------------------------------------------
+Local Resources
+--------------------------------------------------------------------------------
+ora.LISTENER.lsnr
+               ONLINE  ONLINE       k8s-rac01                STABLE
+               ONLINE  ONLINE       k8s-rac02                STABLE
+ora.chad
+               ONLINE  ONLINE       k8s-rac01                STABLE
+               ONLINE  ONLINE       k8s-rac02                STABLE
+ora.net1.network
+               ONLINE  ONLINE       k8s-rac01                STABLE
+               ONLINE  ONLINE       k8s-rac02                STABLE
+ora.ons
+               ONLINE  ONLINE       k8s-rac01                STABLE
+               ONLINE  ONLINE       k8s-rac02                STABLE
+--------------------------------------------------------------------------------
+Cluster Resources
+--------------------------------------------------------------------------------
+ora.ASMNET1LSNR_ASM.lsnr(ora.asmgroup)
+      1        ONLINE  ONLINE       k8s-rac01                STABLE
+      2        ONLINE  ONLINE       k8s-rac02                STABLE
+      3        ONLINE  OFFLINE                               STABLE
+ora.DATA.dg(ora.asmgroup)
+      1        ONLINE  ONLINE       k8s-rac01                STABLE
+      2        ONLINE  OFFLINE                               STABLE
+      3        OFFLINE OFFLINE                               STABLE
+ora.FRA.dg(ora.asmgroup)
+      1        ONLINE  ONLINE       k8s-rac01                STABLE
+      2        ONLINE  OFFLINE                               STABLE
+      3        OFFLINE OFFLINE                               STABLE
+ora.LISTENER_SCAN1.lsnr
+      1        ONLINE  ONLINE       k8s-rac01                STABLE
+ora.OCR.dg(ora.asmgroup)
+      1        ONLINE  ONLINE       k8s-rac01                STABLE
+      2        ONLINE  OFFLINE                               STABLE
+      3        OFFLINE OFFLINE                               STABLE
+ora.asm(ora.asmgroup)
+      1        ONLINE  ONLINE       k8s-rac01                Started,STABLE
+      2        ONLINE  OFFLINE                               STABLE
+      3        OFFLINE OFFLINE                               STABLE
+ora.asmnet1.asmnetwork(ora.asmgroup)
+      1        ONLINE  ONLINE       k8s-rac01                STABLE
+      2        ONLINE  ONLINE       k8s-rac02                STABLE
+      3        OFFLINE OFFLINE                               STABLE
+ora.cvu
+      1        ONLINE  ONLINE       k8s-rac01                STABLE
+ora.k8s-rac01.vip
+      1        ONLINE  ONLINE       k8s-rac01                STABLE
+ora.k8s-rac02.vip
+      1        ONLINE  ONLINE       k8s-rac02                STABLE
+ora.qosmserver
+      1        ONLINE  ONLINE       k8s-rac01                STABLE
+ora.scan1.vip
+      1        ONLINE  ONLINE       k8s-rac01                STABLE
+ora.xydb.db
+      1        ONLINE  ONLINE       k8s-rac01                Open,HOME=/u01/app/o
+                                                             racle/product/19.0.0
+                                                             /db_1,STABLE
+      2        ONLINE  OFFLINE                               STABLE
+ora.xydb.s_stuwork.svc
+      1        ONLINE  ONLINE       k8s-rac01                STABLE
+      2        ONLINE  OFFLINE                               STABLE
+--------------------------------------------------------------------------------
+
+
+#此时对olr进行restore处理
+[root@k8s-rac02 trace]# /u01/app/19.0.0/grid/bin/ocrconfig -local -showbackup
+
+k8s-rac02     2023/11/18 18:49:48     /u01/app/grid/crsdata/k8s-rac02/olr/autobackup_20231118_184948.olr     724960844
+
+k8s-rac02     2023/11/18 18:35:48     /u01/app/grid/crsdata/k8s-rac02/olr/backup_20231118_183548.olr     724960844     
+[root@k8s-rac02 trace]# /u01/app/19.0.0/grid/bin/ocrconfig -local -restore /u01/app/grid/crsdata/k8s-rac02/olr/autobackup_20231118_184948.olr
+[root@k8s-rac02 trace]# /u01/app/19.0.0/grid/bin/ocrconfig -local -showbackup
+PROTL-24: No auto backups of the OLR are available at this time.
+
+k8s-rac02     2023/11/18 18:35:48     /u01/app/grid/crsdata/k8s-rac02/olr/backup_20231118_183548.olr     724960844     
+
+#再次检查ocrcheck -local，发现为succeeded
+[root@k8s-rac02 trace]# /u01/app/19.0.0/grid/bin/ocrcheck -local
+Status of Oracle Local Registry is as follows :
+	 Version                  :          4
+	 Total space (kbytes)     :     491684
+	 Used space (kbytes)      :      83128
+	 Available space (kbytes) :     408556
+	 ID                       :   40730997
+	 Device/File Name         : /u01/app/grid/crsdata/k8s-rac02/olr/k8s-rac02_19.olr
+                                    Device/File integrity check succeeded
+
+	 Local registry integrity check succeeded
+
+	 Logical corruption check succeeded
+
+[root@k8s-rac02 trace]# /u01/app/19.0.0/grid/bin/ocrcheck 
+PROT-602: Failed to retrieve data from the cluster registry
+[root@k8s-rac02 trace]# /u01/app/19.0.0/grid/bin/ocrcheck -local
+Status of Oracle Local Registry is as follows :
+	 Version                  :          4
+	 Total space (kbytes)     :     491684
+	 Used space (kbytes)      :      83128
+	 Available space (kbytes) :     408556
+	 ID                       :   40730997
+	 Device/File Name         : /u01/app/grid/crsdata/k8s-rac02/olr/k8s-rac02_19.olr
+                                    Device/File integrity check succeeded
+
+	 Local registry integrity check succeeded
+
+	 Logical corruption check succeeded
+
+[root@k8s-rac02 trace]# 
+
+------------------------------------------------------------------------
+#(3)
+#但是此时再次启动cluster报错，因为还原了Olr后与已经打的补丁不一致
+[root@k8s-rac02 dispatcher.d]# /u01/app/19.0.0/grid/bin/crsctl start cluster
+CRS-6706: Oracle Clusterware Release patch level ('3976270074') does not match Software patch level ('724960844'). Oracle Clusterware cannot be started.
+CRS-4000: Command Start failed, or completed with errors.
+[root@k8s-rac02 dispatcher.d]# /u01/app/19.0.0/grid/bin/crsctl check crs
+CRS-4639: Could not contact Oracle High Availability Services
+
+[root@k8s-rac02 dispatcher.d]# ps -ef|grep grid|grep app|awk '{print $2}'|xargs kill -9
+
+[root@k8s-rac02 dispatcher.d]# ps -ef|grep grid
+root     14717 11600  0 11:51 pts/4    00:00:00 grep --color=auto grid
+root     26985 11598  0 Nov21 pts/2    00:00:00 su - grid
+grid     26987 26985  0 Nov21 pts/2    00:00:00 -bash
+grid     29819 26987  0 Nov21 pts/2    00:00:00 tail -100f alert_+ASM2.log
+
+
+[root@k8s-rac02 ~]# /u01/app/19.0.0/grid/bin/crsctl start crs -wait
+CRS-6706: Oracle Clusterware Release patch level ('3976270074') does not match Software patch level ('724960844'). Oracle Clusterware cannot be started.
+CRS-4000: Command Start failed, or completed with errors.
+
+#解决办法：
+
+[root@k8s-rac02 ~]# /u01/app/19.0.0/grid/crs/install/rootcrs.sh -unlock
+Using configuration parameter file: /u01/app/19.0.0/grid/crs/install/crsconfig_params
+The log of current session can be found at:
+  /u01/app/grid/crsdata/k8s-rac02/crsconfig/crsunlock_k8s-rac02_2023-11-22_11-54-32AM.log
+2023/11/22 11:54:33 CLSRSC-4012: Shutting down Oracle Trace File Analyzer (TFA) Collector.
+2023/11/22 11:54:56 CLSRSC-4013: Successfully shut down Oracle Trace File Analyzer (TFA) Collector.
+2023/11/22 11:54:58 CLSRSC-347: Successfully unlock /u01/app/19.0.0/grid
+
+[root@k8s-rac02 ~]# /u01/app/19.0.0/grid/bin/clscfg -localpatch
+clscfg: EXISTING configuration version 0 detected.
+Creating OCR keys for user 'root', privgrp 'root'..
+Operation successful.
+[root@k8s-rac02 ~]# /u01/app/19.0.0/grid/bin/ocrcheck -local
+Status of Oracle Local Registry is as follows :
+	 Version                  :          4
+	 Total space (kbytes)     :     491684
+	 Used space (kbytes)      :      83128
+	 Available space (kbytes) :     408556
+	 ID                       :   40730997
+	 Device/File Name         : /u01/app/grid/crsdata/k8s-rac02/olr/k8s-rac02_19.olr
+                                    Device/File integrity check succeeded
+
+	 Local registry integrity check succeeded
+
+	 Logical corruption check succeeded
+
+[root@k8s-rac02 ~]# /u01/app/19.0.0/grid/crs/install/rootcrs.sh -lock
+Using configuration parameter file: /u01/app/19.0.0/grid/crs/install/crsconfig_params
+The log of current session can be found at:
+  /u01/app/grid/crsdata/k8s-rac02/crsconfig/crslock_k8s-rac02_2023-11-22_11-58-45AM.log
+2023/11/22 11:58:52 CLSRSC-329: Replacing Clusterware entries in file 'oracle-ohasd.service'
+[root@k8s-rac02 ~]# /u01/app/19.0.0/grid/bin/crsctl start crs -wait
+CRS-4123: Starting Oracle High Availability Services-managed resources
+CRS-2672: Attempting to start 'ora.evmd' on 'k8s-rac02'
+CRS-2672: Attempting to start 'ora.mdnsd' on 'k8s-rac02'
+CRS-2676: Start of 'ora.mdnsd' on 'k8s-rac02' succeeded
+CRS-2676: Start of 'ora.evmd' on 'k8s-rac02' succeeded
+CRS-2672: Attempting to start 'ora.gpnpd' on 'k8s-rac02'
+CRS-2676: Start of 'ora.gpnpd' on 'k8s-rac02' succeeded
+CRS-2672: Attempting to start 'ora.gipcd' on 'k8s-rac02'
+CRS-2676: Start of 'ora.gipcd' on 'k8s-rac02' succeeded
+CRS-2672: Attempting to start 'ora.crf' on 'k8s-rac02'
+CRS-2672: Attempting to start 'ora.cssdmonitor' on 'k8s-rac02'
+CRS-2676: Start of 'ora.cssdmonitor' on 'k8s-rac02' succeeded
+CRS-2672: Attempting to start 'ora.cssd' on 'k8s-rac02'
+CRS-2672: Attempting to start 'ora.diskmon' on 'k8s-rac02'
+CRS-2676: Start of 'ora.diskmon' on 'k8s-rac02' succeeded
+CRS-2676: Start of 'ora.crf' on 'k8s-rac02' succeeded
+CRS-2676: Start of 'ora.cssd' on 'k8s-rac02' succeeded
+CRS-2679: Attempting to clean 'ora.cluster_interconnect.haip' on 'k8s-rac02'
+CRS-2672: Attempting to start 'ora.ctssd' on 'k8s-rac02'
+CRS-2681: Clean of 'ora.cluster_interconnect.haip' on 'k8s-rac02' succeeded
+CRS-2672: Attempting to start 'ora.cluster_interconnect.haip' on 'k8s-rac02'
+CRS-2676: Start of 'ora.cluster_interconnect.haip' on 'k8s-rac02' succeeded
+CRS-2676: Start of 'ora.ctssd' on 'k8s-rac02' succeeded
+CRS-2672: Attempting to start 'ora.asm' on 'k8s-rac02'
+CRS-2676: Start of 'ora.asm' on 'k8s-rac02' succeeded
+CRS-2672: Attempting to start 'ora.storage' on 'k8s-rac02'
+CRS-2676: Start of 'ora.storage' on 'k8s-rac02' succeeded
+CRS-2672: Attempting to start 'ora.crsd' on 'k8s-rac02'
+CRS-2676: Start of 'ora.crsd' on 'k8s-rac02' succeeded
+CRS-6017: Processing resource auto-start for servers: k8s-rac02
+CRS-2672: Attempting to start 'ora.LISTENER.lsnr' on 'k8s-rac02'
+CRS-2672: Attempting to start 'ora.chad' on 'k8s-rac02'
+CRS-2672: Attempting to start 'ora.ons' on 'k8s-rac02'
+CRS-2676: Start of 'ora.chad' on 'k8s-rac02' succeeded
+CRS-2676: Start of 'ora.LISTENER.lsnr' on 'k8s-rac02' succeeded
+CRS-33672: Attempting to start resource group 'ora.asmgroup' on server 'k8s-rac02'
+CRS-2672: Attempting to start 'ora.asmnet1.asmnetwork' on 'k8s-rac02'
+CRS-2676: Start of 'ora.asmnet1.asmnetwork' on 'k8s-rac02' succeeded
+CRS-2672: Attempting to start 'ora.ASMNET1LSNR_ASM.lsnr' on 'k8s-rac02'
+CRS-2676: Start of 'ora.ASMNET1LSNR_ASM.lsnr' on 'k8s-rac02' succeeded
+CRS-2679: Attempting to clean 'ora.asm' on 'k8s-rac02'
+CRS-2676: Start of 'ora.ons' on 'k8s-rac02' succeeded
+CRS-2681: Clean of 'ora.asm' on 'k8s-rac02' succeeded
+CRS-2672: Attempting to start 'ora.asm' on 'k8s-rac02'
+CRS-2676: Start of 'ora.asm' on 'k8s-rac02' succeeded
+CRS-33676: Start of resource group 'ora.asmgroup' on server 'k8s-rac02' succeeded.
+CRS-2672: Attempting to start 'ora.FRA.dg' on 'k8s-rac02'
+CRS-2672: Attempting to start 'ora.DATA.dg' on 'k8s-rac02'
+CRS-2676: Start of 'ora.FRA.dg' on 'k8s-rac02' succeeded
+CRS-2676: Start of 'ora.DATA.dg' on 'k8s-rac02' succeeded
+CRS-2672: Attempting to start 'ora.xydb.db' on 'k8s-rac02'
+CRS-2676: Start of 'ora.xydb.db' on 'k8s-rac02' succeeded
+CRS-2672: Attempting to start 'ora.xydb.s_stuwork.svc' on 'k8s-rac02'
+CRS-2676: Start of 'ora.xydb.s_stuwork.svc' on 'k8s-rac02' succeeded
+CRS-6016: Resource auto-start has completed for server k8s-rac02
+CRS-6024: Completed start of Oracle Cluster Ready Services-managed resources
+CRS-4123: Oracle High Availability Services has been started.
+[root@k8s-rac02 ~]# 
+
+[root@k8s-rac02 iscsi]# /u01/app/19.0.0/grid/bin/ocrcheck
+Status of Oracle Cluster Registry is as follows :
+	 Version                  :          4
+	 Total space (kbytes)     :     491684
+	 Used space (kbytes)      :      84460
+	 Available space (kbytes) :     407224
+	 ID                       : 1399819439
+	 Device/File Name         :       +OCR
+                                    Device/File integrity check succeeded
+
+                                    Device/File not configured
+
+                                    Device/File not configured
+
+                                    Device/File not configured
+
+                                    Device/File not configured
+
+	 Cluster registry integrity check succeeded
+
+	 Logical corruption check succeeded
+
+[root@k8s-rac02 iscsi]# /u01/app/19.0.0/grid/bin/ocrcheck -local
+Status of Oracle Local Registry is as follows :
+	 Version                  :          4
+	 Total space (kbytes)     :     491684
+	 Used space (kbytes)      :      83152
+	 Available space (kbytes) :     408532
+	 ID                       :   40730997
+	 Device/File Name         : /u01/app/grid/crsdata/k8s-rac02/olr/k8s-rac02_19.olr
+                                    Device/File integrity check succeeded
+
+	 Local registry integrity check succeeded
+
+	 Logical corruption check succeeded
+
+
+#再次手动备份也正常了
+[root@k8s-rac02 iscsi]# /u01/app/19.0.0/grid/bin/ocrconfig -local -manualbackup
+
+k8s-rac02     2023/11/22 12:12:26     /u01/app/grid/crsdata/k8s-rac02/olr/backup_20231122_121226.olr     3976270074     
+
+k8s-rac02     2023/11/18 18:35:48     /u01/app/grid/crsdata/k8s-rac02/olr/backup_20231118_183548.olr     724960844     
+[root@k8s-rac02 iscsi]# /u01/app/19.0.0/grid/bin/ocrconfig -local -showbackup
+PROTL-24: No auto backups of the OLR are available at this time.
+
+k8s-rac02     2023/11/22 12:12:26     /u01/app/grid/crsdata/k8s-rac02/olr/backup_20231122_121226.olr     3976270074     
+
+k8s-rac02     2023/11/18 18:35:48     /u01/app/grid/crsdata/k8s-rac02/olr/backup_20231118_183548.olr     724960844    
+
+#再次打补丁
+
+```
+
+
+
+#### 7.2.10.oracle 升级 root两个节点都要分别执行 --oracle upgrade
+
+```bash
+su - root
+
+#k8s-rac01
+#在非/和/root目录下执行
+
+/u01/app/oracle/product/19.0.0/db_1/OPatch/opatchauto apply /opt/19.21patch/35642822 -oh /u01/app/oracle/product/19.0.0/db_1
+
+#k8s-rac01约25分钟 
+-------------------------------------------------------
+
+#第一次执行报错：
+
+Patch: /opt/opa/35319490/35320081
+Log: /u01/app/oracle/product/19.0.0/db_1/cfgtoollogs/opatchauto/core/opatch/opatch2023-10-10_17-11-02PM_1.log
+Reason: Failed during Patching: oracle.opatch.opatchsdk.OPatchException: Prerequisite check "CheckActiveFilesAndExecutables" failed.
+After fixing the cause of failure Run opatchauto resume
+#查看日志：
+
+Files in use by a process: /u01/app/oracle/product/19.0.0/db_1/lib/libclntsh.so.19.1 PID( 110745 )
+Files in use by a process: /u01/app/oracle/product/19.0.0/db_1/lib/libsqlplus.so PID( 110745 )
+                                    /u01/app/oracle/product/19.0.0/db_1/lib/libclntsh.so.19.1
+                                    /u01/app/oracle/product/19.0.0/db_1/lib/libsqlplus.so
+[Oct 10, 2023 5:11:47 PM] [SEVERE]  OUI-67073:UtilSession failed: Prerequisite check "CheckActiveFilesAndExecutables" failed.
+
+#手动检查进程110745
+ps -ef|grep 110745
+
+fuser /u01/app/oracle/product/19.0.0/db_1/lib/libclntsh.so.19.1
+fuser /u01/app/oracle/product/19.0.0/db_1/lib/libsqlplus.so
+
+#都没有发现
+
+#此时在第一个报错的窗口执行opatchauto resume恢复正常执行完毕
+cd /u01/app/oracle/product/19.0.0/db_1/OPatch/
+
+./opatchauto resume
+
+--------------------------------------------------------
+
+#k8s-rac02
+
+/u01/app/oracle/product/19.0.0/db_1/OPatch/opatchauto apply /opt/19.21patch/35642822 -oh /u01/app/oracle/product/19.0.0/db_1 
+
+#k8s-rac02约33分钟(最长85 minutes, 13 seconds)
+
+ 
+#检查补丁情况
+su - oracle
+cd $ORACLE_HOME/OPatch
+./opatch lspatches  
+
+
+[oracle@k8s-rac01 OPatch]$ ./opatch lspatches
+35655527;OCW RELEASE UPDATE 19.21.0.0.0 (35655527)
+35643107;Database Release Update : 19.21.0.0.231017 (35643107)
+
+OPatch succeeded.
+
+
+[oracle@k8s-rac02 OPatch]$ ./opatch lspatches
+35655527;OCW RELEASE UPDATE 19.21.0.0.0 (35655527)
+35643107;Database Release Update : 19.21.0.0.231017 (35643107)
+
+OPatch succeeded.
+```
+
+
+
+
+
+#### 7.2.11.升级后动作 after patch
+
+```bash
+#(1)
+#仅节点1---直接启动全部pdb后，用oracle用户执行datapatch -verbose
+
+su - oracle
+sqlplus / as sysdba
+show pdbs;
+exit
+
+#确认全部pdb已经启动后
+cd $ORACLE_HOME/OPatch
+
+#可选
+./datapatch -sanity_checks
+
+#执行
+./datapatch -verbose
+
+
+[oracle@k8s-rac01 ~]$ cd $ORACLE_HOME/OPatch
+[oracle@k8s-rac01 OPatch]$ ./datapatch -sanity_checks 
+[oracle@k8s-rac01 OPatch]$ ./datapatch -verbose 
+
+#执行前确认两个节点pdb都打开，如果pdb没有打开 可能会出现cdb和pdb RU不一致，
+#导致pdb受限。如果pdb没有更新 可以使用这个命令强制更新ru
+
+ datapatch -verbose -apply  ru_id -force -pdbs PDB1
+
+#(2)
+#编译无效对象---cdb/pdb全部执行
+
+SQL> select status,count(*) from dba_objects group by status;
+
+STATUS    COUNT(*)
+------- ----------
+VALID        73500
+INVALID        286
+
+
+SQL> @$ORACLE_HOME/rdbms/admin/utlrp.sql
+
+SQL> select status,count(*) from dba_objects group by status;
+
+STATUS    COUNT(*)
+------- ----------
+VALID        73786
+
+
+
+ 
+
+#完成后检查patch情况
+
+set linesize 180
+
+col action for a15
+
+col status for a15
+
+select PATCH_ID,PATCH_TYPE,ACTION,STATUS,TARGET_VERSION from dba_registry_sqlpatch;
+
+ 
+SQL> select PATCH_ID,PATCH_TYPE,ACTION,STATUS,TARGET_VERSION from dba_registry_sqlpatch;
+
+  PATCH_ID PATCH_TYPE ACTION          STATUS          TARGET_VERSION
+---------- ---------- --------------- --------------- ---------------
+  29517242 RU         APPLY           SUCCESS         19.3.0.0.0
+  35320081 RU         APPLY           SUCCESS         19.20.0.0.0
+  35643107 RU         APPLY           SUCCESS         19.21.0.0.0
+
+
+
+SQL>  select  PATCH_UID,PATCH_ID,ACTION,STATUS,ACTION_TIME ,DESCRIPTION,TARGET_VERSION from dba_registry_sqlpatch;
+  
+ PATCH_UID   PATCH_ID ACTION          STATUS          ACTION_TIME
+---------- ---------- --------------- --------------- ---------------------------------------------------------------------------
+DESCRIPTION                                                                                          TARGET_VERSION
+---------------------------------------------------------------------------------------------------- ---------------
+  22862832   29517242 APPLY           SUCCESS         18-NOV-23 07.31.46.746877 PM
+Database Release Update : 19.3.0.0.190416 (29517242)                                                 19.3.0.0.0
+
+  25314491   35320081 APPLY           SUCCESS         22-NOV-23 02.53.28.041848 PM
+Database Release Update : 19.20.0.0.230718 (35320081)                                                19.20.0.0.0
+
+  25405995   35643107 APPLY           SUCCESS         22-NOV-23 11.53.49.603359 PM
+Database Release Update : 19.21.0.0.231017 (35643107)                                                19.21.0.0.0
+
+
+[root@k8s-rac02 ~]# /u01/app/19.0.0/grid/bin/crsctl query crs releasepatch
+Oracle Clusterware release patch level is [2204791795] and the complete list of patches [33575402 35553096 35643107 35652062 35655527 ] have been applied on the local node. The release patch string is [19.21.0.0.0].
+
+[root@k8s-rac02 ~]# /u01/app/19.0.0/grid/bin/crsctl query css votedisk
+##  STATE    File Universal Id                File Name Disk group
+--  -----    -----------------                --------- ---------
+ 1. ONLINE   dd0f67278ca64f02bf1be1f5476c5897 (/dev/sda) [OCR]
+ 2. ONLINE   0c98d89348b64f12bf7a4d996fdaff4f (/dev/sdb) [OCR]
+ 3. ONLINE   a4df36e0ad924f5abff76c6389c32ea8 (/dev/sdc) [OCR]
+
+#常用集群检查命令
+#grid用户
+cluvfy  stage -post crsinst -n k8s-rac01,k8s-rac02 -verbose 
+cluvfy comp software  
+cluvfy comp sys -allnodes -p crs -verbose
+cluvfy comp healthcheck -collect cluster -html
+#u01/app/19.0.0/grid/cv/report/html/
+
+asmcmd lsdsk -k
+kfed read /dev/sda | grep name
+
+
+  
+--------------------------------------------------
+#根据升级文档，datapatch操作可以在全部pdb开启后执行，不再按以下步骤执行
+
+opatch lspatches
+
+sqlplus /nolog
+
+SQL> CONNECT / AS SYSDBA
+
+SQL> STARTUP
+
+SQL> alter system set cluster_database=false scope=spfile;  --设置接非集群
+
+ 
+
+srvctl stop db -d dbname  
+
+ 
+
+sqlplus /nolog
+
+SQL> CONNECT / AS SYSDBA
+
+SQL> STARTUP UPGRADE
+
+如果使用了pdb  请确认pdb 全部open
+
+alter pluggable database  all open;
+
+
+[oracle@k8s-rac01 ~]$ cd $ORACLE_HOME/OPatch
+[oracle@k8s-rac01 OPatch]$ ./datapatch -verbose 
+
+sqlplus /nolog
+
+SQL> CONNECT / AS SYSDBA
+
+SQL> alter system set cluster_database=true scope=spfile sid='*';
+
+SQL> SHUTDOWN
+
+srvctl start database -d dbname
+
+--------------------------------------------------
+
+
+
+#完成后检查patch情况
+
+set linesize 180
+
+col action for a15
+
+col status for a15
+
+select PATCH_ID,PATCH_TYPE,ACTION,STATUS,TARGET_VERSION from dba_registry_sqlpatch;
+
+
+col status for a10
+col action for a10
+col action_time for a30
+col description for a60
+
+select patch_id,patch_type,action,status,action_time,description from dba_registry_sqlpatch;
+
+col version for a25
+col comments for a80
+
+select ACTION_TIME,VERSION,COMMENTS from dba_registry_history;
+
+
+
+```

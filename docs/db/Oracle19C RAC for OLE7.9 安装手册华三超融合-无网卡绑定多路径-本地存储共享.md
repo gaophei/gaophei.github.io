@@ -5121,6 +5121,8 @@ df -h
 |  (there were no OJVM Release Update Revisions for Jul 2023)  |                  |
 | Microsoft Windows 32-Bit & x86-64 Bundle Patch 19.20.0.0.230718 | <Patch 35348034> |
 
+#You must use the OPatch utility version 12.2.0.1.37 or later to apply this patch.
+
 
 
 ```
@@ -6200,6 +6202,8 @@ srvctl start database -d dbname
 |             OJVM Release Update 19.21.0.0.231017             | <Patch 35648110> |
 |  (there were no OJVM Release Update Revisions for Oct 2023)  |                  |
 | Microsoft Windows 32-Bit & x86-64 Bundle Patch 19.21.0.0.231017 | <Patch 35681552> |
+
+#You must use the OPatch utility version 12.2.0.1.37 or later to apply this patch.
 
 
 
