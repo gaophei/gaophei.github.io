@@ -2087,13 +2087,13 @@ import "fmt"
 func main() {
 	//打印空心棱形
 	/*
-	      *
-	     * *
-	    *   *
-	   *     *
-	    *   *
-	     * *
-	      *
+
+
+
+
+
+
+
 	*/
 
 	//先易后难，首先打印实心菱形
@@ -3646,6 +3646,51 @@ plz input a int number:
 1,1,2,3,5,8,13,21
 */
 ```
+
+
+#202401添加fist检测
+
+```go
+package main
+
+import "fmt"
+
+func fbn(n int) int {
+	if n == 1 || n == 2 {
+		return 1
+	} else {
+		return fbn(n-1) + fbn(n-2)
+	}
+}
+
+func main() {
+	var num int
+
+	fmt.Println("plz input a number:")
+	fmt.Scanln(&num)
+
+	first := true
+
+	for i := 1; i <= num; i++ {
+		if !first {
+			fmt.Print(",")
+		}
+
+		fmt.Printf("%v", fbn(i))
+		first = false
+
+	}
+}
+
+/*
+plz input a number:
+5
+1,1,2,3,5
+*/
+```
+
+
+
 ##### 6.5.4.2.猴子吃桃
 
 ```go
