@@ -3689,6 +3689,90 @@ plz input a number:
 */
 ```
 
+#202402添加输出小于某个数的斐波那契数
+
+```go
+package main
+
+import (
+	"fmt"
+)
+
+func fbn(n int) int {
+	if n == 1 || n == 2 {
+		return 1
+	} else {
+		return fbn(n-1) + fbn(n-2)
+	}
+}
+
+func main() {
+
+	for {
+		var num int
+
+		fmt.Println("plz input a number, if num == -1 ,exit")
+		fmt.Scanln(&num)
+
+		if num == -1 {
+			fmt.Println("what's U input is -1 ,exit!")
+			break
+		}
+
+		count := 1
+		for {
+
+			// fmt.Printf("for...for ... count=%v, num=%v\n", count, num)
+			if num == 1 {
+				fmt.Println("1,1")
+				break
+			} else if num >= fbn(count) && num < fbn(count+1) {
+				// fmt.Printf("for...for else if 1... count=%v, num=%v\n", count, num)
+				first := true
+				for i := 1; i <= count; i++ {
+					if !first {
+						fmt.Print(",")
+					}
+					fmt.Printf("%v", fbn(i))
+					first = false
+				}
+				fmt.Println()
+				break
+			} else {
+				// fmt.Printf("for...for else... count=%v, num=%v\n", count, num)
+				count++
+				continue
+			}
+
+		}
+	}
+}
+
+/*
+plz input a number, if num == -1 ,exit
+1
+1,1
+plz input a number, if num == -1 ,exit
+2
+1,1,2
+plz input a number, if num == -1 ,exit
+3
+1,1,2,3
+plz input a number, if num == -1 ,exit
+4
+1,1,2,3
+plz input a number, if num == -1 ,exit
+5
+1,1,2,3,5
+plz input a number, if num == -1 ,exit
+10
+1,1,2,3,5,8
+plz input a number, if num == -1 ,exit
+-1
+what's U input is -1 ,exit!
+*/
+```
+
 
 
 ##### 6.5.4.2.猴子吃桃
