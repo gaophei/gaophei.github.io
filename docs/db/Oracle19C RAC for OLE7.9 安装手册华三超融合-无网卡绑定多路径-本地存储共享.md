@@ -4895,7 +4895,47 @@ impdp  est1/test1@172.18.13.101:1521/s_dataassets schemas=test1 directory=expdir
 
 #expdp-12.2.0.1.0
 expdp test1/test1@172.18.13.101:1521/s_dataassets schemas=test1 directory=expdir dumpfile=test1_20220314.dmp logfile=test1_20220314.log cluster=n compression=data_only version=12.2.0.1.0
+=========================================
+ select * from dba_directories;
 
+create directory expdir as '/home/oracle/expdir';
+
+grant read,write on directory expdir to public;
+
+
+#sqlplus pdbadmin/DSApdb2023#ADb@172.18.13.101:1521/s_dataassets
+
+sqlplus pdbadmin/DSApdb2023#ADb@172.18.13.97:1521/s_dataassets
+
+
+impdp pdbadmin/DSApdb2023#ADb@172.18.13.97:1521/s_dataassets full=y directory=expdir dumpfile=xydb_expdp_ds_20240301.dmp  logfile=ds_20240301.log
+ 
+ 
+sqlplus portaluser/Oracle2023#Portal@172.18.13.101:1521/s_portal
+
+impdp portaluser/Oracle2023#Portal@172.18.13.97:1521/s_portal full=y directory=expdir dumpfile=xydb_expdp_portal_20240301.dmp  logfile=portal_20240301.log
+
+[oracle@k8s-rac01 expdir]$ impdp pdbadmin/DSApdb2023#ADb@172.18.13.97:1521/s_dataassets full=y directory=expdir dumpfile=xydb_expdp_ds_20240301.dmp  logfile=ds_20240301.log
+
+Import: Release 19.0.0.0.0 - Production on Fri Mar 1 11:48:51 2024
+Version 19.21.0.0.0
+
+Copyright (c) 1982, 2019, Oracle and/or its affiliates.  All rights reserved.
+
+Connected to: Oracle Database 19c Enterprise Edition Release 19.0.0.0.0 - Production
+ORA-31626: job does not exist
+ORA-31633: unable to create master table "PDBADMIN.SYS_IMPORT_FULL_05"
+ORA-06512: at "SYS.DBMS_SYS_ERROR", line 95
+ORA-06512: at "SYS.KUPV$FT", line 1163
+ORA-01950: no privileges on tablespace 'SYSTEM'
+ORA-06512: at "SYS.KUPV$FT", line 1056
+ORA-06512: at "SYS.KUPV$FT", line 1044
+
+
+
+#grant dba to pdbadmin;
+
+=============================================
 #脚本
 
 #!/bin/bash
@@ -4957,11 +4997,11 @@ alter pluggable database onecode open;
 alter session set container=onecode;
 grant dba to onecodeuser；
 
-create pluggable database dataassets admin user pdbadmin identified by ConeDe2839#CoeN roles=(dba);
+create pluggable database dataassets admin user pdbadmin identified by DSApdb2023#ADb roles=(dba);
 
-alter pluggable database onecode open;
-alter session set container=onecode;
-grant dba to onecodeuser；
+alter pluggable database dataassets open;
+alter session set container=dataassets;
+grant dba to pdbadmin;
 ```
 #连接方式
 
@@ -4981,11 +5021,23 @@ srvctl status service -d xydb -s s_onecode
 
 sqlplus onecodeuser/ConeDe2839#CoeN@172.18.13.101:1521/s_onecode
 
-sqlplus pdbadmin/DSApdb2023#ADb@172.18.13.101:1521/s_dataassets
+--------------------------------
+srvctl add service -d xydb -s s_dataassets -r xydb1,xydb2 -P basic -e select -m basic -z 180 -w 5 -pdb dataassets
 
+srvctl start service -d xydb -s s_dataassets
+srvctl status service -d xydb -s s_dataassets
+
+sqlplus pdbadmin/DSApdb2023#ADb@172.18.13.101:1521/s_dataassets
 ```
 
+
+
+
+
+
+
 ### 6.8. Oracle RAC更改PDB的字符集
+
 ```
  SQL> show pdbs;
 

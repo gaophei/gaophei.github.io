@@ -3999,6 +3999,7 @@ SYS@xydb1> select sequence#,first_time,next_time,applied from v$archived_log ord
 
 183 rows selected.
 
+
 SYS@xydb1> select role,thread#,sequence#,action from v$dataguard_process;
 
 ROLE			    THREAD#  SEQUENCE# ACTION
@@ -4025,7 +4026,7 @@ SYS@xydb1> col name for a23
 col value for a13
 col time_computed for a20
 col datum_time for a20
-select name,value,time_computed,datum_time from v$dataguard_stats;SYS@xydb1> SYS@xydb1> SYS@xydb1> SYS@xydb1> 
+select name,value,time_computed,datum_time from v$dataguard_stats;
 
 no rows selected
 
@@ -4162,7 +4163,7 @@ SYS@xydbdg> col name for a23
 col value for a13
 col time_computed for a20
 col datum_time for a20
-select name,value,time_computed,datum_time from v$dataguard_stats;SYS@xydbdg> SYS@xydbdg> SYS@xydbdg> SYS@xydbdg> 
+select name,value,time_computed,datum_time from v$dataguard_stats;
 
 NAME			VALUE	      TIME_COMPUTED	   DATUM_TIME
 ----------------------- ------------- -------------------- --------------------
@@ -6231,6 +6232,1778 @@ SYS@xydb1>
 
 
 ## 5.通过dg_broker进行切换测试
+
+
+
+## 6.ADG备份
+
+### 6.1.主库备份及归档清理
+
+
+### 6.2.备库备份及归档清理
+
+
+
+
+### 6.3.备库磁盘满处理
+#发生原因：主库impdp一个pdb全库数据，而备库从建立ADG后未曾清理归档日志，导致归档满
+#备库error-log
+```bash
+[oracle@k8s-oracle-store ~]$ tail -f /u01/app/oracle/diag/rdbms/xydbdg/xydbdg/trace/alert_xydbdg.log
+
+2024-03-01T00:33:23.249701+08:00
+ rfs (PID:32363): Selected LNO:13 for T-2.S-87 dbid 2062989406 branch 1161189366
+2024-03-01T00:33:23.279809+08:00
+ARC1 (PID:8926): Archived Log entry 421 added for T-2.S-86 ID 0x7b6fba49 LAD:1
+2024-03-01T00:33:23.625728+08:00
+PR00 (PID:11197): Media Recovery Waiting for T-2.S-87 (in transit)
+2024-03-01T00:33:23.626537+08:00
+Recovery of Online Redo Log: Thread 2 Group 13 Seq 87 Reading mem 0
+  Mem# 0: /u01/app/oracle/oradata/xydbdg/onlinelog01/xydb/onlinelog/group_13.288.1159637923
+  Mem# 1: /u01/app/oracle/oradata/xydbdg/onlinelog01/xydb/onlinelog/group_13.319.1159637925
+2024-03-01T00:33:28.144011+08:00
+ rfs (PID:1021): Selected LNO:10 for T-1.S-97 dbid 2062989406 branch 1161189366
+2024-03-01T00:33:28.144282+08:00
+ARC3 (PID:8930): Archived Log entry 422 added for T-1.S-96 ID 0x7b6fba49 LAD:1
+2024-03-01T00:33:28.676687+08:00
+PR00 (PID:11197): Media Recovery Waiting for T-1.S-97 (in transit)
+2024-03-01T00:33:28.677390+08:00
+Recovery of Online Redo Log: Thread 1 Group 10 Seq 97 Reading mem 0
+  Mem# 0: /u01/app/oracle/oradata/xydbdg/onlinelog01/xydb/onlinelog/group_10.291.1159637897
+  Mem# 1: /u01/app/oracle/oradata/xydbdg/onlinelog01/xydb/onlinelog/group_10.314.1159637899
+2024-03-01T11:52:55.889803+08:00
+DATAASSETS(5):Recovery created file /u01/app/oracle/oradata/xydbdg/datafile/xydb/1064b454582a4aa4e063610d12ac9d59/datafile/idc_data_standcode.296.1162468273
+2024-03-01T11:53:18.147589+08:00
+DATAASSETS(5):Recovery created file /u01/app/oracle/oradata/xydbdg/datafile/xydb/1064b454582a4aa4e063610d12ac9d59/datafile/idc_data_standcode.297.1162468285
+2024-03-01T11:53:27.402659+08:00
+DATAASSETS(5):Recovery created file /u01/app/oracle/oradata/xydbdg/datafile/xydb/1064b454582a4aa4e063610d12ac9d59/datafile/idc_data_standcode.298.1162468311
+DATAASSETS(5):Successfully added datafile 24 to media recovery
+2024-03-01T11:53:27.624667+08:00
+Buffer Cache Full DB Caching mode changing from FULL CACHING ENABLED to FULL CACHING DISABLED
+Full DB Caching disabled: DEFAULT_CACHE_SIZE should be at least 1251 MBs bigger than current size.
+DATAASSETS(5):Datafile #24: '/u01/app/oracle/oradata/xydbdg/datafile/xydb/1064b454582a4aa4e063610d12ac9d59/datafile/idc_data_standcode.296.1162468273'
+2024-03-01T11:53:27.770041+08:00
+DATAASSETS(5):Successfully added datafile 25 to media recovery
+DATAASSETS(5):Datafile #25: '/u01/app/oracle/oradata/xydbdg/datafile/xydb/1064b454582a4aa4e063610d12ac9d59/datafile/idc_data_standcode.297.1162468285'
+DATAASSETS(5):Successfully added datafile 26 to media recovery
+DATAASSETS(5):Datafile #26: '/u01/app/oracle/oradata/xydbdg/datafile/xydb/1064b454582a4aa4e063610d12ac9d59/datafile/idc_data_standcode.298.1162468311'
+2024-03-01T11:54:33.225676+08:00
+DATAASSETS(5):Recovery created file /u01/app/oracle/oradata/xydbdg/datafile/xydb/1064b454582a4aa4e063610d12ac9d59/datafile/idc_data_dataquality.299.1162468333
+2024-03-01T11:54:44.174645+08:00
+DATAASSETS(5):Recovery created file /u01/app/oracle/oradata/xydbdg/datafile/xydb/1064b454582a4aa4e063610d12ac9d59/datafile/idc_data_dataquality.300.1162468385
+2024-03-01T11:54:55.424683+08:00
+DATAASSETS(5):Recovery created file /u01/app/oracle/oradata/xydbdg/datafile/xydb/1064b454582a4aa4e063610d12ac9d59/datafile/idc_data_dataquality.301.1162468399
+2024-03-01T11:55:04.754159+08:00
+DATAASSETS(5):Recovery created file /u01/app/oracle/oradata/xydbdg/datafile/xydb/1064b454582a4aa4e063610d12ac9d59/datafile/idc_data_dataquality.302.1162468413
+DATAASSETS(5):Successfully added datafile 27 to media recovery
+DATAASSETS(5):Datafile #27: '/u01/app/oracle/oradata/xydbdg/datafile/xydb/1064b454582a4aa4e063610d12ac9d59/datafile/idc_data_dataquality.299.1162468333'
+DATAASSETS(5):Successfully added datafile 28 to media recovery
+DATAASSETS(5):Datafile #28: '/u01/app/oracle/oradata/xydbdg/datafile/xydb/1064b454582a4aa4e063610d12ac9d59/datafile/idc_data_dataquality.300.1162468385'
+DATAASSETS(5):Successfully added datafile 29 to media recovery
+DATAASSETS(5):Datafile #29: '/u01/app/oracle/oradata/xydbdg/datafile/xydb/1064b454582a4aa4e063610d12ac9d59/datafile/idc_data_dataquality.301.1162468399'
+DATAASSETS(5):Successfully added datafile 30 to media recovery
+DATAASSETS(5):Datafile #30: '/u01/app/oracle/oradata/xydbdg/datafile/xydb/1064b454582a4aa4e063610d12ac9d59/datafile/idc_data_dataquality.302.1162468413'
+2024-03-01T11:56:13.052801+08:00
+DATAASSETS(5):Recovery created file /u01/app/oracle/oradata/xydbdg/datafile/xydb/1064b454582a4aa4e063610d12ac9d59/datafile/idc_data_sharedb.303.1162468429
+2024-03-01T11:56:24.184431+08:00
+DATAASSETS(5):Recovery created file /u01/app/oracle/oradata/xydbdg/datafile/xydb/1064b454582a4aa4e063610d12ac9d59/datafile/idc_data_sharedb.304.1162468479
+2024-03-01T11:56:37.688443+08:00
+DATAASSETS(5):Recovery created file /u01/app/oracle/oradata/xydbdg/datafile/xydb/1064b454582a4aa4e063610d12ac9d59/datafile/idc_data_sharedb.305.1162468491
+2024-03-01T11:56:44.288583+08:00
+DATAASSETS(5):Recovery created file /u01/app/oracle/oradata/xydbdg/datafile/xydb/1064b454582a4aa4e063610d12ac9d59/datafile/idc_data_sharedb.306.1162468505
+2024-03-01T11:56:45.142948+08:00
+DATAASSETS(5):Errors in file /u01/app/oracle/diag/rdbms/xydbdg/xydbdg/trace/xydbdg_pr00_11197.trc:
+ORA-27072: File I/O error
+Linux-x86_64 Error: 28: No space left on device
+Additional information: 4
+Additional information: 16128
+Additional information: 4294967295
+2024-03-01T11:56:45.261992+08:00
+DATAASSETS(5):Errors in file /u01/app/oracle/diag/rdbms/xydbdg/xydbdg/trace/xydbdg_pr00_11197.trc:
+ORA-19502: write error on file "/u01/app/oracle/oradata/xydbdg/datafile/xydb/1064b454582a4aa4e063610d12ac9d59/datafile/idc_data_sharedb.307.1162468517", block number 16128 (block size=8192)
+ORA-27072: File I/O error
+Linux-x86_64 Error: 28: No space left on device
+Additional information: 4
+Additional information: 16128
+Additional information: 4294967295
+DATAASSETS(5):File #35 added to control file as 'UNNAMED00035'.
+DATAASSETS(5):Originally created as:
+DATAASSETS(5):'+DATA/XYDB/1064B454582A4AA4E063610D12AC9D59/DATAFILE/idc_data_sharedb.307.1162468517'
+DATAASSETS(5):Recovery was unable to create the file as:
+DATAASSETS(5):'/u01/app/oracle/oradata/xydbdg/datafile/xydb/1064b454582a4aa4e063610d12ac9d59/datafile/idc_data_sharedb.307.1162468517'
+2024-03-01T11:56:45.923349+08:00
+PR00 (PID:11197): MRP0: Background Media Recovery terminated with error 1274
+2024-03-01T11:56:45.923594+08:00
+Errors in file /u01/app/oracle/diag/rdbms/xydbdg/xydbdg/trace/xydbdg_pr00_11197.trc:
+ORA-01274: cannot add data file that was originally created as '+DATA/XYDB/1064B454582A4AA4E063610D12AC9D59/DATAFILE/idc_data_sharedb.307.1162468517'
+PR00 (PID:11197): Managed Standby Recovery not using Real Time Apply
+2024-03-01T11:56:47.501093+08:00
+Recovery interrupted!
+2024-03-01T11:56:58.471770+08:00
+
+IM on ADG: Start of Empty Journal
+
+IM on ADG: End of Empty Journal
+Recovered data files to a consistent state at change 36581438
+Stopping change tracking
+2024-03-01T11:56:58.474453+08:00
+Errors in file /u01/app/oracle/diag/rdbms/xydbdg/xydbdg/trace/xydbdg_pr00_11197.trc:
+ORA-01274: cannot add data file that was originally created as '+DATA/XYDB/1064B454582A4AA4E063610D12AC9D59/DATAFILE/idc_data_sharedb.307.1162468517'
+2024-03-01T11:56:58.504363+08:00
+Background Media Recovery process shutdown (xydbdg)
+2024-03-01T12:01:22.518901+08:00
+ARC1 (PID:8926): Encountered disk I/O error 19502
+2024-03-01T12:01:22.583286+08:00
+Closing local archive destination LOG_ARCHIVE_DEST_1 '/u01/app/oracle/fast_recovery_area/xydbdg/archivelog/1_97_1161189366.dbf', error=19502 (xydbdg)
+2024-03-01T12:01:22.681837+08:00
+Errors in file /u01/app/oracle/diag/rdbms/xydbdg/xydbdg/trace/xydbdg_arc1_8926.trc:
+ORA-27072: File I/O error
+Additional information: 4
+Additional information: 1
+Additional information: 3584
+ORA-19502: write error on file "/u01/app/oracle/fast_recovery_area/xydbdg/archivelog/1_97_1161189366.dbf", block number 1 (block size=512)
+2024-03-01T12:01:22.685414+08:00
+Errors in file /u01/app/oracle/diag/rdbms/xydbdg/xydbdg/trace/xydbdg_arc1_8926.trc:
+ORA-19502: write error on file "/u01/app/oracle/fast_recovery_area/xydbdg/archivelog/1_97_1161189366.dbf", block number 1 (block size=512)
+ORA-27072: File I/O error
+Additional information: 4
+Additional information: 1
+Additional information: 3584
+ORA-19502: write error on file "/u01/app/oracle/fast_recovery_area/xydbdg/archivelog/1_97_1161189366.dbf", block number 1 (block size=512)
+ARC1 (PID:8926): I/O error 19502 archiving LNO:10 to '/u01/app/oracle/fast_recovery_area/xydbdg/archivelog/1_97_1161189366.dbf'
+2024-03-01T12:01:22.719713+08:00
+ rfs (PID:1021): Selected LNO:11 for T-1.S-98 dbid 2062989406 branch 1161189366
+2024-03-01T12:01:22.956380+08:00
+Errors in file /u01/app/oracle/diag/rdbms/xydbdg/xydbdg/trace/xydbdg_arc1_8926.trc:
+ORA-16038: log 10 sequence# 97 cannot be archived
+ORA-19502: write error on file "", block number  (block size=)
+ORA-00312: online log 10 thread 1: '/u01/app/oracle/oradata/xydbdg/onlinelog01/xydb/onlinelog/group_10.291.1159637897'
+ORA-00312: online log 10 thread 1: '/u01/app/oracle/oradata/xydbdg/onlinelog01/xydb/onlinelog/group_10.314.1159637899'
+2024-03-01T12:01:22.956466+08:00
+ARC1 (PID:8926): Archival error occurred on a closed thread, archiver continuing
+2024-03-01T12:01:22.956528+08:00
+ORACLE Instance xydbdg, archival error, archiver continuing
+2024-03-01T12:04:41.841082+08:00
+ rfs (PID:32363): Selected LNO:14 for T-2.S-88 dbid 2062989406 branch 1161189366
+2024-03-01T12:07:17.316892+08:00
+Errors in file /u01/app/oracle/diag/rdbms/xydbdg/xydbdg/trace/xydbdg_arc2_8928.trc:
+ORA-19502: write error on file "/u01/app/oracle/fast_recovery_area/xydbdg/archivelog/2_87_1161189366.dbf", block number 1 (block size=512)
+ORA-27072: File I/O error
+Additional information: 4
+Additional information: 1
+Additional information: 3584
+ORA-19502: write error on file "/u01/app/oracle/fast_recovery_area/xydbdg/archivelog/2_87_1161189366.dbf", block number 1 (block size=512)
+ARC2 (PID:8928): I/O error 19502 archiving LNO:13 to '/u01/app/oracle/fast_recovery_area/xydbdg/archivelog/2_87_1161189366.dbf'
+2024-03-01T12:07:17.337549+08:00
+Errors in file /u01/app/oracle/diag/rdbms/xydbdg/xydbdg/trace/xydbdg_arc2_8928.trc:
+ORA-16038: log 13 sequence# 87 cannot be archived
+ORA-19502: write error on file "", block number  (block size=)
+ORA-00312: online log 13 thread 2: '/u01/app/oracle/oradata/xydbdg/onlinelog01/xydb/onlinelog/group_13.288.1159637923'
+ORA-00312: online log 13 thread 2: '/u01/app/oracle/oradata/xydbdg/onlinelog01/xydb/onlinelog/group_13.319.1159637925'
+
+
+```
+
+
+
+#主库alter_xydb1.log
+
+```bash
+[oracle@k8s-rac01 ~]$ tail -f /u01/app/oracle/diag/rdbms/xydb/xydb1/trace/alert_xydb1.log
+
+2024-03-01T00:32:53.744017+08:00
+ARC3 (PID:24801): Archived Log entry 1611 added for T-1.S-96 ID 0x7b6fba49 LAD:1
+2024-03-01T01:01:20.646253+08:00
+TABLE SYS.WRP$_REPORTS: ADDED INTERVAL PARTITION SYS_P1438 (5174) VALUES LESS THAN (TO_DATE(' 2024-03-02 01:00:00', 'SYYYY-MM-DD HH24:MI:SS', 'NLS_CALENDAR=GREGORIAN'))
+TABLE SYS.WRP$_REPORTS_DETAILS: ADDED INTERVAL PARTITION SYS_P1439 (5174) VALUES LESS THAN (TO_DATE(' 2024-03-02 01:00:00', 'SYYYY-MM-DD HH24:MI:SS', 'NLS_CALENDAR=GREGORIAN'))
+2024-03-01T02:00:00.079652+08:00
+Closing Resource Manager plan via scheduler window
+Clearing Resource Manager CDB plan via parameter
+2024-03-01T11:23:58.291206+08:00
+TABLE AUDSYS.AUD$UNIFIED: ADDED INTERVAL PARTITION SYS_P1442 (117) VALUES LESS THAN (TIMESTAMP' 2024-04-01 00:00:00')
+2024-03-01T11:25:35.385005+08:00
+DATAASSETS(5):TABLE AUDSYS.AUD$UNIFIED: ADDED INTERVAL PARTITION SYS_P412 (117) VALUES LESS THAN (TIMESTAMP' 2024-04-01 00:00:00')
+2024-03-01T11:50:37.642111+08:00
+DATAASSETS(5):Resize operation completed for file# 19, fname +DATA/XYDB/1064B454582A4AA4E063610D12AC9D59/DATAFILE/system.292.1159901297, old size 583680K, new size 593920K
+2024-03-01T11:50:41.760727+08:00
+DATAASSETS(5):Started service SYS.KUPC$C_1_20240301115038_0/SYS$SYS.KUPC$C_1_20240301115038_0.DATAASSETS/SYS$SYS.KUPC$C_1_20240301115038_0.DATAASSETS
+2024-03-01T11:50:41.948771+08:00
+DATAASSETS(5):Started service SYS.KUPC$S_1_20240301115038_0/SYS$SYS.KUPC$S_1_20240301115038_0.DATAASSETS/SYS$SYS.KUPC$S_1_20240301115038_0.DATAASSETS
+2024-03-01T11:50:42.696551+08:00
+DATAASSETS(5):DM00 started with pid=162, OS id=16122, job PDBADMIN.SYS_IMPORT_FULL_01
+2024-03-01T11:50:46.113595+08:00
+DATAASSETS(5):
+DATAASSETS(5):DW00 started with pid=166, OS id=17272, wid=1, job PDBADMIN.SYS_IMPORT_FULL_01
+2024-03-01T11:50:50.129359+08:00
+DATAASSETS(5):Resize operation completed for file# 19, fname +DATA/XYDB/1064B454582A4AA4E063610D12AC9D59/DATAFILE/system.292.1159901297, old size 593920K, new size 604160K
+2024-03-01T11:50:51.125043+08:00
+DATAASSETS(5):Resize operation completed for file# 19, fname +DATA/XYDB/1064B454582A4AA4E063610D12AC9D59/DATAFILE/system.292.1159901297, old size 604160K, new size 614400K
+DATAASSETS(5):Resize operation completed for file# 19, fname +DATA/XYDB/1064B454582A4AA4E063610D12AC9D59/DATAFILE/system.292.1159901297, old size 614400K, new size 624640K
+2024-03-01T11:50:52.607384+08:00
+DATAASSETS(5):Resize operation completed for file# 19, fname +DATA/XYDB/1064B454582A4AA4E063610D12AC9D59/DATAFILE/system.292.1159901297, old size 624640K, new size 634880K
+2024-03-01T11:50:53.627727+08:00
+DATAASSETS(5):Resize operation completed for file# 19, fname +DATA/XYDB/1064B454582A4AA4E063610D12AC9D59/DATAFILE/system.292.1159901297, old size 634880K, new size 645120K
+2024-03-01T11:51:12.906850+08:00
+DATAASSETS(5):CREATE TABLESPACE "IDC_DATA_STANDCODE" DATAFILE SIZE 1073741824 AUTOEXTEND ON NEXT 1073741824 MAXSIZE 31744M,SIZE 1073741824 AUTOEXTEND ON NEXT 1073741824 MAXSIZE 31744M,SIZE 1073741824 AUTOEXTEND ON NEXT 1073741824 MAXSIZE 31744M LOGGING ONLINE PERMANENT BLOCKSIZE 8192 EXTENT MANAGEMENT LOCAL AUTOALLOCATE DEFAULT  NOCOMPRESS  SEGMENT SPACE MANAGEMENT AUTO
+2024-03-01T11:52:13.134663+08:00
+DATAASSETS(5):Completed: CREATE TABLESPACE "IDC_DATA_STANDCODE" DATAFILE SIZE 1073741824 AUTOEXTEND ON NEXT 1073741824 MAXSIZE 31744M,SIZE 1073741824 AUTOEXTEND ON NEXT 1073741824 MAXSIZE 31744M,SIZE 1073741824 AUTOEXTEND ON NEXT 1073741824 MAXSIZE 31744M LOGGING ONLINE PERMANENT BLOCKSIZE 8192 EXTENT MANAGEMENT LOCAL AUTOALLOCATE DEFAULT  NOCOMPRESS  SEGMENT SPACE MANAGEMENT AUTO
+DATAASSETS(5):CREATE UNDO TABLESPACE "UNDO_2" DATAFILE SIZE 173015040 AUTOEXTEND ON NEXT 173015040 MAXSIZE 32767M BLOCKSIZE 8192 EXTENT MANAGEMENT LOCAL AUTOALLOCATE
+DATAASSETS(5):ORA-1543 signalled during: CREATE UNDO TABLESPACE "UNDO_2" DATAFILE SIZE 173015040 AUTOEXTEND ON NEXT 173015040 MAXSIZE 32767M BLOCKSIZE 8192 EXTENT MANAGEMENT LOCAL AUTOALLOCATE...
+DATAASSETS(5):CREATE TEMPORARY TABLESPACE "TEMP" TEMPFILE SIZE 159383552 AUTOEXTEND ON NEXT 655360 MAXSIZE 32767M EXTENT MANAGEMENT LOCAL UNIFORM SIZE 1048576
+DATAASSETS(5):ORA-1543 signalled during: CREATE TEMPORARY TABLESPACE "TEMP" TEMPFILE SIZE 159383552 AUTOEXTEND ON NEXT 655360 MAXSIZE 32767M EXTENT MANAGEMENT LOCAL UNIFORM SIZE 1048576...
+DATAASSETS(5):CREATE UNDO TABLESPACE "UNDOTBS1" DATAFILE SIZE 104857600 AUTOEXTEND ON NEXT 5242880 MAXSIZE 32767M BLOCKSIZE 8192 EXTENT MANAGEMENT LOCAL AUTOALLOCATE
+DATAASSETS(5):ORA-1543 signalled during: CREATE UNDO TABLESPACE "UNDOTBS1" DATAFILE SIZE 104857600 AUTOEXTEND ON NEXT 5242880 MAXSIZE 32767M BLOCKSIZE 8192 EXTENT MANAGEMENT LOCAL AUTOALLOCATE...
+DATAASSETS(5):CREATE TABLESPACE "IDC_DATA_DATAQUALITY" DATAFILE SIZE 1073741824 AUTOEXTEND ON NEXT 1073741824 MAXSIZE 31744M,SIZE 1073741824 AUTOEXTEND ON NEXT 1073741824 MAXSIZE 31744M,SIZE 1073741824 AUTOEXTEND ON NEXT 1073741824 MAXSIZE 31744M,SIZE 1073741824 AUTOEXTEND ON NEXT 1073741824 MAXSIZE 31744M LOGGING ONLINE PERMANENT BLOCKSIZE 8192 EXTENT MANAGEMENT LOCAL AUTOALLOCATE DEFAULT  NOCOMPRESS  SEGMENT SPACE MANAGEMENT AUTO
+2024-03-01T11:53:49.223438+08:00
+DATAASSETS(5):Completed: CREATE TABLESPACE "IDC_DATA_DATAQUALITY" DATAFILE SIZE 1073741824 AUTOEXTEND ON NEXT 1073741824 MAXSIZE 31744M,SIZE 1073741824 AUTOEXTEND ON NEXT 1073741824 MAXSIZE 31744M,SIZE 1073741824 AUTOEXTEND ON NEXT 1073741824 MAXSIZE 31744M,SIZE 1073741824 AUTOEXTEND ON NEXT 1073741824 MAXSIZE 31744M LOGGING ONLINE PERMANENT BLOCKSIZE 8192 EXTENT MANAGEMENT LOCAL AUTOALLOCATE DEFAULT  NOCOMPRESS  SEGMENT SPACE MANAGEMENT AUTO
+DATAASSETS(5):CREATE TABLESPACE "IDC_DATA_SHAREDB" DATAFILE SIZE 1073741824 AUTOEXTEND ON NEXT 1073741824 MAXSIZE 31744M,SIZE 1073741824 AUTOEXTEND ON NEXT 1073741824 MAXSIZE 31744M,SIZE 1073741824 AUTOEXTEND ON NEXT 1073741824 MAXSIZE 31744M,SIZE 1073741824 AUTOEXTEND ON NEXT 1073741824 MAXSIZE 31744M,SIZE 1073741824 AUTOEXTEND ON NEXT 1073741824 MAXSIZE 31744M LOGGING ONLINE PERMANENT BLOCKSIZE 8192 EXTENT MANAGEMENT LOCAL AUTOALLOCATE DEFAULT  NOCOMPRESS  SEGMENT SPACE MANAGEMENT AUTO
+2024-03-01T11:55:34.176039+08:00
+DATAASSETS(5):Completed: CREATE TABLESPACE "IDC_DATA_SHAREDB" DATAFILE SIZE 1073741824 AUTOEXTEND ON NEXT 1073741824 MAXSIZE 31744M,SIZE 1073741824 AUTOEXTEND ON NEXT 1073741824 MAXSIZE 31744M,SIZE 1073741824 AUTOEXTEND ON NEXT 1073741824 MAXSIZE 31744M,SIZE 1073741824 AUTOEXTEND ON NEXT 1073741824 MAXSIZE 31744M,SIZE 1073741824 AUTOEXTEND ON NEXT 1073741824 MAXSIZE 31744M LOGGING ONLINE PERMANENT BLOCKSIZE 8192 EXTENT MANAGEMENT LOCAL AUTOALLOCATE DEFAULT  NOCOMPRESS  SEGMENT SPACE MANAGEMENT AUTO
+DATAASSETS(5):CREATE TABLESPACE "IDC_DATA_API" DATAFILE SIZE 1073741824 AUTOEXTEND ON NEXT 1073741824 MAXSIZE 31744M,SIZE 1073741824 AUTOEXTEND ON NEXT 1073741824 MAXSIZE 31744M,SIZE 1073741824 AUTOEXTEND ON NEXT 1073741824 MAXSIZE 31744M LOGGING ONLINE PERMANENT BLOCKSIZE 8192 EXTENT MANAGEMENT LOCAL AUTOALLOCATE DEFAULT  NOCOMPRESS  SEGMENT SPACE MANAGEMENT AUTO
+2024-03-01T11:56:54.427683+08:00
+DATAASSETS(5):Completed: CREATE TABLESPACE "IDC_DATA_API" DATAFILE SIZE 1073741824 AUTOEXTEND ON NEXT 1073741824 MAXSIZE 31744M,SIZE 1073741824 AUTOEXTEND ON NEXT 1073741824 MAXSIZE 31744M,SIZE 1073741824 AUTOEXTEND ON NEXT 1073741824 MAXSIZE 31744M LOGGING ONLINE PERMANENT BLOCKSIZE 8192 EXTENT MANAGEMENT LOCAL AUTOALLOCATE DEFAULT  NOCOMPRESS  SEGMENT SPACE MANAGEMENT AUTO
+DATAASSETS(5):CREATE TABLESPACE "IDC_DATA_SWOPWORK" DATAFILE SIZE 1073741824 AUTOEXTEND ON NEXT 1073741824 MAXSIZE 31744M,SIZE 1073741824 AUTOEXTEND ON NEXT 1073741824 MAXSIZE 31744M,SIZE 1073741824 AUTOEXTEND ON NEXT 1073741824 MAXSIZE 31744M LOGGING ONLINE PERMANENT BLOCKSIZE 8192 EXTENT MANAGEMENT LOCAL AUTOALLOCATE DEFAULT  NOCOMPRESS  SEGMENT SPACE MANAGEMENT AUTO
+2024-03-01T11:57:37.678917+08:00
+DATAASSETS(5):Completed: CREATE TABLESPACE "IDC_DATA_SWOPWORK" DATAFILE SIZE 1073741824 AUTOEXTEND ON NEXT 1073741824 MAXSIZE 31744M,SIZE 1073741824 AUTOEXTEND ON NEXT 1073741824 MAXSIZE 31744M,SIZE 1073741824 AUTOEXTEND ON NEXT 1073741824 MAXSIZE 31744M LOGGING ONLINE PERMANENT BLOCKSIZE 8192 EXTENT MANAGEMENT LOCAL AUTOALLOCATE DEFAULT  NOCOMPRESS  SEGMENT SPACE MANAGEMENT AUTO
+DATAASSETS(5):CREATE TABLESPACE "IDC_DATA_ASSETS" DATAFILE SIZE 1073741824 AUTOEXTEND ON NEXT 1073741824 MAXSIZE 31744M,SIZE 1073741824 AUTOEXTEND ON NEXT 1073741824 MAXSIZE 31744M,SIZE 1073741824 AUTOEXTEND ON NEXT 1073741824 MAXSIZE 31744M,SIZE 1073741824 AUTOEXTEND ON NEXT 1073741824 MAXSIZE 31744M,SIZE 1073741824 AUTOEXTEND ON NEXT 1073741824 MAXSIZE 31744M LOGGING ONLINE PERMANENT BLOCKSIZE 8192 EXTENT MANAGEMENT LOCAL AUTOALLOCATE DEFAULT  NOCOMPRESS  SEGMENT SPACE MANAGEMENT AUTO
+2024-03-01T11:58:44.512441+08:00
+DATAASSETS(5):Completed: CREATE TABLESPACE "IDC_DATA_ASSETS" DATAFILE SIZE 1073741824 AUTOEXTEND ON NEXT 1073741824 MAXSIZE 31744M,SIZE 1073741824 AUTOEXTEND ON NEXT 1073741824 MAXSIZE 31744M,SIZE 1073741824 AUTOEXTEND ON NEXT 1073741824 MAXSIZE 31744M,SIZE 1073741824 AUTOEXTEND ON NEXT 1073741824 MAXSIZE 31744M,SIZE 1073741824 AUTOEXTEND ON NEXT 1073741824 MAXSIZE 31744M LOGGING ONLINE PERMANENT BLOCKSIZE 8192 EXTENT MANAGEMENT LOCAL AUTOALLOCATE DEFAULT  NOCOMPRESS  SEGMENT SPACE MANAGEMENT AUTO
+DATAASSETS(5):CREATE TABLESPACE "USERS" DATAFILE SIZE 74711040 AUTOEXTEND ON NEXT 74711040 MAXSIZE 32767M LOGGING ONLINE PERMANENT BLOCKSIZE 8192 EXTENT MANAGEMENT LOCAL AUTOALLOCATE DEFAULT  NOCOMPRESS  SEGMENT SPACE MANAGEMENT AUTO
+2024-03-01T11:58:45.867230+08:00
+DATAASSETS(5):Completed: CREATE TABLESPACE "USERS" DATAFILE SIZE 74711040 AUTOEXTEND ON NEXT 74711040 MAXSIZE 32767M LOGGING ONLINE PERMANENT BLOCKSIZE 8192 EXTENT MANAGEMENT LOCAL AUTOALLOCATE DEFAULT  NOCOMPRESS  SEGMENT SPACE MANAGEMENT AUTO
+DATAASSETS(5):CREATE TABLESPACE "IDC_DATA_SWOP" DATAFILE SIZE 1073741824 AUTOEXTEND ON NEXT 1073741824 MAXSIZE 31744M,SIZE 1073741824 AUTOEXTEND ON NEXT 1073741824 MAXSIZE 31744M,SIZE 1073741824 AUTOEXTEND ON NEXT 1073741824 MAXSIZE 31744M,SIZE 1073741824 AUTOEXTEND ON NEXT 1073741824 MAXSIZE 31744M LOGGING ONLINE PERMANENT BLOCKSIZE 8192 EXTENT MANAGEMENT LOCAL AUTOALLOCATE DEFAULT  NOCOMPRESS  SEGMENT SPACE MANAGEMENT AUTO
+2024-03-01T11:59:39.786096+08:00
+DATAASSETS(5):Completed: CREATE TABLESPACE "IDC_DATA_SWOP" DATAFILE SIZE 1073741824 AUTOEXTEND ON NEXT 1073741824 MAXSIZE 31744M,SIZE 1073741824 AUTOEXTEND ON NEXT 1073741824 MAXSIZE 31744M,SIZE 1073741824 AUTOEXTEND ON NEXT 1073741824 MAXSIZE 31744M,SIZE 1073741824 AUTOEXTEND ON NEXT 1073741824 MAXSIZE 31744M LOGGING ONLINE PERMANENT BLOCKSIZE 8192 EXTENT MANAGEMENT LOCAL AUTOALLOCATE DEFAULT  NOCOMPRESS  SEGMENT SPACE MANAGEMENT AUTO
+2024-03-01T12:00:14.808585+08:00
+DATAASSETS(5):Data Pump Worker: Cannot set an SCN larger than the current SCN. If a Streams Capture configuration was imported then the Apply that processes the captured messages needs to be dropped and recreated. See My Oracle Support article number 1380295.1.
+2024-03-01T12:00:47.438983+08:00
+Thread 1 advanced to log sequence 98 (LGWR switch),  current SCN: 36587578
+  Current log# 1 seq# 98 mem# 0: +DATA/XYDB/ONLINELOG/group_1.262.1153250787
+  Current log# 1 seq# 98 mem# 1: +FRA/XYDB/ONLINELOG/group_1.257.1153250793
+2024-03-01T12:00:51.023527+08:00
+ARC0 (PID:24788): Archived Log entry 1613 added for T-1.S-97 ID 0x7b6fba49 LAD:1
+2024-03-01T12:01:06.827821+08:00
+DATAASSETS(5):Resize operation completed for file# 20, fname +DATA/XYDB/1064B454582A4AA4E063610D12AC9D59/DATAFILE/sysaux.284.1159901297, old size 512000K, new size 522240K
+2024-03-01T12:01:07.409312+08:00
+DATAASSETS(5):Resize operation completed for file# 20, fname +DATA/XYDB/1064B454582A4AA4E063610D12AC9D59/DATAFILE/sysaux.284.1159901297, old size 522240K, new size 542720K
+2024-03-01T12:03:14.576500+08:00
+DATAASSETS(5):Resize operation completed for file# 19, fname +DATA/XYDB/1064B454582A4AA4E063610D12AC9D59/DATAFILE/system.292.1159901297, old size 645120K, new size 655360K
+2024-03-01T12:04:06.072891+08:00
+Thread 1 advanced to log sequence 99 (LGWR switch),  current SCN: 36618681
+  Current log# 2 seq# 99 mem# 0: +DATA/XYDB/ONLINELOG/group_2.263.1153250787
+  Current log# 2 seq# 99 mem# 1: +FRA/XYDB/ONLINELOG/group_2.258.1153250793
+2024-03-01T12:04:13.367897+08:00
+ARC1 (PID:24796): Archived Log entry 1616 added for T-1.S-98 ID 0x7b6fba49 LAD:1
+2024-03-01T12:04:40.136996+08:00
+Thread 1 advanced to log sequence 100 (LGWR switch),  current SCN: 36622591
+  Current log# 1 seq# 100 mem# 0: +DATA/XYDB/ONLINELOG/group_1.262.1153250787
+  Current log# 1 seq# 100 mem# 1: +FRA/XYDB/ONLINELOG/group_1.257.1153250793
+2024-03-01T12:04:43.655384+08:00
+ARC2 (PID:24798): Archived Log entry 1618 added for T-1.S-99 ID 0x7b6fba49 LAD:1
+2024-03-01T12:05:00.419762+08:00
+TT03 (PID:19749): LAD:2 not using SRLs; cannot reconnect
+2024-03-01T12:05:00.419950+08:00
+Errors in file /u01/app/oracle/diag/rdbms/xydb/xydb1/trace/xydb1_tt03_19749.trc:
+ORA-19502: write error on file "", block number  (block size=)
+TT03 (PID:19749): Error 19502 for LNO:1 to 'xydbdg'
+2024-03-01T12:05:00.458257+08:00
+Errors in file /u01/app/oracle/diag/rdbms/xydb/xydb1/trace/xydb1_tt03_19749.trc:
+ORA-19502: write error on file "", block number  (block size=)
+2024-03-01T12:05:00.458443+08:00
+Errors in file /u01/app/oracle/diag/rdbms/xydb/xydb1/trace/xydb1_tt03_19749.trc:
+ORA-19502: write error on file "", block number  (block size=)
+2024-03-01T12:10:01.613026+08:00
+DATAASSETS(5):Resize operation completed for file# 20, fname +DATA/XYDB/1064B454582A4AA4E063610D12AC9D59/DATAFILE/sysaux.284.1159901297, old size 573440K, new size 583680K
+2024-03-01T12:10:23.632574+08:00
+DATAASSETS(5):
+DATAASSETS(5):XDB installed.
+DATAASSETS(5):
+DATAASSETS(5):XDB initialized.
+2024-03-01T12:10:50.801678+08:00
+DATAASSETS(5):TABLE SYS.WRI$_OPTSTAT_HISTHEAD_HISTORY: ADDED INTERVAL PARTITION SYS_P475 (45351) VALUES LESS THAN (TO_DATE(' 2024-03-02 00:00:00', 'SYYYY-MM-DD HH24:MI:SS', 'NLS_CALENDAR=GREGORIAN'))
+2024-03-01T12:11:42.601308+08:00
+TT06 (PID:17202): LAD:2 not using SRLs; cannot reconnect
+2024-03-01T12:11:42.601494+08:00
+Errors in file /u01/app/oracle/diag/rdbms/xydb/xydb1/trace/xydb1_tt06_17202.trc:
+ORA-19502: write error on file "", block number  (block size=)
+TT06 (PID:17202): Error 19502 for LNO:1 to 'xydbdg'
+2024-03-01T12:11:42.642797+08:00
+Errors in file /u01/app/oracle/diag/rdbms/xydb/xydb1/trace/xydb1_tt06_17202.trc:
+ORA-19502: write error on file "", block number  (block size=)
+2024-03-01T12:11:42.643045+08:00
+Errors in file /u01/app/oracle/diag/rdbms/xydb/xydb1/trace/xydb1_tt06_17202.trc:
+ORA-19502: write error on file "", block number  (block size=)
+2024-03-01T12:13:05.595364+08:00
+DATAASSETS(5):TABLE AUDSYS.AUD$UNIFIED: ADDED INTERVAL PARTITION SYS_P478 (111) VALUES LESS THAN (TIMESTAMP' 2023-10-01 00:00:00')
+DATAASSETS(5):TABLE AUDSYS.AUD$UNIFIED: ADDED INTERVAL PARTITION SYS_P485 (112) VALUES LESS THAN (TIMESTAMP' 2023-11-01 00:00:00')
+2024-03-01T12:13:12.072380+08:00
+DATAASSETS(5):Resize operation completed for file# 20, fname +DATA/XYDB/1064B454582A4AA4E063610D12AC9D59/DATAFILE/sysaux.284.1159901297, old size 583680K, new size 593920K
+2024-03-01T12:13:12.578468+08:00
+DATAASSETS(5):Resize operation completed for file# 20, fname +DATA/XYDB/1064B454582A4AA4E063610D12AC9D59/DATAFILE/sysaux.284.1159901297, old size 593920K, new size 614400K
+2024-03-01T12:13:13.605189+08:00
+Thread 1 advanced to log sequence 101 (LGWR switch),  current SCN: 36730604
+  Current log# 2 seq# 101 mem# 0: +DATA/XYDB/ONLINELOG/group_2.263.1153250787
+  Current log# 2 seq# 101 mem# 1: +FRA/XYDB/ONLINELOG/group_2.258.1153250793
+2024-03-01T12:13:16.750479+08:00
+ARC0 (PID:24788): Archived Log entry 1620 added for T-1.S-100 ID 0x7b6fba49 LAD:1
+2024-03-01T12:13:17.959002+08:00
+DATAASSETS(5):TABLE AUDSYS.AUD$UNIFIED: ADDED INTERVAL PARTITION SYS_P492 (114) VALUES LESS THAN (TIMESTAMP' 2024-01-01 00:00:00')
+DATAASSETS(5):TABLE AUDSYS.AUD$UNIFIED: ADDED INTERVAL PARTITION SYS_P499 (115) VALUES LESS THAN (TIMESTAMP' 2024-02-01 00:00:00')
+2024-03-01T12:13:51.285254+08:00
+DATAASSETS(5):Stopped service SYS.KUPC$C_1_20240301115038_0
+2024-03-01T12:13:51.983155+08:00
+DATAASSETS(5):Stopped service SYS.KUPC$S_1_20240301115038_0
+2024-03-01T12:13:53.249126+08:00
+DATAASSETS(5):DM00 stopped with pid=162, OS id=16122, job PDBADMIN.SYS_IMPORT_FULL_01 
+2024-03-01T12:17:17.110832+08:00
+TT00 (PID:24790): Error 2002 received logging on to the standby
+2024-03-01T12:22:35.175846+08:00
+TT00 (PID:24790): Error 2002 received logging on to the standby
+2024-03-01T12:27:53.599789+08:00
+TT00 (PID:24790): Error 2002 received logging on to the standby
+2024-03-01T12:33:11.550464+08:00
+TT00 (PID:24790): Error 2002 received logging on to the standby
+2024-03-01T12:38:29.479865+08:00
+TT00 (PID:24790): Error 2002 received logging on to the standby
+2024-03-01T12:43:47.423361+08:00
+TT00 (PID:24790): Error 2002 received logging on to the standby
+2024-03-01T12:49:05.401992+08:00
+TT00 (PID:24790): Error 2002 received logging on to the standby
+2024-03-01T12:54:23.336376+08:00
+TT00 (PID:24790): Error 2002 received logging on to the standby
+2024-03-01T12:59:41.304979+08:00
+TT00 (PID:24790): Error 2002 received logging on to the standby
+2024-03-01T13:04:59.253026+08:00
+TT00 (PID:24790): Error 2002 received logging on to the standby
+2024-03-01T13:10:17.201146+08:00
+TT00 (PID:24790): Error 2002 received logging on to the standby
+2024-03-01T13:15:35.153006+08:00
+TT00 (PID:24790): Error 2002 received logging on to the standby
+2024-03-01T13:20:53.093657+08:00
+TT00 (PID:24790): Error 2002 received logging on to the standby
+2024-03-01T13:26:11.046401+08:00
+TT00 (PID:24790): Error 2002 received logging on to the standby
+2024-03-01T13:31:28.985539+08:00
+TT00 (PID:24790): Error 2002 received logging on to the standby
+2024-03-01T13:36:46.951189+08:00
+TT00 (PID:24790): Error 2002 received logging on to the standby
+2024-03-01T13:42:04.900197+08:00
+TT00 (PID:24790): Error 2002 received logging on to the standby
+2024-03-01T14:00:00.117131+08:00
+STUWORK(3):Setting Resource Manager plan DEFAULT_MAINTENANCE_PLAN via parameter
+2024-03-01T14:00:00.219034+08:00
+PORTAL(4):Setting Resource Manager plan SCHEDULER[0x4D52]:DEFAULT_MAINTENANCE_PLAN via scheduler window
+PORTAL(4):Setting Resource Manager plan DEFAULT_MAINTENANCE_PLAN via parameter
+2024-03-01T14:00:00.380089+08:00
+DATAASSETS(5):Setting Resource Manager plan DEFAULT_MAINTENANCE_PLAN via parameter
+2024-03-01T14:00:08.137753+08:00
+STUWORK(3):TABLE SYS.WRI$_OPTSTAT_HISTHEAD_HISTORY: ADDED INTERVAL PARTITION SYS_P1056 (45351) VALUES LESS THAN (TO_DATE(' 2024-03-02 00:00:00', 'SYYYY-MM-DD HH24:MI:SS', 'NLS_CALENDAR=GREGORIAN'))
+STUWORK(3):TABLE SYS.WRI$_OPTSTAT_HISTGRM_HISTORY: ADDED INTERVAL PARTITION SYS_P1059 (45351) VALUES LESS THAN (TO_DATE(' 2024-03-02 00:00:00', 'SYYYY-MM-DD HH24:MI:SS', 'NLS_CALENDAR=GREGORIAN'))
+2024-03-01T14:00:22.182429+08:00
+DATAASSETS(5):TABLE SYS.WRI$_OPTSTAT_HISTGRM_HISTORY: ADDED INTERVAL PARTITION SYS_P506 (45351) VALUES LESS THAN (TO_DATE(' 2024-03-02 00:00:00', 'SYYYY-MM-DD HH24:MI:SS', 'NLS_CALENDAR=GREGORIAN'))
+
+```
+
+
+
+
+
+#此时检查备库磁盘，果然100%，抓紧清理磁盘，执行
+
+```bash
+[oracle@k8s-oracle-store ~]$ df -h
+Filesystem           Size  Used Avail Use% Mounted on
+devtmpfs              16G     0   16G   0% /dev
+tmpfs                 16G     0   16G   0% /dev/shm
+tmpfs                 16G  433M   16G   3% /run
+tmpfs                 16G     0   16G   0% /sys/fs/cgroup
+/dev/mapper/ol-root   87G   87G  100k  100% /
+/dev/vda1           1014M  204M  811M  21% /boot
+tmpfs                3.2G     0  3.2G   0% /run/user/0
+
+
+SYS@xydbdg> show parameter LOG_ARCHIVE_DEST_2
+
+NAME				     TYPE	 VALUE
+------------------------------------ ----------- ------------------------------
+log_archive_dest_2		     string	 SERVICE=xydb LGWR ASYNC VALID_FOR=(ONLINE_LOGFILES,PRIMARY_ROLE)                                        DB_UNIQUE_NAME=xydb
+
+log_archive_dest_20		     string
+log_archive_dest_21		     string
+log_archive_dest_22		     string
+log_archive_dest_23		     string
+log_archive_dest_24		     string
+log_archive_dest_25		     string
+log_archive_dest_26		     string
+log_archive_dest_27		     string
+log_archive_dest_28		     string
+log_archive_dest_29		     string
+
+
+SYS@xydbdg> show parameter LOG_ARCHIVE_DEST_1
+
+NAME				     TYPE	 VALUE
+------------------------------------ ----------- ------------------------------
+log_archive_dest_1		     string	 LOCATION=/u01/app/oracle/fast_recovery_area/xydbdg/archivelog                                            VALID_FOR=(ALL_LOGFILES,ALL_ROLES) DB_UNIQUE_NAME=xydbdg
+log_archive_dest_10		     string
+log_archive_dest_11		     string
+log_archive_dest_12		     string
+log_archive_dest_13		     string
+log_archive_dest_14		     string
+log_archive_dest_15		     string
+log_archive_dest_16		     string
+log_archive_dest_17		     string
+log_archive_dest_18		     string
+log_archive_dest_19		     string
+
+
+SYS@xydbdg> archive log list;
+Database log mode	       Archive Mode
+Automatic archival	       Enabled
+Archive destination	       /u01/app/oracle/fast_recovery_area/xydbdg/archivelog
+Oldest online log sequence     0
+Next log sequence to archive   0
+Current log sequence	       0
+SYS@xydbdg> 
+
+
+[root@k8s-oracle-store ~]# cd /u01/app/oracle/fast_recovery_area/xydbdg/archivelog
+[root@k8s-oracle-store archivelog]# du -hs
+17G	.
+
+[root@k8s-oracle-store archivelog]# ll |wc -l
+364
+[root@k8s-oracle-store archivelog]# du -hs
+18G	.
+[root@k8s-oracle-store archivelog]# ll -rth|more
+total 18G
+-rw-r----- 1 oracle oinstall 6.5K Feb  1 16:38 2_390_1153250787.dbf
+-rw-r----- 1 oracle oinstall  13M Feb  1 18:11 2_391_1153250787.dbf
+-rw-r----- 1 oracle oinstall  15M Feb  1 18:11 1_414_1153250787.dbf
+-rw-r----- 1 oracle oinstall  13K Feb  1 18:11 1_415_1153250787.dbf
+-rw-r----- 1 oracle oinstall  44M Feb  2 00:30 2_392_1153250787.dbf
+-rw-r----- 1 oracle oinstall 155M Feb  2 00:30 1_416_1153250787.dbf
+-rw-r----- 1 oracle oinstall 9.0K Feb  2 00:30 1_417_1153250787.dbf
+-rw-r----- 1 oracle oinstall  10K Feb  2 00:30 2_393_1153250787.dbf
+-rw-r----- 1 oracle oinstall  85K Feb  2 00:32 2_394_1153250787.dbf
+-rw-r----- 1 oracle oinstall  82K Feb  2 00:32 1_418_1153250787.dbf
+-rw-r----- 1 oracle oinstall 7.0K Feb  2 00:32 2_395_1153250787.dbf
+-rw-r----- 1 oracle oinstall 7.5K Feb  2 00:32 1_419_1153250787.dbf
+-rw-r----- 1 oracle oinstall 4.5K Feb  2 00:32 2_396_1153250787.dbf
+-rw-r----- 1 oracle oinstall 5.0K Feb  2 00:32 1_420_1153250787.dbf
+-rw-r----- 1 oracle oinstall 169M Feb  2 14:00 1_421_1153250787.dbf
+-rw-r----- 1 oracle oinstall  43M Feb  2 16:23 1_422_1153250787.dbf
+-rw-r----- 1 oracle oinstall 113M Feb  2 16:23 2_397_1153250787.dbf
+-rw-r----- 1 oracle oinstall  69K Feb  2 16:25 1_423_1153250787.dbf
+-rw-r----- 1 oracle oinstall  66K Feb  2 16:25 2_398_1153250787.dbf
+-rw-r----- 1 oracle oinstall 1.0K Feb  2 16:36 1_424_1153250787.dbf
+-rw-r----- 1 oracle oinstall 1.0K Feb  2 16:36 2_399_1153250787.dbf
+-rw-r----- 1 oracle oinstall  19M Feb  2 17:36 1_425_1153250787.dbf
+
+#竟然是归档日志一直未清理
+
+#查看归档应用情况
+SYS@xydbdg> select thread#,sequence#,creator,applied,first_time,next_time from v$archived_log where applied='YES' order by sequence#;
+
+   THREAD#  SEQUENCE# CREATOR APPLIED	FIRST_TIME	    NEXT_TIME
+---------- ---------- ------- --------- ------------------- -------------------
+	 2	    3 ARCH    YES	2024-02-17 17:07:48 2024-02-17 17:15:24
+	 1	    4 ARCH    YES	2024-02-17 17:07:26 2024-02-17 17:15:23
+	 2	    4 ARCH    YES	2024-02-17 17:16:43 2024-02-17 17:16:52
+	 2	    5 ARCH    YES	2024-02-17 17:36:23 2024-02-17 17:36:23
+	 1	    6 ARCH    YES	2024-02-17 17:16:51 2024-02-17 17:34:57
+	 1	    6 LGWR    YES	2024-02-17 17:16:51 2024-02-17 17:34:57
+	 2	    6 ARCH    YES	2024-02-17 17:36:23 2024-02-18 00:30:07
+	 1	    7 FGRD    YES	2024-02-17 17:34:57 2024-02-17 17:36:08
+	 2	    7 ARCH    YES	2024-02-18 00:30:07 2024-02-18 00:30:18
+	 1	    8 ARCH    YES	2024-02-17 17:35:56 2024-02-17 17:36:15
+	 2	    8 ARCH    YES	2024-02-18 00:30:18 2024-02-18 00:33:01
+	 1	    9 ARCH    YES	2024-02-17 17:36:15 2024-02-18 00:30:09
+	 2	    9 ARCH    YES	2024-02-18 00:33:01 2024-02-18 00:33:09
+	 1	   10 ARCH    YES	2024-02-18 00:30:09 2024-02-18 00:30:18
+	 2	   10 ARCH    YES	2024-02-18 00:33:09 2024-02-18 00:33:14
+	 1	   11 ARCH    YES	2024-02-18 00:30:18 2024-02-18 00:30:21
+	 2	   11 ARCH    YES	2024-02-18 00:33:14 2024-02-18 18:00:10
+	 1	   12 ARCH    YES	2024-02-18 00:30:21 2024-02-18 00:33:01
+	 2	   12 ARCH    YES	2024-02-18 18:00:10 2024-02-18 23:00:36
+	 1	   13 ARCH    YES	2024-02-18 00:33:01 2024-02-18 00:33:13
+	 2	   13 ARCH    YES	2024-02-18 23:00:36 2024-02-19 00:30:06
+	 1	   14 ARCH    YES	2024-02-18 00:33:13 2024-02-18 00:33:16
+	 2	   14 ARCH    YES	2024-02-19 00:30:06 2024-02-19 00:30:14
+	 1	   15 ARCH    YES	2024-02-18 00:33:16 2024-02-18 09:02:46
+	 2	   15 ARCH    YES	2024-02-19 00:30:14 2024-02-19 00:32:53
+	 1	   16 ARCH    YES	2024-02-18 09:02:46 2024-02-18 18:00:10
+	 2	   16 ARCH    YES	2024-02-19 00:32:53 2024-02-19 00:33:01
+	 1	   17 ARCH    YES	2024-02-18 18:00:10 2024-02-19 00:30:07
+	 2	   17 ARCH    YES	2024-02-19 00:33:01 2024-02-19 00:33:07
+	 1	   18 ARCH    YES	2024-02-19 00:30:07 2024-02-19 00:30:13
+	 2	   18 ARCH    YES	2024-02-19 00:33:07 2024-02-19 19:46:07
+	 1	   19 ARCH    YES	2024-02-19 00:30:13 2024-02-19 00:32:55
+	 2	   19 ARCH    YES	2024-02-19 19:46:07 2024-02-20 00:30:06
+	 1	   20 ARCH    YES	2024-02-19 00:32:55 2024-02-19 00:33:04
+	 2	   20 ARCH    YES	2024-02-20 00:30:06 2024-02-20 00:30:15
+	 1	   21 ARCH    YES	2024-02-19 00:33:04 2024-02-19 00:33:10
+	 2	   21 ARCH    YES	2024-02-20 00:30:15 2024-02-20 00:32:19
+	 1	   22 ARCH    YES	2024-02-19 00:33:10 2024-02-19 15:00:51
+	 2	   22 ARCH    YES	2024-02-20 00:32:19 2024-02-20 00:32:28
+	 1	   23 ARCH    YES	2024-02-19 15:00:51 2024-02-20 00:30:07
+	 2	   23 ARCH    YES	2024-02-20 00:32:28 2024-02-20 00:32:31
+	 1	   24 ARCH    YES	2024-02-20 00:30:07 2024-02-20 00:30:16
+	 2	   24 ARCH    YES	2024-02-20 00:32:31 2024-02-20 10:00:51
+	 1	   25 ARCH    YES	2024-02-20 00:30:16 2024-02-20 00:32:19
+	 2	   25 ARCH    YES	2024-02-20 10:00:51 2024-02-21 00:30:07
+	 1	   26 ARCH    YES	2024-02-20 00:32:19 2024-02-20 00:32:28
+	 2	   26 ARCH    YES	2024-02-21 00:30:07 2024-02-21 00:30:14
+	 1	   27 ARCH    YES	2024-02-20 00:32:28 2024-02-20 00:32:32
+	 2	   27 ARCH    YES	2024-02-21 00:30:14 2024-02-21 00:32:27
+	 1	   28 ARCH    YES	2024-02-20 00:32:32 2024-02-20 00:32:35
+	 2	   28 ARCH    YES	2024-02-21 00:32:27 2024-02-21 00:32:38
+	 1	   29 ARCH    YES	2024-02-20 00:32:35 2024-02-20 14:00:14
+	 2	   29 ARCH    YES	2024-02-21 00:32:38 2024-02-21 00:32:44
+	 1	   30 ARCH    YES	2024-02-20 14:00:14 2024-02-20 22:02:21
+	 2	   30 ARCH    YES	2024-02-21 00:32:44 2024-02-21 13:00:09
+	 1	   31 ARCH    YES	2024-02-20 22:02:21 2024-02-21 00:30:08
+	 2	   31 ARCH    YES	2024-02-21 13:00:09 2024-02-22 00:30:06
+	 1	   32 ARCH    YES	2024-02-21 00:30:08 2024-02-21 00:30:14
+	 2	   32 ARCH    YES	2024-02-22 00:30:06 2024-02-22 00:30:18
+	 1	   33 ARCH    YES	2024-02-21 00:30:14 2024-02-21 00:32:30
+	 2	   33 ARCH    YES	2024-02-22 00:30:18 2024-02-22 00:32:30
+	 1	   34 ARCH    YES	2024-02-21 00:32:30 2024-02-21 00:32:39
+	 2	   34 ARCH    YES	2024-02-22 00:32:30 2024-02-22 00:32:36
+	 1	   35 ARCH    YES	2024-02-21 00:32:39 2024-02-21 00:32:45
+	 2	   35 ARCH    YES	2024-02-22 00:32:36 2024-02-22 00:32:42
+	 1	   36 ARCH    YES	2024-02-21 00:32:45 2024-02-21 00:32:51
+	 2	   36 ARCH    YES	2024-02-22 00:32:42 2024-02-22 13:08:42
+	 1	   37 ARCH    YES	2024-02-21 00:32:51 2024-02-21 13:00:09
+	 2	   37 ARCH    YES	2024-02-22 13:08:42 2024-02-22 22:02:00
+	 1	   38 ARCH    YES	2024-02-21 13:00:09 2024-02-21 22:01:20
+	 2	   38 ARCH    YES	2024-02-22 22:02:00 2024-02-23 00:30:06
+	 1	   39 ARCH    YES	2024-02-21 22:01:20 2024-02-22 00:30:06
+	 2	   39 ARCH    YES	2024-02-23 00:30:06 2024-02-23 00:30:14
+	 1	   40 ARCH    YES	2024-02-22 00:30:06 2024-02-22 00:30:18
+	 2	   40 ARCH    YES	2024-02-23 00:30:14 2024-02-23 00:32:26
+	 1	   41 ARCH    YES	2024-02-22 00:30:18 2024-02-22 00:32:29
+	 2	   41 ARCH    YES	2024-02-23 00:32:26 2024-02-23 00:32:33
+	 1	   42 ARCH    YES	2024-02-22 00:32:29 2024-02-22 00:32:41
+	 2	   42 ARCH    YES	2024-02-23 00:32:33 2024-02-23 00:32:39
+	 1	   43 ARCH    YES	2024-02-22 00:32:41 2024-02-22 00:32:44
+	 2	   43 ARCH    YES	2024-02-23 00:32:39 2024-02-23 13:17:52
+	 1	   44 ARCH    YES	2024-02-22 00:32:44 2024-02-22 15:08:24
+	 2	   44 ARCH    YES	2024-02-23 13:17:52 2024-02-23 22:01:48
+	 1	   45 ARCH    YES	2024-02-22 15:08:24 2024-02-23 00:30:06
+	 2	   45 ARCH    YES	2024-02-23 22:01:48 2024-02-24 00:30:06
+	 1	   46 ARCH    YES	2024-02-23 00:30:06 2024-02-23 00:30:12
+	 2	   46 ARCH    YES	2024-02-24 00:30:06 2024-02-24 00:30:15
+	 1	   47 ARCH    YES	2024-02-23 00:30:12 2024-02-23 00:32:28
+	 2	   47 ARCH    YES	2024-02-24 00:30:15 2024-02-24 00:32:35
+	 1	   48 ARCH    YES	2024-02-23 00:32:28 2024-02-23 00:32:37
+	 2	   48 ARCH    YES	2024-02-24 00:32:35 2024-02-24 00:32:44
+	 1	   49 ARCH    YES	2024-02-23 00:32:37 2024-02-23 00:32:43
+	 2	   49 ARCH    YES	2024-02-24 00:32:44 2024-02-24 00:32:47
+	 1	   50 ARCH    YES	2024-02-23 00:32:43 2024-02-23 15:18:24
+	 2	   50 ARCH    YES	2024-02-24 00:32:47 2024-02-24 13:00:15
+	 1	   51 ARCH    YES	2024-02-23 15:18:24 2024-02-24 00:30:09
+	 2	   51 ARCH    YES	2024-02-24 13:00:15 2024-02-25 00:30:07
+	 1	   52 ARCH    YES	2024-02-24 00:30:09 2024-02-24 00:30:15
+	 2	   52 ARCH    YES	2024-02-25 00:30:07 2024-02-25 00:30:15
+	 1	   53 ARCH    YES	2024-02-24 00:30:15 2024-02-24 00:32:36
+	 2	   53 ARCH    YES	2024-02-25 00:30:15 2024-02-25 00:32:35
+	 1	   54 ARCH    YES	2024-02-24 00:32:36 2024-02-24 00:32:45
+	 2	   54 ARCH    YES	2024-02-25 00:32:35 2024-02-25 00:32:39
+	 1	   55 ARCH    YES	2024-02-24 00:32:45 2024-02-24 00:32:48
+	 2	   55 ARCH    YES	2024-02-25 00:32:39 2024-02-25 00:32:46
+	 1	   56 ARCH    YES	2024-02-24 00:32:48 2024-02-24 10:04:09
+	 2	   56 ARCH    YES	2024-02-25 00:32:46 2024-02-25 08:15:47
+	 1	   57 ARCH    YES	2024-02-24 10:04:09 2024-02-24 22:00:15
+	 2	   57 ARCH    YES	2024-02-25 08:15:47 2024-02-26 00:30:13
+	 1	   58 ARCH    YES	2024-02-24 22:00:15 2024-02-25 00:30:07
+	 2	   58 ARCH    YES	2024-02-26 00:30:13 2024-02-26 00:30:24
+	 1	   59 ARCH    YES	2024-02-25 00:30:07 2024-02-25 00:30:19
+	 2	   59 ARCH    YES	2024-02-26 00:30:24 2024-02-26 00:33:28
+	 1	   60 ARCH    YES	2024-02-25 00:30:19 2024-02-25 00:32:35
+	 2	   60 ARCH    YES	2024-02-26 00:33:28 2024-02-26 00:33:37
+	 1	   61 ARCH    YES	2024-02-25 00:32:35 2024-02-25 00:32:44
+	 2	   61 ARCH    YES	2024-02-26 00:33:37 2024-02-26 00:33:44
+	 1	   62 ARCH    YES	2024-02-25 00:32:44 2024-02-25 00:32:47
+	 2	   62 ARCH    YES	2024-02-26 00:33:44 2024-02-26 11:05:14
+	 1	   63 ARCH    YES	2024-02-25 00:32:47 2024-02-25 10:04:20
+	 2	   63 ARCH    YES	2024-02-26 11:05:14 2024-02-27 00:30:05
+	 1	   64 ARCH    YES	2024-02-25 10:04:20 2024-02-25 19:32:26
+	 2	   64 ARCH    YES	2024-02-27 00:30:05 2024-02-27 00:30:13
+	 1	   65 ARCH    YES	2024-02-25 19:32:26 2024-02-26 00:30:07
+	 2	   65 ARCH    YES	2024-02-27 00:30:13 2024-02-27 00:32:27
+	 1	   66 ARCH    YES	2024-02-26 00:30:07 2024-02-26 00:30:27
+	 2	   66 ARCH    YES	2024-02-27 00:32:27 2024-02-27 00:32:37
+	 1	   67 ARCH    YES	2024-02-26 00:30:27 2024-02-26 00:33:30
+	 2	   67 ARCH    YES	2024-02-27 00:32:37 2024-02-27 00:32:40
+	 1	   68 ARCH    YES	2024-02-26 00:33:30 2024-02-26 00:33:43
+	 2	   68 ARCH    YES	2024-02-27 00:32:40 2024-02-27 13:00:54
+	 1	   69 ARCH    YES	2024-02-26 00:33:43 2024-02-26 00:33:49
+	 2	   69 ARCH    YES	2024-02-27 13:00:54 2024-02-28 00:30:08
+	 1	   70 ARCH    YES	2024-02-26 00:33:49 2024-02-26 15:03:14
+	 2	   70 ARCH    YES	2024-02-28 00:30:08 2024-02-28 00:30:15
+	 1	   71 ARCH    YES	2024-02-26 15:03:14 2024-02-26 23:37:31
+	 2	   71 ARCH    YES	2024-02-28 00:30:15 2024-02-28 00:32:24
+	 1	   72 ARCH    YES	2024-02-26 23:37:31 2024-02-27 00:30:06
+	 2	   72 ARCH    YES	2024-02-28 00:32:24 2024-02-28 00:32:29
+	 1	   73 ARCH    YES	2024-02-27 00:30:06 2024-02-27 00:30:12
+	 2	   73 ARCH    YES	2024-02-28 00:32:29 2024-02-28 00:32:35
+	 1	   74 ARCH    YES	2024-02-27 00:30:12 2024-02-27 00:32:28
+	 2	   74 ARCH    YES	2024-02-28 00:32:35 2024-02-28 13:00:31
+	 1	   75 ARCH    YES	2024-02-27 00:32:28 2024-02-27 00:32:37
+	 2	   75 ARCH    YES	2024-02-28 13:00:31 2024-02-28 22:02:50
+	 1	   76 ARCH    YES	2024-02-27 00:32:37 2024-02-27 00:32:40
+	 2	   76 ARCH    YES	2024-02-28 22:02:50 2024-02-29 00:30:05
+	 1	   77 ARCH    YES	2024-02-27 00:32:40 2024-02-27 14:00:20
+	 2	   77 ARCH    YES	2024-02-29 00:30:05 2024-02-29 00:30:12
+	 1	   78 ARCH    YES	2024-02-27 14:00:20 2024-02-27 22:02:17
+	 2	   78 ARCH    YES	2024-02-29 00:30:12 2024-02-29 00:32:29
+	 1	   79 ARCH    YES	2024-02-27 22:02:17 2024-02-28 00:30:09
+	 2	   79 ARCH    YES	2024-02-29 00:32:29 2024-02-29 00:32:38
+	 1	   80 ARCH    YES	2024-02-28 00:30:09 2024-02-28 00:30:15
+	 2	   80 ARCH    YES	2024-02-29 00:32:38 2024-02-29 00:32:44
+	 1	   81 ARCH    YES	2024-02-28 00:30:15 2024-02-28 00:32:24
+	 2	   81 ARCH    YES	2024-02-29 00:32:44 2024-02-29 13:00:29
+	 1	   82 ARCH    YES	2024-02-28 00:32:24 2024-02-28 00:32:33
+	 2	   82 ARCH    YES	2024-02-29 13:00:29 2024-03-01 00:30:06
+	 1	   83 ARCH    YES	2024-02-28 00:32:33 2024-02-28 00:32:39
+	 2	   83 ARCH    YES	2024-03-01 00:30:06 2024-03-01 00:30:15
+	 1	   84 ARCH    YES	2024-02-28 00:32:39 2024-02-28 14:00:19
+	 2	   84 ARCH    YES	2024-03-01 00:30:15 2024-03-01 00:32:35
+	 1	   85 ARCH    YES	2024-02-28 14:00:19 2024-02-29 00:30:07
+	 2	   85 ARCH    YES	2024-03-01 00:32:35 2024-03-01 00:32:41
+	 1	   86 ARCH    YES	2024-02-29 00:30:07 2024-02-29 00:30:13
+	 2	   86 ARCH    YES	2024-03-01 00:32:41 2024-03-01 00:32:48
+	 1	   87 ARCH    YES	2024-02-29 00:30:13 2024-02-29 00:32:30
+	 1	   88 ARCH    YES	2024-02-29 00:32:30 2024-02-29 00:32:39
+	 1	   89 ARCH    YES	2024-02-29 00:32:39 2024-02-29 00:32:45
+	 1	   90 ARCH    YES	2024-02-29 00:32:45 2024-02-29 17:00:53
+	 1	   91 ARCH    YES	2024-02-29 17:00:53 2024-02-29 23:59:49
+	 1	   92 ARCH    YES	2024-02-29 23:59:49 2024-03-01 00:30:06
+	 1	   93 ARCH    YES	2024-03-01 00:30:06 2024-03-01 00:30:15
+	 1	   94 ARCH    YES	2024-03-01 00:30:15 2024-03-01 00:32:35
+	 1	   95 ARCH    YES	2024-03-01 00:32:35 2024-03-01 00:32:47
+	 1	   96 ARCH    YES	2024-03-01 00:32:47 2024-03-01 00:32:53
+
+177 rows selected.
+
+#清理掉2天前的全部归档日志
+[oracle@k8s-oracle-store ~]$ cd /u01/app/oracle/fast_recovery_area/xydbdg/archivelog
+
+[oracle@k8s-oracle-store archivelog]$  find  -mtime +5 -name "*.dbf" -exec ls -lrt  {} \;
+
+[oracle@k8s-oracle-store archivelog]$ find  -mtime +5 -name "*.dbf" -exec rm -fr {} \;
+
+
+
+#清理磁盘空间后
+[oracle@k8s-oracle-store archivelog]$ df -h
+Filesystem           Size  Used Avail Use% Mounted on
+devtmpfs              16G     0   16G   0% /dev
+tmpfs                 16G     0   16G   0% /dev/shm
+tmpfs                 16G  433M   16G   3% /run
+tmpfs                 16G     0   16G   0% /sys/fs/cgroup
+/dev/mapper/ol-root   87G   62G   26G  71% /
+/dev/vda1           1014M  204M  811M  21% /boot
+tmpfs                3.2G     0  3.2G   0% /run/user/0
+[oracle@k8s-oracle-store archivelog]$ du -hs
+4.7G	.
+[oracle@k8s-oracle-store archivelog]$ 
+```
+
+
+
+#查询备库同步日志情况
+
+```sql
+SYS@xydbdg> select name,value,time_computed,datum_time from v$dataguard_stats;
+
+NAME				 VALUE								  TIME_COMPUTED 		 DATUM_TIME
+-------------------------------- ---------------------------------------------------------------- ------------------------------ ------------------------------
+transport lag			 +00 01:35:56							  03/01/2024 13:49:54		 03/01/2024 13:49:52
+apply lag			 +00 01:53:46							  03/01/2024 13:49:54		 03/01/2024 13:49:52
+apply finish time		 +00 00:04:15.788						  03/01/2024 13:49:54
+estimated startup time		 26								  03/01/2024 13:49:54
+
+
+SYS@xydbdg> ALTER DATABASE RECOVER MANAGED STANDBY DATABASE DISCONNECT;
+
+Database altered.
+```
+
+
+
+#再次查看alter_xydbdg.log日志
+
+#同步报错，因为卡在了datafile 35#文件
+
+```bash
+[oracle@k8s-oracle-store ~]$ tail -f /u01/app/oracle/diag/rdbms/xydbdg/xydbdg/trace/alert_xydbdg.log
+
+Starting background process MRP0
+2024-03-01T13:57:35.076944+08:00
+MRP0 started with pid=62, OS id=14683
+2024-03-01T13:57:35.078323+08:00
+Background Managed Standby Recovery process started (xydbdg)
+2024-03-01T13:57:40.135526+08:00
+ Started logmerger process
+2024-03-01T13:57:40.145958+08:00
+
+IM on ADG: Start of Empty Journal
+
+IM on ADG: End of Empty Journal
+PR00 (PID:15078): Managed Standby Recovery starting Real Time Apply
+2024-03-01T13:57:40.285162+08:00
+Errors in file /u01/app/oracle/diag/rdbms/xydbdg/xydbdg/trace/xydbdg_dbw0_7437.trc:
+ORA-01186: file 35 failed verification tests
+ORA-01157: cannot identify/lock data file 35 - see DBWR trace file
+ORA-01111: name for data file 35 is unknown - rename to correct file
+ORA-01110: data file 35: '/u01/app/oracle/product/19.0.0/db_1/dbs/UNNAMED00035'
+2024-03-01T13:57:40.285281+08:00
+File 35 not verified due to error ORA-01157
+2024-03-01T13:57:40.313298+08:00
+max_pdb is 5
+PR00 (PID:15078): MRP0: Background Media Recovery terminated with error 1111
+2024-03-01T13:57:40.333200+08:00
+Errors in file /u01/app/oracle/diag/rdbms/xydbdg/xydbdg/trace/xydbdg_pr00_15078.trc:
+ORA-01111: name for data file 35 is unknown - rename to correct file
+ORA-01110: data file 35: '/u01/app/oracle/product/19.0.0/db_1/dbs/UNNAMED00035'
+ORA-01157: cannot identify/lock data file 35 - see DBWR trace file
+ORA-01111: name for data file 35 is unknown - rename to correct file
+ORA-01110: data file 35: '/u01/app/oracle/product/19.0.0/db_1/dbs/UNNAMED00035'
+PR00 (PID:15078): Managed Standby Recovery not using Real Time Apply
+Stopping change tracking
+2024-03-01T13:57:40.480502+08:00
+Recovery Slave PR00 previously exited with exception 1111.
+2024-03-01T13:57:40.511154+08:00
+Errors in file /u01/app/oracle/diag/rdbms/xydbdg/xydbdg/trace/xydbdg_mrp0_14683.trc:
+ORA-01111: name for data file 35 is unknown - rename to correct file
+ORA-01110: data file 35: '/u01/app/oracle/product/19.0.0/db_1/dbs/UNNAMED00035'
+ORA-01157: cannot identify/lock data file 35 - see DBWR trace file
+ORA-01111: name for data file 35 is unknown - rename to correct file
+ORA-01110: data file 35: '/u01/app/oracle/product/19.0.0/db_1/dbs/UNNAMED00035'
+2024-03-01T13:57:40.511277+08:00
+Background Media Recovery process shutdown (xydbdg)
+2024-03-01T13:57:41.083648+08:00
+Completed: ALTER DATABASE RECOVER MANAGED STANDBY DATABASE DISCONNECT
+```
+
+
+
+#主、备库数据文件查询
+
+```sql
+-- 主库数据文件：
+SYS@xydb1> select file#,name from v$datafile;
+
+     FILE# NAME
+---------- --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+	19 +DATA/XYDB/1064B454582A4AA4E063610D12AC9D59/DATAFILE/system.292.1159901297
+	20 +DATA/XYDB/1064B454582A4AA4E063610D12AC9D59/DATAFILE/sysaux.284.1159901297
+	21 +DATA/XYDB/1064B454582A4AA4E063610D12AC9D59/DATAFILE/undotbs1.285.1159901297
+	22 +DATA/XYDB/1064B454582A4AA4E063610D12AC9D59/DATAFILE/pdb1user.294.1159902173
+	23 +DATA/XYDB/1064B454582A4AA4E063610D12AC9D59/DATAFILE/undo_2.295.1159902455
+	24 +DATA/XYDB/1064B454582A4AA4E063610D12AC9D59/DATAFILE/idc_data_standcode.296.1162468273
+	25 +DATA/XYDB/1064B454582A4AA4E063610D12AC9D59/DATAFILE/idc_data_standcode.297.1162468285
+	26 +DATA/XYDB/1064B454582A4AA4E063610D12AC9D59/DATAFILE/idc_data_standcode.298.1162468311
+	27 +DATA/XYDB/1064B454582A4AA4E063610D12AC9D59/DATAFILE/idc_data_dataquality.299.1162468333
+	28 +DATA/XYDB/1064B454582A4AA4E063610D12AC9D59/DATAFILE/idc_data_dataquality.300.1162468385
+	29 +DATA/XYDB/1064B454582A4AA4E063610D12AC9D59/DATAFILE/idc_data_dataquality.301.1162468399
+	30 +DATA/XYDB/1064B454582A4AA4E063610D12AC9D59/DATAFILE/idc_data_dataquality.302.1162468413
+	31 +DATA/XYDB/1064B454582A4AA4E063610D12AC9D59/DATAFILE/idc_data_sharedb.303.1162468429
+	32 +DATA/XYDB/1064B454582A4AA4E063610D12AC9D59/DATAFILE/idc_data_sharedb.304.1162468479
+	33 +DATA/XYDB/1064B454582A4AA4E063610D12AC9D59/DATAFILE/idc_data_sharedb.305.1162468491
+	34 +DATA/XYDB/1064B454582A4AA4E063610D12AC9D59/DATAFILE/idc_data_sharedb.306.1162468505
+	35 +DATA/XYDB/1064B454582A4AA4E063610D12AC9D59/DATAFILE/idc_data_sharedb.307.1162468517
+	36 +DATA/XYDB/1064B454582A4AA4E063610D12AC9D59/DATAFILE/idc_data_api.308.1162468535
+	37 +DATA/XYDB/1064B454582A4AA4E063610D12AC9D59/DATAFILE/idc_data_api.309.1162468579
+	38 +DATA/XYDB/1064B454582A4AA4E063610D12AC9D59/DATAFILE/idc_data_api.310.1162468593
+	39 +DATA/XYDB/1064B454582A4AA4E063610D12AC9D59/DATAFILE/idc_data_swopwork.311.1162468615
+	40 +DATA/XYDB/1064B454582A4AA4E063610D12AC9D59/DATAFILE/idc_data_swopwork.312.1162468629
+	41 +DATA/XYDB/1064B454582A4AA4E063610D12AC9D59/DATAFILE/idc_data_swopwork.313.1162468643
+	42 +DATA/XYDB/1064B454582A4AA4E063610D12AC9D59/DATAFILE/idc_data_assets.314.1162468657
+	43 +DATA/XYDB/1064B454582A4AA4E063610D12AC9D59/DATAFILE/idc_data_assets.315.1162468671
+	44 +DATA/XYDB/1064B454582A4AA4E063610D12AC9D59/DATAFILE/idc_data_assets.316.1162468685
+	45 +DATA/XYDB/1064B454582A4AA4E063610D12AC9D59/DATAFILE/idc_data_assets.317.1162468697
+	46 +DATA/XYDB/1064B454582A4AA4E063610D12AC9D59/DATAFILE/idc_data_assets.318.1162468711
+	47 +DATA/XYDB/1064B454582A4AA4E063610D12AC9D59/DATAFILE/users.319.1162468725
+	48 +DATA/XYDB/1064B454582A4AA4E063610D12AC9D59/DATAFILE/idc_data_swop.320.1162468725
+	49 +DATA/XYDB/1064B454582A4AA4E063610D12AC9D59/DATAFILE/idc_data_swop.321.1162468739
+	50 +DATA/XYDB/1064B454582A4AA4E063610D12AC9D59/DATAFILE/idc_data_swop.322.1162468753
+	51 +DATA/XYDB/1064B454582A4AA4E063610D12AC9D59/DATAFILE/idc_data_swop.323.1162468765
+
+33 rows selected.
+
+SYS@xydb1> 
+
+
+SYS@xydb1> select file_id,file_name from dba_data_files;
+
+   FILE_ID FILE_NAME
+---------- --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+	19 +DATA/XYDB/1064B454582A4AA4E063610D12AC9D59/DATAFILE/system.292.1159901297
+	20 +DATA/XYDB/1064B454582A4AA4E063610D12AC9D59/DATAFILE/sysaux.284.1159901297
+	21 +DATA/XYDB/1064B454582A4AA4E063610D12AC9D59/DATAFILE/undotbs1.285.1159901297
+	22 +DATA/XYDB/1064B454582A4AA4E063610D12AC9D59/DATAFILE/pdb1user.294.1159902173
+	23 +DATA/XYDB/1064B454582A4AA4E063610D12AC9D59/DATAFILE/undo_2.295.1159902455
+	24 +DATA/XYDB/1064B454582A4AA4E063610D12AC9D59/DATAFILE/idc_data_standcode.296.1162468273
+	25 +DATA/XYDB/1064B454582A4AA4E063610D12AC9D59/DATAFILE/idc_data_standcode.297.1162468285
+	26 +DATA/XYDB/1064B454582A4AA4E063610D12AC9D59/DATAFILE/idc_data_standcode.298.1162468311
+	27 +DATA/XYDB/1064B454582A4AA4E063610D12AC9D59/DATAFILE/idc_data_dataquality.299.1162468333
+	28 +DATA/XYDB/1064B454582A4AA4E063610D12AC9D59/DATAFILE/idc_data_dataquality.300.1162468385
+	29 +DATA/XYDB/1064B454582A4AA4E063610D12AC9D59/DATAFILE/idc_data_dataquality.301.1162468399
+	30 +DATA/XYDB/1064B454582A4AA4E063610D12AC9D59/DATAFILE/idc_data_dataquality.302.1162468413
+	31 +DATA/XYDB/1064B454582A4AA4E063610D12AC9D59/DATAFILE/idc_data_sharedb.303.1162468429
+	32 +DATA/XYDB/1064B454582A4AA4E063610D12AC9D59/DATAFILE/idc_data_sharedb.304.1162468479
+	33 +DATA/XYDB/1064B454582A4AA4E063610D12AC9D59/DATAFILE/idc_data_sharedb.305.1162468491
+	34 +DATA/XYDB/1064B454582A4AA4E063610D12AC9D59/DATAFILE/idc_data_sharedb.306.1162468505
+	35 +DATA/XYDB/1064B454582A4AA4E063610D12AC9D59/DATAFILE/idc_data_sharedb.307.1162468517
+	36 +DATA/XYDB/1064B454582A4AA4E063610D12AC9D59/DATAFILE/idc_data_api.308.1162468535
+	37 +DATA/XYDB/1064B454582A4AA4E063610D12AC9D59/DATAFILE/idc_data_api.309.1162468579
+	38 +DATA/XYDB/1064B454582A4AA4E063610D12AC9D59/DATAFILE/idc_data_api.310.1162468593
+	39 +DATA/XYDB/1064B454582A4AA4E063610D12AC9D59/DATAFILE/idc_data_swopwork.311.1162468615
+	40 +DATA/XYDB/1064B454582A4AA4E063610D12AC9D59/DATAFILE/idc_data_swopwork.312.1162468629
+	41 +DATA/XYDB/1064B454582A4AA4E063610D12AC9D59/DATAFILE/idc_data_swopwork.313.1162468643
+	42 +DATA/XYDB/1064B454582A4AA4E063610D12AC9D59/DATAFILE/idc_data_assets.314.1162468657
+	43 +DATA/XYDB/1064B454582A4AA4E063610D12AC9D59/DATAFILE/idc_data_assets.315.1162468671
+	44 +DATA/XYDB/1064B454582A4AA4E063610D12AC9D59/DATAFILE/idc_data_assets.316.1162468685
+	45 +DATA/XYDB/1064B454582A4AA4E063610D12AC9D59/DATAFILE/idc_data_assets.317.1162468697
+	46 +DATA/XYDB/1064B454582A4AA4E063610D12AC9D59/DATAFILE/idc_data_assets.318.1162468711
+	47 +DATA/XYDB/1064B454582A4AA4E063610D12AC9D59/DATAFILE/users.319.1162468725
+	48 +DATA/XYDB/1064B454582A4AA4E063610D12AC9D59/DATAFILE/idc_data_swop.320.1162468725
+	49 +DATA/XYDB/1064B454582A4AA4E063610D12AC9D59/DATAFILE/idc_data_swop.321.1162468739
+	50 +DATA/XYDB/1064B454582A4AA4E063610D12AC9D59/DATAFILE/idc_data_swop.322.1162468753
+	51 +DATA/XYDB/1064B454582A4AA4E063610D12AC9D59/DATAFILE/idc_data_swop.323.1162468765
+
+33 rows selected.
+
+SYS@xydb1> 
+
+
+
+--备库数据文件：
+SYS@xydbdg> alter session set container=dataassets;
+
+Session altered.
+
+SYS@xydbdg> set linesize 300
+SYS@xydbdg> col name format a200
+SYS@xydbdg> col file_name format a200
+SYS@xydbdg> select file#,name from v$datafile;
+
+     FILE# NAME
+---------- --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+	19 /u01/app/oracle/oradata/xydbdg/datafile/xydb/1064b454582a4aa4e063610d12ac9d59/datafile/system.292.1159901297
+	20 /u01/app/oracle/oradata/xydbdg/datafile/xydb/1064b454582a4aa4e063610d12ac9d59/datafile/sysaux.284.1159901297
+	21 /u01/app/oracle/oradata/xydbdg/datafile/xydb/1064b454582a4aa4e063610d12ac9d59/datafile/undotbs1.285.1159901297
+	22 /u01/app/oracle/oradata/xydbdg/datafile/xydb/1064b454582a4aa4e063610d12ac9d59/datafile/pdb1user.294.1159902173
+	23 /u01/app/oracle/oradata/xydbdg/datafile/xydb/1064b454582a4aa4e063610d12ac9d59/datafile/undo_2.295.1159902455
+	24 /u01/app/oracle/oradata/xydbdg/datafile/xydb/1064b454582a4aa4e063610d12ac9d59/datafile/idc_data_standcode.296.1162468273
+	25 /u01/app/oracle/oradata/xydbdg/datafile/xydb/1064b454582a4aa4e063610d12ac9d59/datafile/idc_data_standcode.297.1162468285
+	26 /u01/app/oracle/oradata/xydbdg/datafile/xydb/1064b454582a4aa4e063610d12ac9d59/datafile/idc_data_standcode.298.1162468311
+	27 /u01/app/oracle/oradata/xydbdg/datafile/xydb/1064b454582a4aa4e063610d12ac9d59/datafile/idc_data_dataquality.299.1162468333
+	28 /u01/app/oracle/oradata/xydbdg/datafile/xydb/1064b454582a4aa4e063610d12ac9d59/datafile/idc_data_dataquality.300.1162468385
+	29 /u01/app/oracle/oradata/xydbdg/datafile/xydb/1064b454582a4aa4e063610d12ac9d59/datafile/idc_data_dataquality.301.1162468399
+	30 /u01/app/oracle/oradata/xydbdg/datafile/xydb/1064b454582a4aa4e063610d12ac9d59/datafile/idc_data_dataquality.302.1162468413
+	31 /u01/app/oracle/oradata/xydbdg/datafile/xydb/1064b454582a4aa4e063610d12ac9d59/datafile/idc_data_sharedb.303.1162468429
+	32 /u01/app/oracle/oradata/xydbdg/datafile/xydb/1064b454582a4aa4e063610d12ac9d59/datafile/idc_data_sharedb.304.1162468479
+	33 /u01/app/oracle/oradata/xydbdg/datafile/xydb/1064b454582a4aa4e063610d12ac9d59/datafile/idc_data_sharedb.305.1162468491
+	34 /u01/app/oracle/oradata/xydbdg/datafile/xydb/1064b454582a4aa4e063610d12ac9d59/datafile/idc_data_sharedb.306.1162468505
+	35  /u01/app/oracle/product/19.0.0/db_1/dbs/UNNAMED00035
+
+17 rows selected.
+
+SYS@xydbdg> select file_id,file_name from dba_data_files;
+
+   FILE_ID FILE_NAME
+---------- ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+	19 /u01/app/oracle/oradata/xydbdg/datafile/xydb/1064b454582a4aa4e063610d12ac9d59/datafile/system.292.1159901297
+	20 /u01/app/oracle/oradata/xydbdg/datafile/xydb/1064b454582a4aa4e063610d12ac9d59/datafile/sysaux.284.1159901297
+	21 /u01/app/oracle/oradata/xydbdg/datafile/xydb/1064b454582a4aa4e063610d12ac9d59/datafile/undotbs1.285.1159901297
+	22 /u01/app/oracle/oradata/xydbdg/datafile/xydb/1064b454582a4aa4e063610d12ac9d59/datafile/pdb1user.294.1159902173
+	23 /u01/app/oracle/oradata/xydbdg/datafile/xydb/1064b454582a4aa4e063610d12ac9d59/datafile/undo_2.295.1159902455
+	24 /u01/app/oracle/oradata/xydbdg/datafile/xydb/1064b454582a4aa4e063610d12ac9d59/datafile/idc_data_standcode.296.1162468273
+	25 /u01/app/oracle/oradata/xydbdg/datafile/xydb/1064b454582a4aa4e063610d12ac9d59/datafile/idc_data_standcode.297.1162468285
+	26 /u01/app/oracle/oradata/xydbdg/datafile/xydb/1064b454582a4aa4e063610d12ac9d59/datafile/idc_data_standcode.298.1162468311
+	27 /u01/app/oracle/oradata/xydbdg/datafile/xydb/1064b454582a4aa4e063610d12ac9d59/datafile/idc_data_dataquality.299.1162468333
+	28 /u01/app/oracle/oradata/xydbdg/datafile/xydb/1064b454582a4aa4e063610d12ac9d59/datafile/idc_data_dataquality.300.1162468385
+	29 /u01/app/oracle/oradata/xydbdg/datafile/xydb/1064b454582a4aa4e063610d12ac9d59/datafile/idc_data_dataquality.301.1162468399
+	30 /u01/app/oracle/oradata/xydbdg/datafile/xydb/1064b454582a4aa4e063610d12ac9d59/datafile/idc_data_dataquality.302.1162468413
+
+12 rows selected.
+
+```
+
+
+
+
+
+#查询归档日志是否跟主库同步完毕
+
+```sql
+#备库
+SYS@xydbdg> select sequence#,first_time,next_time,applied from v$archived_log order by sequence#;
+
+ SEQUENCE# FIRST_TIME	       NEXT_TIME	   APPLIED
+---------- ------------------- ------------------- ---------
+	 3 2024-02-17 17:07:48 2024-02-17 17:15:24 YES
+	 4 2024-02-17 17:07:26 2024-02-17 17:15:23 YES
+	 4 2024-02-17 17:16:43 2024-02-17 17:16:52 YES
+...........................
+	65 2024-02-27 00:30:13 2024-02-27 00:32:27 YES
+	66 2024-02-26 00:30:07 2024-02-26 00:30:27 YES
+	66 2024-02-27 00:32:27 2024-02-27 00:32:37 YES
+	67 2024-02-26 00:30:27 2024-02-26 00:33:30 YES
+	67 2024-02-27 00:32:37 2024-02-27 00:32:40 YES
+	68 2024-02-26 00:33:30 2024-02-26 00:33:43 YES
+	68 2024-02-27 00:32:40 2024-02-27 13:00:54 YES
+	69 2024-02-26 00:33:43 2024-02-26 00:33:49 YES
+	69 2024-02-27 13:00:54 2024-02-28 00:30:08 YES
+	70 2024-02-26 00:33:49 2024-02-26 15:03:14 YES
+	70 2024-02-28 00:30:08 2024-02-28 00:30:15 YES
+	71 2024-02-28 00:30:15 2024-02-28 00:32:24 YES
+	71 2024-02-26 15:03:14 2024-02-26 23:37:31 YES
+	72 2024-02-28 00:32:24 2024-02-28 00:32:29 YES
+	72 2024-02-26 23:37:31 2024-02-27 00:30:06 YES
+	73 2024-02-28 00:32:29 2024-02-28 00:32:35 YES
+	73 2024-02-27 00:30:06 2024-02-27 00:30:12 YES
+	74 2024-02-28 00:32:35 2024-02-28 13:00:31 YES
+	74 2024-02-27 00:30:12 2024-02-27 00:32:28 YES
+	75 2024-02-27 00:32:28 2024-02-27 00:32:37 YES
+	75 2024-02-28 13:00:31 2024-02-28 22:02:50 YES
+	76 2024-02-27 00:32:37 2024-02-27 00:32:40 YES
+	76 2024-02-28 22:02:50 2024-02-29 00:30:05 YES
+	77 2024-02-29 00:30:05 2024-02-29 00:30:12 YES
+	77 2024-02-27 00:32:40 2024-02-27 14:00:20 YES
+	78 2024-02-29 00:30:12 2024-02-29 00:32:29 YES
+	78 2024-02-27 14:00:20 2024-02-27 22:02:17 YES
+	79 2024-02-27 22:02:17 2024-02-28 00:30:09 YES
+	79 2024-02-29 00:32:29 2024-02-29 00:32:38 YES
+	80 2024-02-28 00:30:09 2024-02-28 00:30:15 YES
+	80 2024-02-29 00:32:38 2024-02-29 00:32:44 YES
+	81 2024-02-29 00:32:44 2024-02-29 13:00:29 YES
+	81 2024-02-28 00:30:15 2024-02-28 00:32:24 YES
+	82 2024-02-29 13:00:29 2024-03-01 00:30:06 YES
+	82 2024-02-28 00:32:24 2024-02-28 00:32:33 YES
+	83 2024-03-01 00:30:06 2024-03-01 00:30:15 YES
+	83 2024-02-28 00:32:33 2024-02-28 00:32:39 YES
+	84 2024-03-01 00:30:15 2024-03-01 00:32:35 YES
+	84 2024-02-28 00:32:39 2024-02-28 14:00:19 YES
+	85 2024-02-28 14:00:19 2024-02-29 00:30:07 YES
+	85 2024-03-01 00:32:35 2024-03-01 00:32:41 YES
+	86 2024-02-29 00:30:07 2024-02-29 00:30:13 YES
+	86 2024-03-01 00:32:41 2024-03-01 00:32:48 YES
+	87 2024-02-29 00:30:13 2024-02-29 00:32:30 YES
+	87 2024-03-01 00:32:48 2024-03-01 12:04:06 NO
+	88 2024-02-29 00:32:30 2024-02-29 00:32:39 YES
+	89 2024-02-29 00:32:39 2024-02-29 00:32:45 YES
+	90 2024-02-29 00:32:45 2024-02-29 17:00:53 YES
+	91 2024-02-29 17:00:53 2024-02-29 23:59:49 YES
+	92 2024-02-29 23:59:49 2024-03-01 00:30:06 YES
+	93 2024-03-01 00:30:06 2024-03-01 00:30:15 YES
+	94 2024-03-01 00:30:15 2024-03-01 00:32:35 YES
+	95 2024-03-01 00:32:35 2024-03-01 00:32:47 YES
+	96 2024-03-01 00:32:47 2024-03-01 00:32:53 YES
+	97 2024-03-01 00:32:53 2024-03-01 12:00:47 NO
+	98 2024-03-01 12:00:47 2024-03-01 12:04:06 NO
+	99 2024-03-01 12:04:06 2024-03-01 12:04:40 NO
+    100 2024-03-01 12:04:40 2024-03-01 12:13:13 NO
+
+183 rows selected.
+
+SYS@xydbdg> 
+
+
+SYS@xydbdg>  select max(sequence#)  from v$archived_log;
+
+MAX(SEQUENCE#)
+--------------
+	   100
+
+SYS@xydbdg> select max(sequence#) from v$archived_log where applied='YES'; 
+
+MAX(SEQUENCE#)
+--------------
+	    96
+
+
+
+#主库
+SYS@xydb1> archive log list;
+Database log mode	       Archive Mode
+Automatic archival	       Enabled
+Archive destination	       +FRA
+Oldest online log sequence     100
+Next log sequence to archive   101
+Current log sequence	       101
+SYS@xydb1> 
+
+
+SYS@xydb1> SELECT SEQUENCE#, NAME FROM V$ARCHIVED_LOG WHERE SEQUENCE# > 100 ORDER BY SEQUENCE#;
+
+ SEQUENCE# NAME
+---------- --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+       481
+
+SYS@xydb1> 
+
+```
+
+
+
+
+
+#在备库针对报错的35号文件进行手动修改：
+
+```sql
+#SYS@xydbdg> alter database rename file '/u01/app/oracle/product/19.0.0/db_1/dbs/UNNAMED00035' to '/u01/app/oracle/oradata/xydbdg/datafile/xydb/1064b454582a4aa4e063610d12ac9d59/datafile/idc_data_sharedb.307.1162468517';
+#alter database rename file '/u01/app/oracle/product/19.0.0/db_1/dbs/UNNAMED00035' to '/u01/app/oracle/oradata/xydbdg/datafile/xydb/1064b454582a4aa4e063610d12ac9d59/datafile/idc_data_sharedb.307.1162468517'
+*
+#ERROR at line 1:
+#ORA-01275: Operation RENAME is not allowed if standby file management is automatic.
+
+
+SYS@xydbdg> alter database create datafile '/u01/app/oracle/product/19.0.0/db_1/dbs/UNNAMED00035' as '/u01/app/oracle/oradata/xydbdg/datafile/xydb/1064b454582a4aa4e063610d12ac9d59/datafile/idc_data_sharedb.307.1162468517';
+
+ERROR at line 1:
+ORA-01275: Operation RENAME is not allowed if standby file management is automatic.
+```
+
+#先改成manual，再创建数据文件
+
+```sql
+SYS@xydbdg> select name,open_mode,database_role from v$database;
+
+NAME	  OPEN_MODE	       DATABASE_ROLE
+--------- -------------------- ----------------
+XYDB	  READ ONLY	       PHYSICAL STANDBY
+
+SYS@xydbdg> 
+
+SYS@xydbdg> shutdown immediate;
+Database closed.
+Database dismounted.
+ORACLE instance shut down.
+SYS@xydbdg> startup mount; 
+ORACLE instance started.
+
+Total System Global Area 1.6106E+10 bytes
+Fixed Size		   18625040 bytes
+Variable Size		 2181038080 bytes
+Database Buffers	 1.3892E+10 bytes
+Redo Buffers		   14925824 bytes
+Database mounted.
+SYS@xydbdg> select name,open_mode,database_role from v$database;
+
+NAME	  OPEN_MODE	       DATABASE_ROLE
+--------- -------------------- ----------------
+XYDB	  MOUNTED	       PHYSICAL STANDBY
+
+SYS@xydbdg> 
+
+#在cdb下执行报错
+SYS@xydbdg> alter database create datafile '/u01/app/oracle/product/19.0.0/db_1/dbs/UNNAMED00035' as '/u01/app/oracle/oradata/xydbdg/datafile/xydb/1064b454582a4aa4e063610d12ac9d59/datafile/idc_data_sharedb.307.1162468517';
+alter database create datafile '/u01/app/oracle/product/19.0.0/db_1/dbs/UNNAMED00035' as '/u01/app/oracle/oradata/xydbdg/datafile/xydb/1064b454582a4aa4e063610d12ac9d59/datafile/idc_data_sharedb.307.1162468517'
+*
+ERROR at line 1:
+ORA-01516: nonexistent log file, data file, or temporary file "/u01/app/oracle/product/19.0.0/db_1/dbs/UNNAMED00035" in the current container
+
+
+
+SYS@xydbdg> show pdbs;
+
+    CON_ID CON_NAME			  OPEN MODE  RESTRICTED
+---------- ------------------------------ ---------- ----------
+	 2 PDB$SEED			  MOUNTED
+	 3 STUWORK			  MOUNTED
+	 4 PORTAL			  MOUNTED
+	 5 DATAASSETS			  MOUNTED
+	 
+	 
+#必须切换到相关pdb下执行才可以
+SYS@xydbdg> alter session set container=dataassets;
+
+Session altered.
+
+SYS@xydbdg> alter database create datafile '/u01/app/oracle/product/19.0.0/db_1/dbs/UNNAMED00035' as '/u01/app/oracle/oradata/xydbdg/datafile/xydb/1064b454582a4aa4e063610d12ac9d59/datafile/idc_data_sharedb.307.1162468517';
+
+Database altered.
+
+SYS@xydbdg> 
+
+SYS@xydbdg> select file#,name from v$datafile where file#=35;
+
+     FILE# NAME
+---------- ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+	35 /u01/app/oracle/oradata/xydbdg/datafile/xydb/1064b454582a4aa4e063610d12ac9d59/datafile/idc_data_sharedb.307.1162468517
+
+SYS@xydbdg> 
+SYS@xydbdg> alter system set standby_file_management=auto;
+alter system set standby_file_management=auto
+*
+ERROR at line 1:
+ORA-65040: operation not allowed from within a pluggable database
+
+
+SYS@xydbdg> 
+
+#再次切换到cdb执行，修改为auto
+SYS@xydbdg> alter session set container=cdb$root;
+
+Session altered.
+
+SYS@xydbdg> alter system set standby_file_management=auto;
+
+System altered.
+
+SYS@xydbdg> show parameter standby;
+
+NAME				     TYPE	 VALUE
+------------------------------------ ----------- ------------------------------
+enabled_PDBs_on_standby 	     string	 *
+standby_db_preserve_states	     string	 NONE
+standby_file_management 	     string	 AUTO
+standby_pdb_source_file_dblink	     string
+standby_pdb_source_file_directory    string
+SYS@xydbdg> 
+
+
+#再次执行同步
+SYS@xydbdg> ALTER DATABASE RECOVER MANAGED STANDBY DATABASE DISCONNECT;
+
+Database altered.
+
+SYS@xydbdg> select process,status,thread#,sequence#,block# from v$managed_standby;
+
+PROCESS   STATUS	  THREAD#  SEQUENCE#	 BLOCK#
+--------- ------------ ---------- ---------- ----------
+ARCH	  CONNECTED		0	   0	      0
+DGRD	  ALLOCATED		0	   0	      0
+DGRD	  ALLOCATED		0	   0	      0
+ARCH	  CONNECTED		0	   0	      0
+ARCH	  CONNECTED		0	   0	      0
+ARCH	  CONNECTED		0	   0	      0
+RFS	  WRITING		2	  88	 104008
+RFS	  IDLE			1	   0	      0
+RFS	  WRITING		1	 101	 309690
+RFS	  IDLE			2	   0	      0
+MRP0	  APPLYING_LOG		2	  87	 319599
+
+11 rows selected.
+
+SYS@xydbdg> select process,status,thread#,sequence#,block# from v$managed_standby;
+
+PROCESS   STATUS	  THREAD#  SEQUENCE#	 BLOCK#
+--------- ------------ ---------- ---------- ----------
+ARCH	  CONNECTED		0	   0	      0
+DGRD	  ALLOCATED		0	   0	      0
+DGRD	  ALLOCATED		0	   0	      0
+ARCH	  CONNECTED		0	   0	      0
+ARCH	  CONNECTED		0	   0	      0
+ARCH	  CONNECTED		0	   0	      0
+RFS	  IDLE			2	  88	 104456
+RFS	  IDLE			1	   0	      0
+RFS	  IDLE			1	 101	 310425
+RFS	  IDLE			2	   0	      0
+MRP0	  APPLYING_LOG		1	 101	 310424
+
+11 rows selected.
+
+SYS@xydbdg> select sequence#,first_time,next_time,applied from v$archived_log order by sequence#;
+
+ SEQUENCE# FIRST_TIME	       NEXT_TIME	   APPLIED
+---------- ------------------- ------------------- ---------
+	 3 2024-02-17 17:07:48 2024-02-17 17:15:24 YES
+	 4 2024-02-17 17:07:26 2024-02-17 17:15:23 YES
+	 4 2024-02-17 17:16:43 2024-02-17 17:16:52 YES
+	 5 2024-02-17 17:36:23 2024-02-17 17:36:23 YES
+	 6 2024-02-17 17:16:51 2024-02-17 17:34:57 YES
+	 6 2024-02-17 17:16:51 2024-02-17 17:34:57 YES
+	 6 2024-02-17 17:36:23 2024-02-18 00:30:07 YES
+	 7 2024-02-17 17:34:57 2024-02-17 17:36:08 NO
+	 7 2024-02-17 17:34:57 2024-02-17 17:36:08 YES
+	 7 2024-02-18 00:30:07 2024-02-18 00:30:18 YES
+	 8 2024-02-17 17:35:56 2024-02-17 17:36:15 YES
+	 8 2024-02-18 00:30:18 2024-02-18 00:33:01 YES
+	 9 2024-02-17 17:36:15 2024-02-18 00:30:09 YES
+	 9 2024-02-18 00:33:01 2024-02-18 00:33:09 YES
+	10 2024-02-18 00:30:09 2024-02-18 00:30:18 YES
+	10 2024-02-18 00:33:09 2024-02-18 00:33:14 YES
+	11 2024-02-18 00:30:18 2024-02-18 00:30:21 YES
+	11 2024-02-18 00:33:14 2024-02-18 18:00:10 YES
+	12 2024-02-18 00:30:21 2024-02-18 00:33:01 YES
+	12 2024-02-18 18:00:10 2024-02-18 23:00:36 YES
+	13 2024-02-18 00:33:01 2024-02-18 00:33:13 YES
+	13 2024-02-18 23:00:36 2024-02-19 00:30:06 YES
+	14 2024-02-18 00:33:13 2024-02-18 00:33:16 YES
+	14 2024-02-19 00:30:06 2024-02-19 00:30:14 YES
+	15 2024-02-18 00:33:16 2024-02-18 09:02:46 YES
+	15 2024-02-19 00:30:14 2024-02-19 00:32:53 YES
+	16 2024-02-18 09:02:46 2024-02-18 18:00:10 YES
+	16 2024-02-19 00:32:53 2024-02-19 00:33:01 YES
+	17 2024-02-18 18:00:10 2024-02-19 00:30:07 YES
+	17 2024-02-19 00:33:01 2024-02-19 00:33:07 YES
+	18 2024-02-19 00:30:07 2024-02-19 00:30:13 YES
+	18 2024-02-19 00:33:07 2024-02-19 19:46:07 YES
+	19 2024-02-19 00:30:13 2024-02-19 00:32:55 YES
+	19 2024-02-19 19:46:07 2024-02-20 00:30:06 YES
+	20 2024-02-19 00:32:55 2024-02-19 00:33:04 YES
+	20 2024-02-20 00:30:06 2024-02-20 00:30:15 YES
+	21 2024-02-19 00:33:04 2024-02-19 00:33:10 YES
+	21 2024-02-20 00:30:15 2024-02-20 00:32:19 YES
+	22 2024-02-19 00:33:10 2024-02-19 15:00:51 YES
+	22 2024-02-20 00:32:19 2024-02-20 00:32:28 YES
+	23 2024-02-19 15:00:51 2024-02-20 00:30:07 YES
+	23 2024-02-20 00:32:28 2024-02-20 00:32:31 YES
+	24 2024-02-20 00:30:07 2024-02-20 00:30:16 YES
+	24 2024-02-20 00:32:31 2024-02-20 10:00:51 YES
+	25 2024-02-20 00:30:16 2024-02-20 00:32:19 YES
+	25 2024-02-20 10:00:51 2024-02-21 00:30:07 YES
+	26 2024-02-20 00:32:19 2024-02-20 00:32:28 YES
+	26 2024-02-21 00:30:07 2024-02-21 00:30:14 YES
+	27 2024-02-20 00:32:28 2024-02-20 00:32:32 YES
+	27 2024-02-21 00:30:14 2024-02-21 00:32:27 YES
+	28 2024-02-20 00:32:32 2024-02-20 00:32:35 YES
+	28 2024-02-21 00:32:27 2024-02-21 00:32:38 YES
+	29 2024-02-20 00:32:35 2024-02-20 14:00:14 YES
+	29 2024-02-21 00:32:38 2024-02-21 00:32:44 YES
+	30 2024-02-20 14:00:14 2024-02-20 22:02:21 YES
+	30 2024-02-21 00:32:44 2024-02-21 13:00:09 YES
+	31 2024-02-20 22:02:21 2024-02-21 00:30:08 YES
+	31 2024-02-21 13:00:09 2024-02-22 00:30:06 YES
+	32 2024-02-21 00:30:08 2024-02-21 00:30:14 YES
+	32 2024-02-22 00:30:06 2024-02-22 00:30:18 YES
+	33 2024-02-21 00:30:14 2024-02-21 00:32:30 YES
+	33 2024-02-22 00:30:18 2024-02-22 00:32:30 YES
+	34 2024-02-21 00:32:30 2024-02-21 00:32:39 YES
+	34 2024-02-22 00:32:30 2024-02-22 00:32:36 YES
+	35 2024-02-21 00:32:39 2024-02-21 00:32:45 YES
+	35 2024-02-22 00:32:36 2024-02-22 00:32:42 YES
+	36 2024-02-21 00:32:45 2024-02-21 00:32:51 YES
+	36 2024-02-22 00:32:42 2024-02-22 13:08:42 YES
+	37 2024-02-21 00:32:51 2024-02-21 13:00:09 YES
+	37 2024-02-22 13:08:42 2024-02-22 22:02:00 YES
+	38 2024-02-21 13:00:09 2024-02-21 22:01:20 YES
+	38 2024-02-22 22:02:00 2024-02-23 00:30:06 YES
+	39 2024-02-21 22:01:20 2024-02-22 00:30:06 YES
+	39 2024-02-23 00:30:06 2024-02-23 00:30:14 YES
+	40 2024-02-22 00:30:06 2024-02-22 00:30:18 YES
+	40 2024-02-23 00:30:14 2024-02-23 00:32:26 YES
+	41 2024-02-22 00:30:18 2024-02-22 00:32:29 YES
+	41 2024-02-23 00:32:26 2024-02-23 00:32:33 YES
+	42 2024-02-22 00:32:29 2024-02-22 00:32:41 YES
+	42 2024-02-23 00:32:33 2024-02-23 00:32:39 YES
+	43 2024-02-22 00:32:41 2024-02-22 00:32:44 YES
+	43 2024-02-23 00:32:39 2024-02-23 13:17:52 YES
+	44 2024-02-22 00:32:44 2024-02-22 15:08:24 YES
+	44 2024-02-23 13:17:52 2024-02-23 22:01:48 YES
+	45 2024-02-22 15:08:24 2024-02-23 00:30:06 YES
+	45 2024-02-23 22:01:48 2024-02-24 00:30:06 YES
+	46 2024-02-23 00:30:06 2024-02-23 00:30:12 YES
+	46 2024-02-24 00:30:06 2024-02-24 00:30:15 YES
+	47 2024-02-24 00:30:15 2024-02-24 00:32:35 YES
+	47 2024-02-23 00:30:12 2024-02-23 00:32:28 YES
+	48 2024-02-23 00:32:28 2024-02-23 00:32:37 YES
+	48 2024-02-24 00:32:35 2024-02-24 00:32:44 YES
+	49 2024-02-23 00:32:37 2024-02-23 00:32:43 YES
+	49 2024-02-24 00:32:44 2024-02-24 00:32:47 YES
+	50 2024-02-23 00:32:43 2024-02-23 15:18:24 YES
+	50 2024-02-24 00:32:47 2024-02-24 13:00:15 YES
+	51 2024-02-24 13:00:15 2024-02-25 00:30:07 YES
+	51 2024-02-23 15:18:24 2024-02-24 00:30:09 YES
+	52 2024-02-25 00:30:07 2024-02-25 00:30:15 YES
+	52 2024-02-24 00:30:09 2024-02-24 00:30:15 YES
+	53 2024-02-25 00:30:15 2024-02-25 00:32:35 YES
+	53 2024-02-24 00:30:15 2024-02-24 00:32:36 YES
+	54 2024-02-24 00:32:36 2024-02-24 00:32:45 YES
+	54 2024-02-25 00:32:35 2024-02-25 00:32:39 YES
+	55 2024-02-24 00:32:45 2024-02-24 00:32:48 YES
+	55 2024-02-25 00:32:39 2024-02-25 00:32:46 YES
+	56 2024-02-24 00:32:48 2024-02-24 10:04:09 YES
+	56 2024-02-25 00:32:46 2024-02-25 08:15:47 YES
+	57 2024-02-25 08:15:47 2024-02-26 00:30:13 YES
+	57 2024-02-24 10:04:09 2024-02-24 22:00:15 YES
+	58 2024-02-24 22:00:15 2024-02-25 00:30:07 YES
+	58 2024-02-26 00:30:13 2024-02-26 00:30:24 YES
+	59 2024-02-26 00:30:24 2024-02-26 00:33:28 YES
+	59 2024-02-25 00:30:07 2024-02-25 00:30:19 YES
+	60 2024-02-25 00:30:19 2024-02-25 00:32:35 YES
+	60 2024-02-26 00:33:28 2024-02-26 00:33:37 YES
+	61 2024-02-26 00:33:37 2024-02-26 00:33:44 YES
+	61 2024-02-25 00:32:35 2024-02-25 00:32:44 YES
+	62 2024-02-25 00:32:44 2024-02-25 00:32:47 YES
+	62 2024-02-26 00:33:44 2024-02-26 11:05:14 YES
+	63 2024-02-25 00:32:47 2024-02-25 10:04:20 YES
+	63 2024-02-26 11:05:14 2024-02-27 00:30:05 YES
+	64 2024-02-25 10:04:20 2024-02-25 19:32:26 YES
+	64 2024-02-27 00:30:05 2024-02-27 00:30:13 YES
+	65 2024-02-25 19:32:26 2024-02-26 00:30:07 YES
+	65 2024-02-27 00:30:13 2024-02-27 00:32:27 YES
+	66 2024-02-26 00:30:07 2024-02-26 00:30:27 YES
+	66 2024-02-27 00:32:27 2024-02-27 00:32:37 YES
+	67 2024-02-26 00:30:27 2024-02-26 00:33:30 YES
+	67 2024-02-27 00:32:37 2024-02-27 00:32:40 YES
+	68 2024-02-26 00:33:30 2024-02-26 00:33:43 YES
+	68 2024-02-27 00:32:40 2024-02-27 13:00:54 YES
+	69 2024-02-26 00:33:43 2024-02-26 00:33:49 YES
+	69 2024-02-27 13:00:54 2024-02-28 00:30:08 YES
+	70 2024-02-26 00:33:49 2024-02-26 15:03:14 YES
+	70 2024-02-28 00:30:08 2024-02-28 00:30:15 YES
+	71 2024-02-28 00:30:15 2024-02-28 00:32:24 YES
+	71 2024-02-26 15:03:14 2024-02-26 23:37:31 YES
+	72 2024-02-28 00:32:24 2024-02-28 00:32:29 YES
+	72 2024-02-26 23:37:31 2024-02-27 00:30:06 YES
+	73 2024-02-28 00:32:29 2024-02-28 00:32:35 YES
+	73 2024-02-27 00:30:06 2024-02-27 00:30:12 YES
+	74 2024-02-28 00:32:35 2024-02-28 13:00:31 YES
+	74 2024-02-27 00:30:12 2024-02-27 00:32:28 YES
+	75 2024-02-27 00:32:28 2024-02-27 00:32:37 YES
+	75 2024-02-28 13:00:31 2024-02-28 22:02:50 YES
+	76 2024-02-27 00:32:37 2024-02-27 00:32:40 YES
+	76 2024-02-28 22:02:50 2024-02-29 00:30:05 YES
+	77 2024-02-29 00:30:05 2024-02-29 00:30:12 YES
+	77 2024-02-27 00:32:40 2024-02-27 14:00:20 YES
+	78 2024-02-29 00:30:12 2024-02-29 00:32:29 YES
+	78 2024-02-27 14:00:20 2024-02-27 22:02:17 YES
+	79 2024-02-27 22:02:17 2024-02-28 00:30:09 YES
+	79 2024-02-29 00:32:29 2024-02-29 00:32:38 YES
+	80 2024-02-28 00:30:09 2024-02-28 00:30:15 YES
+	80 2024-02-29 00:32:38 2024-02-29 00:32:44 YES
+	81 2024-02-29 00:32:44 2024-02-29 13:00:29 YES
+	81 2024-02-28 00:30:15 2024-02-28 00:32:24 YES
+	82 2024-02-29 13:00:29 2024-03-01 00:30:06 YES
+	82 2024-02-28 00:32:24 2024-02-28 00:32:33 YES
+	83 2024-03-01 00:30:06 2024-03-01 00:30:15 YES
+	83 2024-02-28 00:32:33 2024-02-28 00:32:39 YES
+	84 2024-03-01 00:30:15 2024-03-01 00:32:35 YES
+	84 2024-02-28 00:32:39 2024-02-28 14:00:19 YES
+	85 2024-02-28 14:00:19 2024-02-29 00:30:07 YES
+	85 2024-03-01 00:32:35 2024-03-01 00:32:41 YES
+	86 2024-02-29 00:30:07 2024-02-29 00:30:13 YES
+	86 2024-03-01 00:32:41 2024-03-01 00:32:48 YES
+	87 2024-02-29 00:30:13 2024-02-29 00:32:30 YES
+	87 2024-03-01 00:32:48 2024-03-01 12:04:06 YES
+	88 2024-02-29 00:32:30 2024-02-29 00:32:39 YES
+	89 2024-02-29 00:32:39 2024-02-29 00:32:45 YES
+	90 2024-02-29 00:32:45 2024-02-29 17:00:53 YES
+	91 2024-02-29 17:00:53 2024-02-29 23:59:49 YES
+	92 2024-02-29 23:59:49 2024-03-01 00:30:06 YES
+	93 2024-03-01 00:30:06 2024-03-01 00:30:15 YES
+	94 2024-03-01 00:30:15 2024-03-01 00:32:35 YES
+	95 2024-03-01 00:32:35 2024-03-01 00:32:47 YES
+	96 2024-03-01 00:32:47 2024-03-01 00:32:53 YES
+	97 2024-03-01 00:32:53 2024-03-01 12:00:47 YES
+	98 2024-03-01 12:00:47 2024-03-01 12:04:06 YES
+	99 2024-03-01 12:04:06 2024-03-01 12:04:40 IN-MEMORY
+    100 2024-03-01 12:04:40 2024-03-01 12:13:13 IN-MEMORY
+
+183 rows selected.
+
+SYS@xydbdg> select process,status,thread#,sequence#,block# from v$managed_standby;
+
+PROCESS   STATUS	  THREAD#  SEQUENCE#	 BLOCK#
+--------- ------------ ---------- ---------- ----------
+ARCH	  CONNECTED		0	   0	      0
+DGRD	  ALLOCATED		0	   0	      0
+DGRD	  ALLOCATED		0	   0	      0
+ARCH	  CONNECTED		0	   0	      0
+ARCH	  CONNECTED		0	   0	      0
+ARCH	  CONNECTED		0	   0	      0
+RFS	  IDLE			2	  88	 104678
+RFS	  IDLE			1	   0	      0
+RFS	  IDLE			1	 101	 310550
+RFS	  IDLE			2	   0	      0
+MRP0	  APPLYING_LOG		1	 101	 310550
+
+11 rows selected.
+
+SYS@xydbdg> select sequence#,first_time,next_time,applied from v$archived_log order by sequence#;
+
+ SEQUENCE# FIRST_TIME	       NEXT_TIME	   APPLIED
+---------- ------------------- ------------------- ---------
+	 3 2024-02-17 17:07:48 2024-02-17 17:15:24 YES
+	 4 2024-02-17 17:07:26 2024-02-17 17:15:23 YES
+	 4 2024-02-17 17:16:43 2024-02-17 17:16:52 YES
+	 5 2024-02-17 17:36:23 2024-02-17 17:36:23 YES
+	 6 2024-02-17 17:16:51 2024-02-17 17:34:57 YES
+	 6 2024-02-17 17:16:51 2024-02-17 17:34:57 YES
+	 6 2024-02-17 17:36:23 2024-02-18 00:30:07 YES
+	 7 2024-02-17 17:34:57 2024-02-17 17:36:08 NO
+	 7 2024-02-17 17:34:57 2024-02-17 17:36:08 YES
+	 7 2024-02-18 00:30:07 2024-02-18 00:30:18 YES
+	 8 2024-02-17 17:35:56 2024-02-17 17:36:15 YES
+	 8 2024-02-18 00:30:18 2024-02-18 00:33:01 YES
+	 9 2024-02-17 17:36:15 2024-02-18 00:30:09 YES
+	 9 2024-02-18 00:33:01 2024-02-18 00:33:09 YES
+	10 2024-02-18 00:30:09 2024-02-18 00:30:18 YES
+	10 2024-02-18 00:33:09 2024-02-18 00:33:14 YES
+	11 2024-02-18 00:30:18 2024-02-18 00:30:21 YES
+	11 2024-02-18 00:33:14 2024-02-18 18:00:10 YES
+	12 2024-02-18 00:30:21 2024-02-18 00:33:01 YES
+	12 2024-02-18 18:00:10 2024-02-18 23:00:36 YES
+	13 2024-02-18 00:33:01 2024-02-18 00:33:13 YES
+	13 2024-02-18 23:00:36 2024-02-19 00:30:06 YES
+	14 2024-02-18 00:33:13 2024-02-18 00:33:16 YES
+	14 2024-02-19 00:30:06 2024-02-19 00:30:14 YES
+	15 2024-02-18 00:33:16 2024-02-18 09:02:46 YES
+	15 2024-02-19 00:30:14 2024-02-19 00:32:53 YES
+	16 2024-02-18 09:02:46 2024-02-18 18:00:10 YES
+	16 2024-02-19 00:32:53 2024-02-19 00:33:01 YES
+	17 2024-02-18 18:00:10 2024-02-19 00:30:07 YES
+	17 2024-02-19 00:33:01 2024-02-19 00:33:07 YES
+	18 2024-02-19 00:30:07 2024-02-19 00:30:13 YES
+	18 2024-02-19 00:33:07 2024-02-19 19:46:07 YES
+	19 2024-02-19 00:30:13 2024-02-19 00:32:55 YES
+	19 2024-02-19 19:46:07 2024-02-20 00:30:06 YES
+	20 2024-02-19 00:32:55 2024-02-19 00:33:04 YES
+	20 2024-02-20 00:30:06 2024-02-20 00:30:15 YES
+	21 2024-02-19 00:33:04 2024-02-19 00:33:10 YES
+	21 2024-02-20 00:30:15 2024-02-20 00:32:19 YES
+	22 2024-02-19 00:33:10 2024-02-19 15:00:51 YES
+	22 2024-02-20 00:32:19 2024-02-20 00:32:28 YES
+	23 2024-02-19 15:00:51 2024-02-20 00:30:07 YES
+	23 2024-02-20 00:32:28 2024-02-20 00:32:31 YES
+	24 2024-02-20 00:30:07 2024-02-20 00:30:16 YES
+	24 2024-02-20 00:32:31 2024-02-20 10:00:51 YES
+	25 2024-02-20 00:30:16 2024-02-20 00:32:19 YES
+	25 2024-02-20 10:00:51 2024-02-21 00:30:07 YES
+	26 2024-02-20 00:32:19 2024-02-20 00:32:28 YES
+	26 2024-02-21 00:30:07 2024-02-21 00:30:14 YES
+	27 2024-02-20 00:32:28 2024-02-20 00:32:32 YES
+	27 2024-02-21 00:30:14 2024-02-21 00:32:27 YES
+	28 2024-02-20 00:32:32 2024-02-20 00:32:35 YES
+	28 2024-02-21 00:32:27 2024-02-21 00:32:38 YES
+	29 2024-02-20 00:32:35 2024-02-20 14:00:14 YES
+	29 2024-02-21 00:32:38 2024-02-21 00:32:44 YES
+	30 2024-02-20 14:00:14 2024-02-20 22:02:21 YES
+	30 2024-02-21 00:32:44 2024-02-21 13:00:09 YES
+	31 2024-02-20 22:02:21 2024-02-21 00:30:08 YES
+	31 2024-02-21 13:00:09 2024-02-22 00:30:06 YES
+	32 2024-02-21 00:30:08 2024-02-21 00:30:14 YES
+	32 2024-02-22 00:30:06 2024-02-22 00:30:18 YES
+	33 2024-02-21 00:30:14 2024-02-21 00:32:30 YES
+	33 2024-02-22 00:30:18 2024-02-22 00:32:30 YES
+	34 2024-02-21 00:32:30 2024-02-21 00:32:39 YES
+	34 2024-02-22 00:32:30 2024-02-22 00:32:36 YES
+	35 2024-02-21 00:32:39 2024-02-21 00:32:45 YES
+	35 2024-02-22 00:32:36 2024-02-22 00:32:42 YES
+	36 2024-02-21 00:32:45 2024-02-21 00:32:51 YES
+	36 2024-02-22 00:32:42 2024-02-22 13:08:42 YES
+	37 2024-02-21 00:32:51 2024-02-21 13:00:09 YES
+	37 2024-02-22 13:08:42 2024-02-22 22:02:00 YES
+	38 2024-02-21 13:00:09 2024-02-21 22:01:20 YES
+	38 2024-02-22 22:02:00 2024-02-23 00:30:06 YES
+	39 2024-02-21 22:01:20 2024-02-22 00:30:06 YES
+	39 2024-02-23 00:30:06 2024-02-23 00:30:14 YES
+	40 2024-02-22 00:30:06 2024-02-22 00:30:18 YES
+	40 2024-02-23 00:30:14 2024-02-23 00:32:26 YES
+	41 2024-02-22 00:30:18 2024-02-22 00:32:29 YES
+	41 2024-02-23 00:32:26 2024-02-23 00:32:33 YES
+	42 2024-02-22 00:32:29 2024-02-22 00:32:41 YES
+	42 2024-02-23 00:32:33 2024-02-23 00:32:39 YES
+	43 2024-02-22 00:32:41 2024-02-22 00:32:44 YES
+	43 2024-02-23 00:32:39 2024-02-23 13:17:52 YES
+	44 2024-02-22 00:32:44 2024-02-22 15:08:24 YES
+	44 2024-02-23 13:17:52 2024-02-23 22:01:48 YES
+	45 2024-02-22 15:08:24 2024-02-23 00:30:06 YES
+	45 2024-02-23 22:01:48 2024-02-24 00:30:06 YES
+	46 2024-02-23 00:30:06 2024-02-23 00:30:12 YES
+	46 2024-02-24 00:30:06 2024-02-24 00:30:15 YES
+	47 2024-02-24 00:30:15 2024-02-24 00:32:35 YES
+	47 2024-02-23 00:30:12 2024-02-23 00:32:28 YES
+	48 2024-02-23 00:32:28 2024-02-23 00:32:37 YES
+	48 2024-02-24 00:32:35 2024-02-24 00:32:44 YES
+	49 2024-02-23 00:32:37 2024-02-23 00:32:43 YES
+	49 2024-02-24 00:32:44 2024-02-24 00:32:47 YES
+	50 2024-02-23 00:32:43 2024-02-23 15:18:24 YES
+	50 2024-02-24 00:32:47 2024-02-24 13:00:15 YES
+	51 2024-02-24 13:00:15 2024-02-25 00:30:07 YES
+	51 2024-02-23 15:18:24 2024-02-24 00:30:09 YES
+	52 2024-02-25 00:30:07 2024-02-25 00:30:15 YES
+	52 2024-02-24 00:30:09 2024-02-24 00:30:15 YES
+	53 2024-02-25 00:30:15 2024-02-25 00:32:35 YES
+	53 2024-02-24 00:30:15 2024-02-24 00:32:36 YES
+	54 2024-02-24 00:32:36 2024-02-24 00:32:45 YES
+	54 2024-02-25 00:32:35 2024-02-25 00:32:39 YES
+	55 2024-02-24 00:32:45 2024-02-24 00:32:48 YES
+	55 2024-02-25 00:32:39 2024-02-25 00:32:46 YES
+	56 2024-02-24 00:32:48 2024-02-24 10:04:09 YES
+	56 2024-02-25 00:32:46 2024-02-25 08:15:47 YES
+	57 2024-02-25 08:15:47 2024-02-26 00:30:13 YES
+	57 2024-02-24 10:04:09 2024-02-24 22:00:15 YES
+	58 2024-02-24 22:00:15 2024-02-25 00:30:07 YES
+	58 2024-02-26 00:30:13 2024-02-26 00:30:24 YES
+	59 2024-02-26 00:30:24 2024-02-26 00:33:28 YES
+	59 2024-02-25 00:30:07 2024-02-25 00:30:19 YES
+	60 2024-02-25 00:30:19 2024-02-25 00:32:35 YES
+	60 2024-02-26 00:33:28 2024-02-26 00:33:37 YES
+	61 2024-02-26 00:33:37 2024-02-26 00:33:44 YES
+	61 2024-02-25 00:32:35 2024-02-25 00:32:44 YES
+	62 2024-02-25 00:32:44 2024-02-25 00:32:47 YES
+	62 2024-02-26 00:33:44 2024-02-26 11:05:14 YES
+	63 2024-02-25 00:32:47 2024-02-25 10:04:20 YES
+	63 2024-02-26 11:05:14 2024-02-27 00:30:05 YES
+	64 2024-02-25 10:04:20 2024-02-25 19:32:26 YES
+	64 2024-02-27 00:30:05 2024-02-27 00:30:13 YES
+	65 2024-02-25 19:32:26 2024-02-26 00:30:07 YES
+	65 2024-02-27 00:30:13 2024-02-27 00:32:27 YES
+	66 2024-02-26 00:30:07 2024-02-26 00:30:27 YES
+	66 2024-02-27 00:32:27 2024-02-27 00:32:37 YES
+	67 2024-02-26 00:30:27 2024-02-26 00:33:30 YES
+	67 2024-02-27 00:32:37 2024-02-27 00:32:40 YES
+	68 2024-02-26 00:33:30 2024-02-26 00:33:43 YES
+	68 2024-02-27 00:32:40 2024-02-27 13:00:54 YES
+	69 2024-02-26 00:33:43 2024-02-26 00:33:49 YES
+	69 2024-02-27 13:00:54 2024-02-28 00:30:08 YES
+	70 2024-02-26 00:33:49 2024-02-26 15:03:14 YES
+	70 2024-02-28 00:30:08 2024-02-28 00:30:15 YES
+	71 2024-02-28 00:30:15 2024-02-28 00:32:24 YES
+	71 2024-02-26 15:03:14 2024-02-26 23:37:31 YES
+	72 2024-02-28 00:32:24 2024-02-28 00:32:29 YES
+	72 2024-02-26 23:37:31 2024-02-27 00:30:06 YES
+	73 2024-02-28 00:32:29 2024-02-28 00:32:35 YES
+	73 2024-02-27 00:30:06 2024-02-27 00:30:12 YES
+	74 2024-02-28 00:32:35 2024-02-28 13:00:31 YES
+	74 2024-02-27 00:30:12 2024-02-27 00:32:28 YES
+	75 2024-02-27 00:32:28 2024-02-27 00:32:37 YES
+	75 2024-02-28 13:00:31 2024-02-28 22:02:50 YES
+	76 2024-02-27 00:32:37 2024-02-27 00:32:40 YES
+	76 2024-02-28 22:02:50 2024-02-29 00:30:05 YES
+	77 2024-02-29 00:30:05 2024-02-29 00:30:12 YES
+	77 2024-02-27 00:32:40 2024-02-27 14:00:20 YES
+	78 2024-02-29 00:30:12 2024-02-29 00:32:29 YES
+	78 2024-02-27 14:00:20 2024-02-27 22:02:17 YES
+	79 2024-02-27 22:02:17 2024-02-28 00:30:09 YES
+	79 2024-02-29 00:32:29 2024-02-29 00:32:38 YES
+	80 2024-02-28 00:30:09 2024-02-28 00:30:15 YES
+	80 2024-02-29 00:32:38 2024-02-29 00:32:44 YES
+	81 2024-02-29 00:32:44 2024-02-29 13:00:29 YES
+	81 2024-02-28 00:30:15 2024-02-28 00:32:24 YES
+	82 2024-02-29 13:00:29 2024-03-01 00:30:06 YES
+	82 2024-02-28 00:32:24 2024-02-28 00:32:33 YES
+	83 2024-03-01 00:30:06 2024-03-01 00:30:15 YES
+	83 2024-02-28 00:32:33 2024-02-28 00:32:39 YES
+	84 2024-03-01 00:30:15 2024-03-01 00:32:35 YES
+	84 2024-02-28 00:32:39 2024-02-28 14:00:19 YES
+	85 2024-02-28 14:00:19 2024-02-29 00:30:07 YES
+	85 2024-03-01 00:32:35 2024-03-01 00:32:41 YES
+	86 2024-02-29 00:30:07 2024-02-29 00:30:13 YES
+	86 2024-03-01 00:32:41 2024-03-01 00:32:48 YES
+	87 2024-02-29 00:30:13 2024-02-29 00:32:30 YES
+	87 2024-03-01 00:32:48 2024-03-01 12:04:06 YES
+	88 2024-02-29 00:32:30 2024-02-29 00:32:39 YES
+	89 2024-02-29 00:32:39 2024-02-29 00:32:45 YES
+	90 2024-02-29 00:32:45 2024-02-29 17:00:53 YES
+	91 2024-02-29 17:00:53 2024-02-29 23:59:49 YES
+	92 2024-02-29 23:59:49 2024-03-01 00:30:06 YES
+	93 2024-03-01 00:30:06 2024-03-01 00:30:15 YES
+	94 2024-03-01 00:30:15 2024-03-01 00:32:35 YES
+	95 2024-03-01 00:32:35 2024-03-01 00:32:47 YES
+	96 2024-03-01 00:32:47 2024-03-01 00:32:53 YES
+	97 2024-03-01 00:32:53 2024-03-01 12:00:47 YES
+	98 2024-03-01 12:00:47 2024-03-01 12:04:06 YES
+	99 2024-03-01 12:04:06 2024-03-01 12:04:40 YES
+    100 2024-03-01 12:04:40 2024-03-01 12:13:13 YES
+
+183 rows selected.
+
+SYS@xydbdg> 
+
+SYS@xydbdg> select name,value,time_computed,datum_time from v$dataguard_stats;
+
+NAME				 VALUE								  TIME_COMPUTED 		 DATUM_TIME
+-------------------------------- ---------------------------------------------------------------- ------------------------------ ------------------------------
+transport lag			 +00 00:00:00							  03/01/2024 17:10:57		 03/01/2024 17:10:56
+apply lag			 +00 00:00:00							  03/01/2024 17:10:57		 03/01/2024 17:10:56
+apply finish time		 +00 00:00:00.000						  03/01/2024 17:10:57
+estimated startup time		 26								  03/01/2024 17:10:57
+
+SYS@xydbdg> 
+
+#此时数据文件跟主库一致了
+SYS@xydbdg> select file#,name from v$datafile;
+
+     FILE# NAME
+---------- ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+	19 /u01/app/oracle/oradata/xydbdg/datafile/xydb/1064b454582a4aa4e063610d12ac9d59/datafile/system.292.1159901297
+	20 /u01/app/oracle/oradata/xydbdg/datafile/xydb/1064b454582a4aa4e063610d12ac9d59/datafile/sysaux.284.1159901297
+	21 /u01/app/oracle/oradata/xydbdg/datafile/xydb/1064b454582a4aa4e063610d12ac9d59/datafile/undotbs1.285.1159901297
+	22 /u01/app/oracle/oradata/xydbdg/datafile/xydb/1064b454582a4aa4e063610d12ac9d59/datafile/pdb1user.294.1159902173
+	23 /u01/app/oracle/oradata/xydbdg/datafile/xydb/1064b454582a4aa4e063610d12ac9d59/datafile/undo_2.295.1159902455
+	24 /u01/app/oracle/oradata/xydbdg/datafile/xydb/1064b454582a4aa4e063610d12ac9d59/datafile/idc_data_standcode.296.1162468273
+	25 /u01/app/oracle/oradata/xydbdg/datafile/xydb/1064b454582a4aa4e063610d12ac9d59/datafile/idc_data_standcode.297.1162468285
+	26 /u01/app/oracle/oradata/xydbdg/datafile/xydb/1064b454582a4aa4e063610d12ac9d59/datafile/idc_data_standcode.298.1162468311
+	27 /u01/app/oracle/oradata/xydbdg/datafile/xydb/1064b454582a4aa4e063610d12ac9d59/datafile/idc_data_dataquality.299.1162468333
+	28 /u01/app/oracle/oradata/xydbdg/datafile/xydb/1064b454582a4aa4e063610d12ac9d59/datafile/idc_data_dataquality.300.1162468385
+	29 /u01/app/oracle/oradata/xydbdg/datafile/xydb/1064b454582a4aa4e063610d12ac9d59/datafile/idc_data_dataquality.301.1162468399
+	30 /u01/app/oracle/oradata/xydbdg/datafile/xydb/1064b454582a4aa4e063610d12ac9d59/datafile/idc_data_dataquality.302.1162468413
+	31 /u01/app/oracle/oradata/xydbdg/datafile/xydb/1064b454582a4aa4e063610d12ac9d59/datafile/idc_data_sharedb.303.1162468429
+	32 /u01/app/oracle/oradata/xydbdg/datafile/xydb/1064b454582a4aa4e063610d12ac9d59/datafile/idc_data_sharedb.304.1162468479
+	33 /u01/app/oracle/oradata/xydbdg/datafile/xydb/1064b454582a4aa4e063610d12ac9d59/datafile/idc_data_sharedb.305.1162468491
+	34 /u01/app/oracle/oradata/xydbdg/datafile/xydb/1064b454582a4aa4e063610d12ac9d59/datafile/idc_data_sharedb.306.1162468505
+	35 /u01/app/oracle/oradata/xydbdg/datafile/xydb/1064b454582a4aa4e063610d12ac9d59/datafile/idc_data_sharedb.307.1162468517
+	36 /u01/app/oracle/oradata/xydbdg/datafile/xydb/1064b454582a4aa4e063610d12ac9d59/datafile/idc_data_api.308.1162468535
+	37 /u01/app/oracle/oradata/xydbdg/datafile/xydb/1064b454582a4aa4e063610d12ac9d59/datafile/idc_data_api.309.1162468579
+	38 /u01/app/oracle/oradata/xydbdg/datafile/xydb/1064b454582a4aa4e063610d12ac9d59/datafile/idc_data_api.310.1162468593
+	39 /u01/app/oracle/oradata/xydbdg/datafile/xydb/1064b454582a4aa4e063610d12ac9d59/datafile/idc_data_swopwork.311.1162468615
+	40 /u01/app/oracle/oradata/xydbdg/datafile/xydb/1064b454582a4aa4e063610d12ac9d59/datafile/idc_data_swopwork.312.1162468629
+	41 /u01/app/oracle/oradata/xydbdg/datafile/xydb/1064b454582a4aa4e063610d12ac9d59/datafile/idc_data_swopwork.313.1162468643
+	42 /u01/app/oracle/oradata/xydbdg/datafile/xydb/1064b454582a4aa4e063610d12ac9d59/datafile/idc_data_assets.314.1162468657
+	43 /u01/app/oracle/oradata/xydbdg/datafile/xydb/1064b454582a4aa4e063610d12ac9d59/datafile/idc_data_assets.315.1162468671
+	44 /u01/app/oracle/oradata/xydbdg/datafile/xydb/1064b454582a4aa4e063610d12ac9d59/datafile/idc_data_assets.316.1162468685
+	45 /u01/app/oracle/oradata/xydbdg/datafile/xydb/1064b454582a4aa4e063610d12ac9d59/datafile/idc_data_assets.317.1162468697
+	46 /u01/app/oracle/oradata/xydbdg/datafile/xydb/1064b454582a4aa4e063610d12ac9d59/datafile/idc_data_assets.318.1162468711
+	47 /u01/app/oracle/oradata/xydbdg/datafile/xydb/1064b454582a4aa4e063610d12ac9d59/datafile/users.319.1162468725
+	48 /u01/app/oracle/oradata/xydbdg/datafile/xydb/1064b454582a4aa4e063610d12ac9d59/datafile/idc_data_swop.320.1162468725
+	49 /u01/app/oracle/oradata/xydbdg/datafile/xydb/1064b454582a4aa4e063610d12ac9d59/datafile/idc_data_swop.321.1162468739
+	50 /u01/app/oracle/oradata/xydbdg/datafile/xydb/1064b454582a4aa4e063610d12ac9d59/datafile/idc_data_swop.322.1162468753
+	51 /u01/app/oracle/oradata/xydbdg/datafile/xydb/1064b454582a4aa4e063610d12ac9d59/datafile/idc_data_swop.323.1162468765
+
+33 rows selected.
+
+SYS@xydbdg> 
+
+
+
+#同步完毕，切换到cdb，将数据库启动到open read only模式
+
+SYS@xydbdg> alter session set container=cdb$root;
+
+Session altered.
+
+
+SYS@xydbdg> select status from v$instance;
+
+STATUS
+------------
+MOUNTED
+
+SYS@xydbdg> alter database open;
+alter database open
+*
+ERROR at line 1:
+ORA-10456: cannot open standby database; media recovery session may be in progress
+
+
+SYS@xydbdg> show pdbs;
+
+    CON_ID CON_NAME			  OPEN MODE  RESTRICTED
+---------- ------------------------------ ---------- ----------
+	 2 PDB$SEED			  MOUNTED
+	 3 STUWORK			  MOUNTED
+	 4 PORTAL			  MOUNTED
+	 5 DATAASSETS			  MOUNTED
+	 
+	 
+SYS@xydbdg> select name,value,time_computed,datum_time from v$dataguard_stats;
+
+NAME				 VALUE								  TIME_COMPUTED 		 DATUM_TIME
+-------------------------------- ---------------------------------------------------------------- ------------------------------ ------------------------------
+transport lag			 +00 00:00:00							  03/01/2024 17:12:38		 03/01/2024 17:12:36
+apply lag			 +00 00:00:00							  03/01/2024 17:12:38		 03/01/2024 17:12:36
+apply finish time		 +00 00:00:00.000						  03/01/2024 17:12:38
+estimated startup time		 26								  03/01/2024 17:12:38
+
+
+SYS@xydbdg> alter database open read only;
+alter database open read only
+*
+ERROR at line 1:
+ORA-10456: cannot open standby database; media recovery session may be in progress
+
+
+SYS@xydbdg> SELECT PROCESS, STATUS FROM V$MANAGED_STANDBY;
+
+PROCESS   STATUS
+--------- ------------
+ARCH	  CONNECTED
+DGRD	  ALLOCATED
+DGRD	  ALLOCATED
+ARCH	  CONNECTED
+ARCH	  CONNECTED
+ARCH	  CONNECTED
+RFS	  IDLE
+RFS	  IDLE
+RFS	  IDLE
+RFS	  IDLE
+MRP0	  APPLYING_LOG
+
+11 rows selected.
+
+
+SYS@xydbdg> ALTER DATABASE RECOVER MANAGED STANDBY DATABASE CANCEL;
+
+Database altered.
+
+SYS@xydbdg>  alter database open;
+
+Database altered.
+
+SYS@xydbdg> ALTER DATABASE RECOVER MANAGED STANDBY DATABASE DISCONNECT;
+
+Database altered.
+
+SYS@xydbdg> select database_role,protection_mode,protection_level,open_mode from v$database;
+
+DATABASE_ROLE	 PROTECTION_MODE      PROTECTION_LEVEL	   OPEN_MODE
+---------------- -------------------- -------------------- --------------------
+PHYSICAL STANDBY MAXIMUM PERFORMANCE  MAXIMUM PERFORMANCE  READ ONLY WITH APPLY
+
+SYS@xydbdg> show pdbs;
+
+    CON_ID CON_NAME			  OPEN MODE  RESTRICTED
+---------- ------------------------------ ---------- ----------
+	 2 PDB$SEED			  READ ONLY  NO
+	 3 STUWORK			  MOUNTED
+	 4 PORTAL			  MOUNTED
+	 5 DATAASSETS			  MOUNTED
+SYS@xydbdg> alter pluggable database all open;
+
+Pluggable database altered.
+
+SYS@xydbdg> show pdbs;
+
+    CON_ID CON_NAME			  OPEN MODE  RESTRICTED
+---------- ------------------------------ ---------- ----------
+	 2 PDB$SEED			  READ ONLY  NO
+	 3 STUWORK			  READ ONLY  NO
+	 4 PORTAL			  READ ONLY  NO
+	 5 DATAASSETS			  READ ONLY  NO
+SYS@xydbdg> 
+
+
+SYS@xydbdg> SELECT inst_id, thread#, process, pid, status, client_process, client_pid,
+sequence#, block#, active_agents, known_agents FROM gv$managed_standby ORDER BY thread#, pid;  2  
+
+   INST_ID    THREAD# PROCESS	PID			 STATUS       CLIENT_P CLIENT_PID				 SEQUENCE#     BLOCK# ACTIVE_AGENTS KNOWN_AGENTS
+---------- ---------- --------- ------------------------ ------------ -------- ---------------------------------------- ---------- ---------- ------------- ------------
+	 1	    0 DGRD	7339			 ALLOCATED    N/A      N/A						 0	    0		  0	       0
+	 1	    0 DGRD	7341			 ALLOCATED    N/A      N/A						 0	    0		  0	       0
+	 1	    0 ARCH	7343			 CONNECTED    ARCH     7343						 0	    0		  0	       0
+	 1	    0 ARCH	7347			 CONNECTED    ARCH     7347						 0	    0		  0	       0
+	 1	    1 RFS	19607			 IDLE	      LGWR     19749					       102     260121		  0	       0
+	 1	    1 ARCH	7345			 CLOSING      ARCH     7345					       101     354304		  0	       0
+	 1	    1 RFS	8344			 IDLE	      Archival 24790						 0	    0		  0	       0
+	 1	    2 MRP0	18654			 APPLYING_LOG N/A      N/A						89	16000		 17	      17
+	 1	    2 RFS	19361			 IDLE	      LGWR     4037						89	16001		  0	       0
+	 1	    2 ARCH	7337			 CLOSING      ARCH     7337						88     129024		  0	       0
+	 1	    2 RFS	8352			 IDLE	      Archival 5124						 0	    0		  0	       0
+
+11 rows selected.
+
+SYS@xydbdg> select * from v$archive_gap;
+
+no rows selected
+
+SYS@xydbdg> 
+
+```
+
+
+
+
+
+
 
 
 
