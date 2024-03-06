@@ -1288,7 +1288,7 @@ flush tables with read lock;
 #主库执行
 
 ```bash
-/usr/bin/mysqldump -uroot -pMysql2023\!\@\#Root --quick --events --all-databases --master-data=2 --single-transaction --set-gtid-purged=OFF > 20231102.sql
+#/usr/bin/mysqldump -uroot -pMysql2023\!\@\#Root --quick --events --all-databases --master-data=2 --single-transaction --set-gtid-purged=OFF > 20231102.sql
 
 /usr/bin/mysqldump -uroot -pMysql2023\!\@\#Root --quick --events --all-databases --source-data=2 --single-transaction --set-gtid-purged=OFF > 20231102.sql
 
@@ -1318,7 +1318,7 @@ source /root/20231102.sql
 #仅在从库配置
 
 ```bash
-SET @@GLOBAL.read_only = ON;
+#SET @@GLOBAL.read_only = ON;
 
 CHANGE REPLICATION SOURCE TO SOURCE_HOST='10.20.12.136',SOURCE_PORT=3306,SOURCE_USER='repl',SOURCE_PASSWORD='Repl123!@#2023',SOURCE_AUTO_POSITION = 1;
 
@@ -1330,7 +1330,7 @@ start replica;
 
 SHOW REPLICA STATUS \G;
 
-SET @@GLOBAL.read_only = OFF;
+#SET @@GLOBAL.read_only = OFF;
 ```
 
 
@@ -1915,6 +1915,1406 @@ set global log_error_suppression_list='MY-010914,MY-013360,MY-013730,MY-010584,M
 ```
 log_error_suppression_list = 'MY-010914,MY-013360,MY-013730,MY-010584,MY-010559'
 ```
+
+
+
+##### 5) 主库误操作: reset master，没有数据写入 --- 可立即还原成双主模式
+
+#同事在主库上新建了个备份库formflowcs，导出原库formflow数据库，导入到formflowcs，但是报错：ERROR 3546 (HY000) at line 24: @@GLOBAL.GTID_PURGED cannot be changed: the added gtid set must not overlap with @@GLOBAL.GTID_EXECUTED
+
+#同事经过百度后，在主库执行了reset master，导致主库的binlog全部清空了
+
+#此时主从同步中断，从库报错
+
+#但是此时数据库进行了read only操作，可以立即恢复为双主模式
+
+#主库状态
+
+```sql
+#reset master前
+mysql> show master status;
++------------------+----------+--------------+------------------+---------------------------------------------------------------------------------------------+
+| File             | Position | Binlog_Do_DB | Binlog_Ignore_DB | Executed_Gtid_Set                                                                           |
++------------------+----------+--------------+------------------+---------------------------------------------------------------------------------------------+
+| mysql-bin.000009 |   822250 |              |                  | 6cf9ffd3-7926-11ee-84ca-fefcfe0f647a:1-57525,
+6cfaa641-7926-11ee-bb23-fefcfe25467b:1-257840 |
++------------------+----------+--------------+------------------+---------------------------------------------------------------------------------------------+
+1 row in set (0.00 sec)
+
+#reset master操作
+mysql> reset master;
+Query OK, 0 rows affected (0.15 sec)
+
+
+mysql> show master status;
++------------------+----------+--------------+------------------+-------------------+
+| File             | Position | Binlog_Do_DB | Binlog_Ignore_DB | Executed_Gtid_Set |
++------------------+----------+--------------+------------------+-------------------+
+| mysql-bin.000001 |      157 |              |                  |                   |
++------------------+----------+--------------+------------------+-------------------+
+1 row in set (0.00 sec)
+
+mysql> show replica status\G;
+*************************** 1. row ***************************
+             Replica_IO_State: Waiting for source to send event
+                  Source_Host: 172.18.13.115
+                  Source_User: repl
+                  Source_Port: 3306
+                Connect_Retry: 60
+              Source_Log_File: mysql-bin.000007
+          Read_Source_Log_Pos: 391
+               Relay_Log_File: relay-bin.000021
+                Relay_Log_Pos: 567
+        Relay_Source_Log_File: mysql-bin.000007
+           Replica_IO_Running: Yes
+          Replica_SQL_Running: Yes
+              Replicate_Do_DB: 
+          Replicate_Ignore_DB: 
+           Replicate_Do_Table: 
+       Replicate_Ignore_Table: 
+      Replicate_Wild_Do_Table: 
+  Replicate_Wild_Ignore_Table: 
+                   Last_Errno: 0
+                   Last_Error: 
+                 Skip_Counter: 0
+          Exec_Source_Log_Pos: 391
+              Relay_Log_Space: 446208
+              Until_Condition: None
+               Until_Log_File: 
+                Until_Log_Pos: 0
+           Source_SSL_Allowed: No
+           Source_SSL_CA_File: 
+           Source_SSL_CA_Path: 
+              Source_SSL_Cert: 
+            Source_SSL_Cipher: 
+               Source_SSL_Key: 
+        Seconds_Behind_Source: 0
+Source_SSL_Verify_Server_Cert: No
+                Last_IO_Errno: 0
+                Last_IO_Error: 
+               Last_SQL_Errno: 0
+               Last_SQL_Error: 
+  Replicate_Ignore_Server_Ids: 
+             Source_Server_Id: 115
+                  Source_UUID: 6cf9ffd3-7926-11ee-84ca-fefcfe0f647a
+             Source_Info_File: mysql.slave_master_info
+                    SQL_Delay: 0
+          SQL_Remaining_Delay: NULL
+    Replica_SQL_Running_State: Replica has read all relay log; waiting for more updates
+           Source_Retry_Count: 86400
+                  Source_Bind: 
+      Last_IO_Error_Timestamp: 
+     Last_SQL_Error_Timestamp: 
+               Source_SSL_Crl: 
+           Source_SSL_Crlpath: 
+           Retrieved_Gtid_Set: 6cf9ffd3-7926-11ee-84ca-fefcfe0f647a:55119-57525
+            Executed_Gtid_Set: 
+                Auto_Position: 1
+         Replicate_Rewrite_DB: 
+                 Channel_Name: 
+           Source_TLS_Version: 
+       Source_public_key_path: 
+        Get_Source_public_key: 0
+            Network_Namespace: 
+1 row in set (0.00 sec)
+
+ERROR: 
+No query specified
+
+```
+
+
+
+#从库状态
+
+```sql
+#主库reset master前
+> show replica status\G;
+*************************** 1. row ***************************
+             Replica_IO_State: Waiting for source to send event
+                  Source_Host: 172.18.13.114
+                  Source_User: repl
+                  Source_Port: 3306
+                Connect_Retry: 60
+              Source_Log_File: mysql-bin.000009
+          Read_Source_Log_Pos: 822250
+               Relay_Log_File: relay-bin.000021
+                Relay_Log_Pos: 420
+        Relay_Source_Log_File: mysql-bin.000009
+           Replica_IO_Running: Yes
+          Replica_SQL_Running: Yes
+              Replicate_Do_DB: 
+          Replicate_Ignore_DB: 
+           Replicate_Do_Table: 
+       Replicate_Ignore_Table: 
+      Replicate_Wild_Do_Table: 
+  Replicate_Wild_Ignore_Table: 
+                   Last_Errno: 0
+                   Last_Error: 
+                 Skip_Counter: 0
+          Exec_Source_Log_Pos: 822250
+              Relay_Log_Space: 624
+              Until_Condition: None
+               Until_Log_File: 
+                Until_Log_Pos: 0
+           Source_SSL_Allowed: No
+           Source_SSL_CA_File: 
+           Source_SSL_CA_Path: 
+              Source_SSL_Cert: 
+            Source_SSL_Cipher: 
+               Source_SSL_Key: 
+        Seconds_Behind_Source: 0
+Source_SSL_Verify_Server_Cert: No
+                Last_IO_Errno: 0
+                Last_IO_Error: 
+               Last_SQL_Errno: 0
+               Last_SQL_Error: 
+  Replicate_Ignore_Server_Ids: 
+             Source_Server_Id: 114
+                  Source_UUID: 6cfaa641-7926-11ee-bb23-fefcfe25467b
+             Source_Info_File: mysql.slave_master_info
+                    SQL_Delay: 0
+          SQL_Remaining_Delay: NULL
+    Replica_SQL_Running_State: Replica has read all relay log; waiting for more updates
+           Source_Retry_Count: 86400
+                  Source_Bind: 
+      Last_IO_Error_Timestamp: 
+     Last_SQL_Error_Timestamp: 
+               Source_SSL_Crl: 
+           Source_SSL_Crlpath: 
+           Retrieved_Gtid_Set: 
+            Executed_Gtid_Set: 6cf9ffd3-7926-11ee-84ca-fefcfe0f647a:1-57525,
+6cfaa641-7926-11ee-bb23-fefcfe25467b:1-257840
+                Auto_Position: 1
+         Replicate_Rewrite_DB: 
+                 Channel_Name: 
+           Source_TLS_Version: 
+       Source_public_key_path: 
+        Get_Source_public_key: 0
+            Network_Namespace: 
+1 row in set (0.00 sec)
+
+ERROR: 
+No query specified
+
+
+#主库reset master后，暂时未有变化
+> show replica status\G;
+*************************** 1. row ***************************
+             Replica_IO_State: Waiting for source to send event
+                  Source_Host: 172.18.13.114
+                  Source_User: repl
+                  Source_Port: 3306
+                Connect_Retry: 60
+              Source_Log_File: mysql-bin.000009
+          Read_Source_Log_Pos: 822250
+               Relay_Log_File: relay-bin.000021
+                Relay_Log_Pos: 420
+        Relay_Source_Log_File: mysql-bin.000009
+           Replica_IO_Running: Yes
+          Replica_SQL_Running: Yes
+              Replicate_Do_DB: 
+          Replicate_Ignore_DB: 
+           Replicate_Do_Table: 
+       Replicate_Ignore_Table: 
+      Replicate_Wild_Do_Table: 
+  Replicate_Wild_Ignore_Table: 
+                   Last_Errno: 0
+                   Last_Error: 
+                 Skip_Counter: 0
+          Exec_Source_Log_Pos: 822250
+              Relay_Log_Space: 624
+              Until_Condition: None
+               Until_Log_File: 
+                Until_Log_Pos: 0
+           Source_SSL_Allowed: No
+           Source_SSL_CA_File: 
+           Source_SSL_CA_Path: 
+              Source_SSL_Cert: 
+            Source_SSL_Cipher: 
+               Source_SSL_Key: 
+        Seconds_Behind_Source: 0
+Source_SSL_Verify_Server_Cert: No
+                Last_IO_Errno: 0
+                Last_IO_Error: 
+               Last_SQL_Errno: 0
+               Last_SQL_Error: 
+  Replicate_Ignore_Server_Ids: 
+             Source_Server_Id: 114
+                  Source_UUID: 6cfaa641-7926-11ee-bb23-fefcfe25467b
+             Source_Info_File: mysql.slave_master_info
+                    SQL_Delay: 0
+          SQL_Remaining_Delay: NULL
+    Replica_SQL_Running_State: Replica has read all relay log; waiting for more updates
+           Source_Retry_Count: 86400
+                  Source_Bind: 
+      Last_IO_Error_Timestamp: 
+     Last_SQL_Error_Timestamp: 
+               Source_SSL_Crl: 
+           Source_SSL_Crlpath: 
+           Retrieved_Gtid_Set: 
+            Executed_Gtid_Set: 6cf9ffd3-7926-11ee-84ca-fefcfe0f647a:1-57525,
+6cfaa641-7926-11ee-bb23-fefcfe25467b:1-257840
+                Auto_Position: 1
+         Replicate_Rewrite_DB: 
+                 Channel_Name: 
+           Source_TLS_Version: 
+       Source_public_key_path: 
+        Get_Source_public_key: 0
+            Network_Namespace: 
+1 row in set (0.00 sec)
+
+ERROR: 
+No query specified
+
+```
+
+
+
+#双主重置操作
+
+```bash
+1、从库操作
+
+-- 清空从库gtid
+reset master;
+
+-- 停止slave
+stop slave;
+-- 重置slave
+reset slave all;
+
+-- 重新指定主
+CHANGE REPLICATION SOURCE TO SOURCE_HOST='10.20.12.136',SOURCE_PORT=3306,SOURCE_USER='repl',SOURCE_PASSWORD='Repl123!@#2023',SOURCE_AUTO_POSITION = 1;
+
+-- 启动slave
+#start slave
+start replica;
+
+show replica status\G;
+
+2、主库操作
+
+-- 停止slave
+stop slave;
+-- 重置slave
+reset slave all;
+
+-- 重新建立关系  子厚两个参数查看master状态即可 和主库保持一致
+#change master to master_host = '192.168.22.22', master_user = 'user', master_port=3306, master_password='pwd', master_log_file = 'mysqld-bin.000001', master_log_pos=1234; 
+CHANGE REPLICATION SOURCE TO SOURCE_HOST='10.20.12.137',SOURCE_PORT=3306,SOURCE_USER='repl',SOURCE_PASSWORD='Repl123!@#2023',SOURCE_AUTO_POSITION = 1;
+
+
+-- 启动slave
+#start slave
+start replica;
+
+show replica status\G;
+
+3、查看从库状态
+
+-- 查看slave状态
+#show slave status
+SHOW REPLICA STATUS \G;
+
+4、验证主从的同步，查看Slave_IO_Running、Slave_SQL_Running的值，都为YES就说明没问题，主库写入数据测试即可。
+1) 主库A操作
+mysql> CREATE DATABASE testdb01 DEFAULT CHARSET utf8mb4; 
+mysql> CREATE USER 'testuser01'@'%' IDENTIFIED BY 'Qwert123..';
+mysql> GRANT ALL PRIVILEGES ON testdb01.* TO 'testuser01'@'%'; 
+mysql> FLUSH PRIVILEGES;
+
+mysql> USE testdb01;
+mysql> CREATE TABLE t_user01(
+ id int auto_increment primary key,
+ name varchar(40)
+) ENGINE = InnoDB;
+
+BEGIN;
+INSERT INTO t_user01 VALUES (1,'user01');
+INSERT INTO t_user01 VALUES (2,'user02');
+INSERT INTO t_user01 VALUES (3,'user03');
+INSERT INTO t_user01 VALUES (4,'user04');
+INSERT INTO t_user01 VALUES (5,'user05');
+commit;
+
+mysql> select * from t_user01;
++----+--------+
+| id | name   |
++----+--------+
+|  1 | user01 |
+|  2 | user02 |
+|  3 | user03 |
+|  4 | user04 |
+|  5 | user05 |
++----+--------+
+5 rows in set (0.00 sec)
+
+
+
+2) 主库B操作
+mysql> use testdb01;
+Database changed
+
+mysql> select * from testdb01.t_user01;
++----+--------+
+| id | name   |
++----+--------+
+|  1 | user01 |
+|  2 | user02 |
+|  3 | user03 |
+|  4 | user04 |
+|  5 | user05 |
++----+--------+
+5 rows in set (0.00 sec)
+
+mysql> show replica status\G;
+*************************** 1. row ***************************
+             Replica_IO_State: Waiting for source to send event
+                  Source_Host: 172.18.13.114
+                  Source_User: repl
+                  Source_Port: 3306
+                Connect_Retry: 60
+              Source_Log_File: mysql-bin.000001
+          Read_Source_Log_Pos: 1609
+               Relay_Log_File: relay-bin.000002
+                Relay_Log_Pos: 1825
+        Relay_Source_Log_File: mysql-bin.000001
+           Replica_IO_Running: Yes
+          Replica_SQL_Running: Yes
+              Replicate_Do_DB: 
+          Replicate_Ignore_DB: 
+           Replicate_Do_Table: 
+       Replicate_Ignore_Table: 
+      Replicate_Wild_Do_Table: 
+  Replicate_Wild_Ignore_Table: 
+                   Last_Errno: 0
+                   Last_Error: 
+                 Skip_Counter: 0
+          Exec_Source_Log_Pos: 1609
+              Relay_Log_Space: 2029
+              Until_Condition: None
+               Until_Log_File: 
+                Until_Log_Pos: 0
+           Source_SSL_Allowed: No
+           Source_SSL_CA_File: 
+           Source_SSL_CA_Path: 
+              Source_SSL_Cert: 
+            Source_SSL_Cipher: 
+               Source_SSL_Key: 
+        Seconds_Behind_Source: 0
+Source_SSL_Verify_Server_Cert: No
+                Last_IO_Errno: 0
+                Last_IO_Error: 
+               Last_SQL_Errno: 0
+               Last_SQL_Error: 
+  Replicate_Ignore_Server_Ids: 
+             Source_Server_Id: 114
+                  Source_UUID: 6cfaa641-7926-11ee-bb23-fefcfe25467b
+             Source_Info_File: mysql.slave_master_info
+                    SQL_Delay: 0
+          SQL_Remaining_Delay: NULL
+    Replica_SQL_Running_State: Replica has read all relay log; waiting for more updates
+           Source_Retry_Count: 86400
+                  Source_Bind: 
+      Last_IO_Error_Timestamp: 
+     Last_SQL_Error_Timestamp: 
+               Source_SSL_Crl: 
+           Source_SSL_Crlpath: 
+           Retrieved_Gtid_Set: 6cfaa641-7926-11ee-bb23-fefcfe25467b:1-2
+            Executed_Gtid_Set: 6cfaa641-7926-11ee-bb23-fefcfe25467b:1-2
+                Auto_Position: 1
+         Replicate_Rewrite_DB: 
+                 Channel_Name: 
+           Source_TLS_Version: 
+       Source_public_key_path: 
+        Get_Source_public_key: 0
+            Network_Namespace: 
+1 row in set (0.00 sec)
+
+ERROR: 
+No query specified
+
+
+mysql> BEGIN;
+INSERT INTO t_user01 VALUES (10,'user01');
+INSERT INTO t_user01 VALUES (20,'user02');
+INSERT INTO t_user01 VALUES (30,'user03');
+INSERT INTO t_user01 VALUES (40,'user04');
+INSERT INTO t_user01 VALUES (50,'user05');
+commit;
+
+mysql> select * from testdb01.t_user01;
++----+--------+
+| id | name   |
++----+--------+
+|  1 | user01 |
+|  2 | user02 |
+|  3 | user03 |
+|  4 | user04 |
+|  5 | user05 |
+| 10 | user01 |
+| 20 | user02 |
+| 30 | user03 |
+| 40 | user04 |
+| 50 | user05 |
++----+--------+
+10 rows in set (0.00 sec)
+
+
+mysql> show replica status\G;
+*************************** 1. row ***************************
+             Replica_IO_State: Waiting for source to send event
+                  Source_Host: 172.18.13.114
+                  Source_User: repl
+                  Source_Port: 3306
+                Connect_Retry: 60
+              Source_Log_File: mysql-bin.000001
+          Read_Source_Log_Pos: 2678
+               Relay_Log_File: relay-bin.000002
+                Relay_Log_Pos: 1825
+        Relay_Source_Log_File: mysql-bin.000001
+           Replica_IO_Running: Yes
+          Replica_SQL_Running: Yes
+              Replicate_Do_DB: 
+          Replicate_Ignore_DB: 
+           Replicate_Do_Table: 
+       Replicate_Ignore_Table: 
+      Replicate_Wild_Do_Table: 
+  Replicate_Wild_Ignore_Table: 
+                   Last_Errno: 0
+                   Last_Error: 
+                 Skip_Counter: 0
+          Exec_Source_Log_Pos: 2678
+              Relay_Log_Space: 2029
+              Until_Condition: None
+               Until_Log_File: 
+                Until_Log_Pos: 0
+           Source_SSL_Allowed: No
+           Source_SSL_CA_File: 
+           Source_SSL_CA_Path: 
+              Source_SSL_Cert: 
+            Source_SSL_Cipher: 
+               Source_SSL_Key: 
+        Seconds_Behind_Source: 0
+Source_SSL_Verify_Server_Cert: No
+                Last_IO_Errno: 0
+                Last_IO_Error: 
+               Last_SQL_Errno: 0
+               Last_SQL_Error: 
+  Replicate_Ignore_Server_Ids: 
+             Source_Server_Id: 114
+                  Source_UUID: 6cfaa641-7926-11ee-bb23-fefcfe25467b
+             Source_Info_File: mysql.slave_master_info
+                    SQL_Delay: 0
+          SQL_Remaining_Delay: NULL
+    Replica_SQL_Running_State: Replica has read all relay log; waiting for more updates
+           Source_Retry_Count: 86400
+                  Source_Bind: 
+      Last_IO_Error_Timestamp: 
+     Last_SQL_Error_Timestamp: 
+               Source_SSL_Crl: 
+           Source_SSL_Crlpath: 
+           Retrieved_Gtid_Set: 6cfaa641-7926-11ee-bb23-fefcfe25467b:1-2
+            Executed_Gtid_Set: 6cf9ffd3-7926-11ee-84ca-fefcfe0f647a:1,
+6cfaa641-7926-11ee-bb23-fefcfe25467b:1-2
+                Auto_Position: 1
+         Replicate_Rewrite_DB: 
+                 Channel_Name: 
+           Source_TLS_Version: 
+       Source_public_key_path: 
+        Get_Source_public_key: 0
+            Network_Namespace: 
+1 row in set (0.00 sec)
+
+ERROR: 
+No query specified
+
+
+
+3)主库A操作
+
+mysql> select * from t_user01;
++----+--------+
+| id | name   |
++----+--------+
+|  1 | user01 |
+|  2 | user02 |
+|  3 | user03 |
+|  4 | user04 |
+|  5 | user05 |
+| 10 | user01 |
+| 20 | user02 |
+| 30 | user03 |
+| 40 | user04 |
+| 50 | user05 |
++----+--------+
+10 rows in set (0.00 sec)
+
+mysql> show replica status\G;
+*************************** 1. row ***************************
+             Replica_IO_State: Waiting for source to send event
+                  Source_Host: 172.18.13.115
+                  Source_User: repl
+                  Source_Port: 3306
+                Connect_Retry: 60
+              Source_Log_File: mysql-bin.000001
+          Read_Source_Log_Pos: 2680
+               Relay_Log_File: relay-bin.000002
+                Relay_Log_Pos: 1440
+        Relay_Source_Log_File: mysql-bin.000001
+           Replica_IO_Running: Yes
+          Replica_SQL_Running: Yes
+              Replicate_Do_DB: 
+          Replicate_Ignore_DB: 
+           Replicate_Do_Table: 
+       Replicate_Ignore_Table: 
+      Replicate_Wild_Do_Table: 
+  Replicate_Wild_Ignore_Table: 
+                   Last_Errno: 0
+                   Last_Error: 
+                 Skip_Counter: 0
+          Exec_Source_Log_Pos: 2680
+              Relay_Log_Space: 1644
+              Until_Condition: None
+               Until_Log_File: 
+                Until_Log_Pos: 0
+           Source_SSL_Allowed: No
+           Source_SSL_CA_File: 
+           Source_SSL_CA_Path: 
+              Source_SSL_Cert: 
+            Source_SSL_Cipher: 
+               Source_SSL_Key: 
+        Seconds_Behind_Source: 0
+Source_SSL_Verify_Server_Cert: No
+                Last_IO_Errno: 0
+                Last_IO_Error: 
+               Last_SQL_Errno: 0
+               Last_SQL_Error: 
+  Replicate_Ignore_Server_Ids: 
+             Source_Server_Id: 115
+                  Source_UUID: 6cf9ffd3-7926-11ee-84ca-fefcfe0f647a
+             Source_Info_File: mysql.slave_master_info
+                    SQL_Delay: 0
+          SQL_Remaining_Delay: NULL
+    Replica_SQL_Running_State: Replica has read all relay log; waiting for more updates
+           Source_Retry_Count: 86400
+                  Source_Bind: 
+      Last_IO_Error_Timestamp: 
+     Last_SQL_Error_Timestamp: 
+               Source_SSL_Crl: 
+           Source_SSL_Crlpath: 
+           Retrieved_Gtid_Set: 6cf9ffd3-7926-11ee-84ca-fefcfe0f647a:1
+            Executed_Gtid_Set: 6cf9ffd3-7926-11ee-84ca-fefcfe0f647a:1,
+6cfaa641-7926-11ee-bb23-fefcfe25467b:1-2
+                Auto_Position: 1
+         Replicate_Rewrite_DB: 
+                 Channel_Name: 
+           Source_TLS_Version: 
+       Source_public_key_path: 
+        Get_Source_public_key: 0
+            Network_Namespace: 
+1 row in set (0.01 sec)
+
+ERROR: 
+No query specified
+
+```
+
+
+
+
+
+##### 6) 主库误操作: reset master，又执行了DML后 --- 还原成主从模式
+
+#同事在主库上新建了个备份库formflowcs，导出原库formflow数据库，导入到formflowcs，但是报错：ERROR 3546 (HY000) at line 24: @@GLOBAL.GTID_PURGED cannot be changed: the added gtid set must not overlap with @@GLOBAL.GTID_EXECUTED
+
+#同事经过百度后，在主库执行了reset master，导致主库的binlog全部清空了
+
+#此时主从同步中断，从库报错
+
+#但是后面又有数据插入进来或者删除
+
+#主库状态
+
+```sql
+root@localhost:mysql.sock [(none)]> SHOW MASTER STATUS;
++------------------+-----------+--------------+------------------+-----------------------------------------------+
+| File             | Position  | Binlog_Do_DB | Binlog_Ignore_DB | Executed_Gtid_Set                             |
++------------------+-----------+--------------+------------------+-----------------------------------------------+
+| mysql-bin.000003 | 444986131 |              |                  | af179f66-7990-11ee-97cc-fa163e1255d2:1-366018 |
++------------------+-----------+--------------+------------------+-----------------------------------------------+
+1 row in set (0.00 sec)
+```
+
+
+
+#从库状态
+
+```sql
+root@localhost:mysql.sock [(none)]>  SHOW REPLICA STATUS \G;
+*************************** 1. row ***************************
+             Replica_IO_State:
+                  Source_Host: 10.20.12.136
+                  Source_User: repl
+                  Source_Port: 3306
+                Connect_Retry: 60
+              Source_Log_File: mysql-bin.000153
+          Read_Source_Log_Pos: 1171668
+               Relay_Log_File: relay-bin.000458
+                Relay_Log_Pos: 1171844
+        Relay_Source_Log_File: mysql-bin.000153
+           Replica_IO_Running: No
+          Replica_SQL_Running: Yes
+              Replicate_Do_DB:
+          Replicate_Ignore_DB:
+           Replicate_Do_Table:
+       Replicate_Ignore_Table:
+      Replicate_Wild_Do_Table:
+  Replicate_Wild_Ignore_Table:
+                   Last_Errno: 0
+                   Last_Error:
+                 Skip_Counter: 0
+          Exec_Source_Log_Pos: 1171668
+              Relay_Log_Space: 1172135
+              Until_Condition: None
+               Until_Log_File:
+                Until_Log_Pos: 0
+           Source_SSL_Allowed: No
+           Source_SSL_CA_File:
+           Source_SSL_CA_Path:
+              Source_SSL_Cert:
+            Source_SSL_Cipher:
+               Source_SSL_Key:
+        Seconds_Behind_Source: NULL
+Source_SSL_Verify_Server_Cert: No
+                Last_IO_Errno: 13114
+                Last_IO_Error: Got fatal error 1236 from source when reading data from binary log: 'could not find next log; the first event '' at 4, the last event read from './mysql-bin.000153' at 1171668, the last byte read from './mysql-bin.000153' at 1171668.'
+               Last_SQL_Errno: 0
+               Last_SQL_Error:
+  Replicate_Ignore_Server_Ids:
+             Source_Server_Id: 136
+                  Source_UUID: af179f66-7990-11ee-97cc-fa163e1255d2
+             Source_Info_File: mysql.slave_master_info
+                    SQL_Delay: 0
+          SQL_Remaining_Delay: NULL
+    Replica_SQL_Running_State: Replica has read all relay log; waiting for more updates
+           Source_Retry_Count: 86400
+                  Source_Bind:
+      Last_IO_Error_Timestamp: 240301 09:39:41
+     Last_SQL_Error_Timestamp:
+               Source_SSL_Crl:
+           Source_SSL_Crlpath:
+           Retrieved_Gtid_Set: af179f66-7990-11ee-97cc-fa163e1255d2:3440-10308609
+            Executed_Gtid_Set: af179f66-7990-11ee-97cc-fa163e1255d2:1-10308609,
+
+b00ea401-7990-11ee-a316-fa163e3f7e56:1-1235
+                Auto_Position: 1
+         Replicate_Rewrite_DB:
+                 Channel_Name:
+           Source_TLS_Version:
+       Source_public_key_path:
+        Get_Source_public_key: 0
+            Network_Namespace:
+1 row in set (0.00 sec)
+
+ERROR:
+No query specified
+```
+
+
+
+#主从重置操作
+
+```bash
+1、从库操作
+
+-- 清空从库gtid
+reset master;
+
+-- 停止slave
+stop slave;
+-- 重置slave
+reset slave all;
+--删除同步的数据
+show databases;
+drop database db*
+
+2、主库操作
+
+-- 查看状态
+show master status;
+
+查看position的数值，如果多次查询有变化，就说明对数据有操作。
+
+-- 重置master
+reset master;
+show master status;
+
+-- 全局锁定
+SET @@GLOBAL.read_only = ON;
+-- 锁表只读
+flush tables with read lock;
+
+-- 此时进行备份
+
+/usr/bin/mysqldump -uroot -pMysql2023\!\@\#Root --quick --events --all-databases --source-data=2 --single-transaction --set-gtid-purged=OFF > 20240305.sql
+
+/usr/bin/tar -zcvf 20240305.sql.tar.gz 20240305.sql
+
+-- 传输到从库
+
+ scp 20240305.sql.tar.gz 10.20.12.136:/root/
+
+3、从库操作
+
+-- 还原从库
+tar -zxvf 20240305.sql.tar.gz
+
+mysql -u root -p
+
+source /root/20240305.sql
+
+
+-- 重新建立关系  子厚两个参数查看master状态即可 和主库保持一致
+#change master to master_host = '192.168.22.22', master_user = 'user', master_port=3306, master_password='pwd', master_log_file = 'mysqld-bin.000001', master_log_pos=1234; 
+CHANGE REPLICATION SOURCE TO SOURCE_HOST='10.20.12.136',SOURCE_PORT=3306,SOURCE_USER='repl',SOURCE_PASSWORD='Repl123!@#2023',SOURCE_AUTO_POSITION = 1;
+
+
+-- 启动slave
+#start slave
+start replica;
+
+4、主库解锁
+
+unlock tables;
+SET @@GLOBAL.read_only = OFF;
+
+
+5、查看从库状态
+
+-- 查看slave状态
+#show slave status
+SHOW REPLICA STATUS \G;
+
+6、验证主从的同步，查看Slave_IO_Running、Slave_SQL_Running的值，都为YES就说明没问题，主库写入数据测试即可。
+1) 主库操作
+mysql> CREATE DATABASE testdb01 DEFAULT CHARSET utf8mb4; 
+mysql> CREATE USER 'testuser01'@'%' IDENTIFIED BY 'Qwert123..';
+mysql> GRANT ALL PRIVILEGES ON testdb01.* TO 'testuser01'@'%'; 
+mysql> FLUSH PRIVILEGES;
+
+mysql> USE testdb01;
+mysql> CREATE TABLE t_user01(
+ id int auto_increment primary key,
+ name varchar(40)
+) ENGINE = InnoDB;
+
+BEGIN;
+INSERT INTO t_user01 VALUES (1,'user01');
+INSERT INTO t_user01 VALUES (2,'user02');
+INSERT INTO t_user01 VALUES (3,'user03');
+INSERT INTO t_user01 VALUES (4,'user04');
+INSERT INTO t_user01 VALUES (5,'user05');
+commit;
+
+mysql> select * from t_user01;
++----+--------+
+| id | name   |
++----+--------+
+|  1 | user01 |
+|  2 | user02 |
+|  3 | user03 |
+|  4 | user04 |
+|  5 | user05 |
++----+--------+
+5 rows in set (0.00 sec)
+
+mysql> show master status;
++------------------+----------+--------------+------------------+------------------------------------------+
+| File             | Position | Binlog_Do_DB | Binlog_Ignore_DB | Executed_Gtid_Set                        |
++------------------+----------+--------------+------------------+------------------------------------------+
+| mysql-bin.000001 |     1718 |              |                  | b526a489-7796-11ee-b698-fefcfec91d86:1-6 |
++------------------+----------+--------------+------------------+------------------------------------------+
+1 row in set (0.00 sec)
+
+
+2) 从库查询
+mysql> use testdb01;
+Database changed
+
+mysql> select * from testdb01.t_user01;
++----+--------+
+| id | name   |
++----+--------+
+|  1 | user01 |
+|  2 | user02 |
+|  3 | user03 |
+|  4 | user04 |
+|  5 | user05 |
++----+--------+
+5 rows in set (0.00 sec)
+
+mysql> SHOW REPLICA STATUS \G;
+*************************** 1. row ***************************
+             Replica_IO_State: Waiting for source to send event
+                  Source_Host: 172.18.13.112
+                  Source_User: repl
+                  Source_Port: 3306
+                Connect_Retry: 60
+              Source_Log_File: mysql-bin.000001
+          Read_Source_Log_Pos: 1718
+               Relay_Log_File: relay-bin.000002
+                Relay_Log_Pos: 1934
+        Relay_Source_Log_File: mysql-bin.000001
+           Replica_IO_Running: Yes
+          Replica_SQL_Running: Yes
+              Replicate_Do_DB: 
+          Replicate_Ignore_DB: 
+           Replicate_Do_Table: 
+       Replicate_Ignore_Table: 
+      Replicate_Wild_Do_Table: 
+  Replicate_Wild_Ignore_Table: 
+                   Last_Errno: 0
+                   Last_Error: 
+                 Skip_Counter: 0
+          Exec_Source_Log_Pos: 1718
+              Relay_Log_Space: 2138
+              Until_Condition: None
+               Until_Log_File: 
+                Until_Log_Pos: 0
+           Source_SSL_Allowed: No
+           Source_SSL_CA_File: 
+           Source_SSL_CA_Path: 
+              Source_SSL_Cert: 
+            Source_SSL_Cipher: 
+               Source_SSL_Key: 
+        Seconds_Behind_Source: 0
+Source_SSL_Verify_Server_Cert: No
+                Last_IO_Errno: 0
+                Last_IO_Error: 
+               Last_SQL_Errno: 0
+               Last_SQL_Error: 
+  Replicate_Ignore_Server_Ids: 
+             Source_Server_Id: 112
+                  Source_UUID: b526a489-7796-11ee-b698-fefcfec91d86
+             Source_Info_File: mysql.slave_master_info
+                    SQL_Delay: 0
+          SQL_Remaining_Delay: NULL
+    Replica_SQL_Running_State: Replica has read all relay log; waiting for more updates
+           Source_Retry_Count: 86400
+                  Source_Bind: 
+      Last_IO_Error_Timestamp: 
+     Last_SQL_Error_Timestamp: 
+               Source_SSL_Crl: 
+           Source_SSL_Crlpath: 
+           Retrieved_Gtid_Set: b526a489-7796-11ee-b698-fefcfec91d86:1-6
+            Executed_Gtid_Set: b526a489-7796-11ee-b698-fefcfec91d86:1-6
+                Auto_Position: 1
+         Replicate_Rewrite_DB: 
+                 Channel_Name: 
+           Source_TLS_Version: 
+       Source_public_key_path: 
+        Get_Source_public_key: 0
+            Network_Namespace: 
+1 row in set (0.00 sec)
+
+ERROR: 
+No query specified
+
+```
+
+
+
+##### 7) 主库误操作: reset master，又执行了DML后 --- 还原成双主模式
+
+#同事在主库上新建了个备份库formflowcs，导出原库formflow数据库，导入到formflowcs，但是报错：ERROR 3546 (HY000) at line 24: @@GLOBAL.GTID_PURGED cannot be changed: the added gtid set must not overlap with @@GLOBAL.GTID_EXECUTED
+
+#同事经过百度后，在主库执行了reset master，导致主库的binlog全部清空了
+
+#此时主从同步中断，从库报错
+
+#但是后面又有数据插入进来或者删除
+
+#主库状态
+
+```sql
+root@localhost:mysql.sock [(none)]> SHOW MASTER STATUS;
++------------------+-----------+--------------+------------------+-----------------------------------------------+
+| File             | Position  | Binlog_Do_DB | Binlog_Ignore_DB | Executed_Gtid_Set                             |
++------------------+-----------+--------------+------------------+-----------------------------------------------+
+| mysql-bin.000003 | 444986131 |              |                  | af179f66-7990-11ee-97cc-fa163e1255d2:1-366018 |
++------------------+-----------+--------------+------------------+-----------------------------------------------+
+1 row in set (0.00 sec)
+```
+
+
+
+#从库状态
+
+```sql
+root@localhost:mysql.sock [(none)]>  SHOW REPLICA STATUS \G;
+*************************** 1. row ***************************
+             Replica_IO_State:
+                  Source_Host: 10.20.12.136
+                  Source_User: repl
+                  Source_Port: 3306
+                Connect_Retry: 60
+              Source_Log_File: mysql-bin.000153
+          Read_Source_Log_Pos: 1171668
+               Relay_Log_File: relay-bin.000458
+                Relay_Log_Pos: 1171844
+        Relay_Source_Log_File: mysql-bin.000153
+           Replica_IO_Running: No
+          Replica_SQL_Running: Yes
+              Replicate_Do_DB:
+          Replicate_Ignore_DB:
+           Replicate_Do_Table:
+       Replicate_Ignore_Table:
+      Replicate_Wild_Do_Table:
+  Replicate_Wild_Ignore_Table:
+                   Last_Errno: 0
+                   Last_Error:
+                 Skip_Counter: 0
+          Exec_Source_Log_Pos: 1171668
+              Relay_Log_Space: 1172135
+              Until_Condition: None
+               Until_Log_File:
+                Until_Log_Pos: 0
+           Source_SSL_Allowed: No
+           Source_SSL_CA_File:
+           Source_SSL_CA_Path:
+              Source_SSL_Cert:
+            Source_SSL_Cipher:
+               Source_SSL_Key:
+        Seconds_Behind_Source: NULL
+Source_SSL_Verify_Server_Cert: No
+                Last_IO_Errno: 13114
+                Last_IO_Error: Got fatal error 1236 from source when reading data from binary log: 'could not find next log; the first event '' at 4, the last event read from './mysql-bin.000153' at 1171668, the last byte read from './mysql-bin.000153' at 1171668.'
+               Last_SQL_Errno: 0
+               Last_SQL_Error:
+  Replicate_Ignore_Server_Ids:
+             Source_Server_Id: 136
+                  Source_UUID: af179f66-7990-11ee-97cc-fa163e1255d2
+             Source_Info_File: mysql.slave_master_info
+                    SQL_Delay: 0
+          SQL_Remaining_Delay: NULL
+    Replica_SQL_Running_State: Replica has read all relay log; waiting for more updates
+           Source_Retry_Count: 86400
+                  Source_Bind:
+      Last_IO_Error_Timestamp: 240301 09:39:41
+     Last_SQL_Error_Timestamp:
+               Source_SSL_Crl:
+           Source_SSL_Crlpath:
+           Retrieved_Gtid_Set: af179f66-7990-11ee-97cc-fa163e1255d2:3440-10308609
+            Executed_Gtid_Set: af179f66-7990-11ee-97cc-fa163e1255d2:1-10308609,
+
+b00ea401-7990-11ee-a316-fa163e3f7e56:1-1235
+                Auto_Position: 1
+         Replicate_Rewrite_DB:
+                 Channel_Name:
+           Source_TLS_Version:
+       Source_public_key_path:
+        Get_Source_public_key: 0
+            Network_Namespace:
+1 row in set (0.00 sec)
+
+ERROR:
+No query specified
+```
+
+
+
+#双主重置操作
+
+```bash
+1、从库操作
+
+-- 清空从库gtid
+reset master;
+
+-- 停止slave
+stop slave;
+-- 重置slave
+reset slave all;
+--删除同步的数据
+show databases;
+drop database db*
+
+2、主库操作
+
+-- 查看状态
+show master status;
+
+查看position的数值，如果多次查询有变化，就说明对数据有操作。
+
+-- 重置master
+reset master;
+show master status;
+
+-- 全局锁定
+SET @@GLOBAL.read_only = ON;
+-- 锁表只读
+flush tables with read lock;
+
+-- 此时进行备份
+
+/usr/bin/mysqldump -uroot -pMysql2023\!\@\#Root --quick --events --all-databases --source-data=2 --single-transaction --set-gtid-purged=OFF > 20240305.sql
+
+/usr/bin/tar -zcvf 20240305.sql.tar.gz 20240305.sql
+
+-- 传输到从库
+
+ scp 20240305.sql.tar.gz 10.20.12.136:/root/
+
+3、从库操作
+
+-- 还原从库
+tar -zxvf 20240305.sql.tar.gz
+
+mysql -u root -p
+
+source /root/20240305.sql
+
+-- 如果是双主，此时从库也要reset master下，重置下binlog
+reset master;
+
+-- 重新建立关系  子厚两个参数查看master状态即可 和主库保持一致
+#change master to master_host = '192.168.22.22', master_user = 'user', master_port=3306, master_password='pwd', master_log_file = 'mysqld-bin.000001', master_log_pos=1234; 
+CHANGE REPLICATION SOURCE TO SOURCE_HOST='10.20.12.136',SOURCE_PORT=3306,SOURCE_USER='repl',SOURCE_PASSWORD='Repl123!@#2023',SOURCE_AUTO_POSITION = 1;
+
+
+-- 启动slave
+#start slave
+start replica;
+
+4、主库解锁
+
+unlock tables;
+SET @@GLOBAL.read_only = OFF;
+
+5、配置双主模式
+
+stop slave;
+reset slave all;
+
+CHANGE REPLICATION SOURCE TO SOURCE_HOST='10.20.12.137',SOURCE_PORT=3306,SOURCE_USER='repl',SOURCE_PASSWORD='Repl123!@#2023',SOURCE_AUTO_POSITION = 1;
+
+start replica;
+
+
+6、查看从库状态
+
+-- 查看slave状态
+#show slave status
+SHOW REPLICA STATUS \G;
+
+7、验证主从的同步，查看Slave_IO_Running、Slave_SQL_Running的值，都为YES就说明没问题，主库写入数据测试即可。
+1) 主库A操作
+mysql> CREATE DATABASE testdb01 DEFAULT CHARSET utf8mb4; 
+mysql> CREATE USER 'testuser01'@'%' IDENTIFIED BY 'Qwert123..';
+mysql> GRANT ALL PRIVILEGES ON testdb01.* TO 'testuser01'@'%'; 
+mysql> FLUSH PRIVILEGES;
+
+mysql> USE testdb01;
+mysql> CREATE TABLE t_user01(
+ id int auto_increment primary key,
+ name varchar(40)
+) ENGINE = InnoDB;
+
+BEGIN;
+INSERT INTO t_user01 VALUES (1,'user01');
+INSERT INTO t_user01 VALUES (2,'user02');
+INSERT INTO t_user01 VALUES (3,'user03');
+INSERT INTO t_user01 VALUES (4,'user04');
+INSERT INTO t_user01 VALUES (5,'user05');
+commit;
+
+mysql> select * from t_user01;
++----+--------+
+| id | name   |
++----+--------+
+|  1 | user01 |
+|  2 | user02 |
+|  3 | user03 |
+|  4 | user04 |
+|  5 | user05 |
++----+--------+
+5 rows in set (0.00 sec)
+
+
+
+2) 主库B操作
+mysql> use testdb01;
+Database changed
+
+mysql> select * from testdb01.t_user01;
++----+--------+
+| id | name   |
++----+--------+
+|  1 | user01 |
+|  2 | user02 |
+|  3 | user03 |
+|  4 | user04 |
+|  5 | user05 |
++----+--------+
+5 rows in set (0.00 sec)
+
+mysql> show replica status\G;
+*************************** 1. row ***************************
+             Replica_IO_State: Waiting for source to send event
+                  Source_Host: 10.20.12.136
+                  Source_User: repl
+                  Source_Port: 3306
+                Connect_Retry: 60
+              Source_Log_File: mysql-bin.000001
+          Read_Source_Log_Pos: 7896
+               Relay_Log_File: relay-bin.000002
+                Relay_Log_Pos: 8112
+        Relay_Source_Log_File: mysql-bin.000001
+           Replica_IO_Running: Yes
+          Replica_SQL_Running: Yes
+              Replicate_Do_DB:
+          Replicate_Ignore_DB:
+           Replicate_Do_Table:
+       Replicate_Ignore_Table:
+      Replicate_Wild_Do_Table:
+  Replicate_Wild_Ignore_Table:
+                   Last_Errno: 0
+                   Last_Error:
+                 Skip_Counter: 0
+          Exec_Source_Log_Pos: 7896
+              Relay_Log_Space: 8316
+              Until_Condition: None
+               Until_Log_File:
+                Until_Log_Pos: 0
+           Source_SSL_Allowed: No
+           Source_SSL_CA_File:
+           Source_SSL_CA_Path:
+              Source_SSL_Cert:
+            Source_SSL_Cipher:
+               Source_SSL_Key:
+        Seconds_Behind_Source: 0
+Source_SSL_Verify_Server_Cert: No
+                Last_IO_Errno: 0
+                Last_IO_Error:
+               Last_SQL_Errno: 0
+               Last_SQL_Error:
+  Replicate_Ignore_Server_Ids:
+             Source_Server_Id: 136
+                  Source_UUID: af179f66-7990-11ee-97cc-fa163e1255d2
+             Source_Info_File: mysql.slave_master_info
+                    SQL_Delay: 0
+          SQL_Remaining_Delay: NULL
+    Replica_SQL_Running_State: Replica has read all relay log; waiting for more updates
+           Source_Retry_Count: 86400
+                  Source_Bind:
+      Last_IO_Error_Timestamp:
+     Last_SQL_Error_Timestamp:
+               Source_SSL_Crl:
+           Source_SSL_Crlpath:
+           Retrieved_Gtid_Set: af179f66-7990-11ee-97cc-fa163e1255d2:1-11
+            Executed_Gtid_Set: af179f66-7990-11ee-97cc-fa163e1255d2:1-11
+                Auto_Position: 1
+         Replicate_Rewrite_DB:
+                 Channel_Name:
+           Source_TLS_Version:
+       Source_public_key_path:
+        Get_Source_public_key: 0
+            Network_Namespace:
+1 row in set (0.00 sec)
+
+ERROR:
+No query specified
+
+
+mysql> BEGIN;
+INSERT INTO t_user01 VALUES (10,'user01');
+INSERT INTO t_user01 VALUES (20,'user02');
+INSERT INTO t_user01 VALUES (30,'user03');
+INSERT INTO t_user01 VALUES (40,'user04');
+INSERT INTO t_user01 VALUES (50,'user05');
+commit;
+
+mysql> select * from testdb01.t_user01;
++----+--------+
+| id | name   |
++----+--------+
+|  1 | user01 |
+|  2 | user02 |
+|  3 | user03 |
+|  4 | user04 |
+|  5 | user05 |
+| 10 | user01 |
+| 20 | user02 |
+| 30 | user03 |
+| 40 | user04 |
+| 50 | user05 |
++----+--------+
+10 rows in set (0.00 sec)
+
+
+mysql> show replica status\G;
+*************************** 1. row ***************************
+             Replica_IO_State: Waiting for source to send event
+                  Source_Host: 10.20.12.136
+                  Source_User: repl
+                  Source_Port: 3306
+                Connect_Retry: 60
+              Source_Log_File: mysql-bin.000001
+          Read_Source_Log_Pos: 296748
+               Relay_Log_File: relay-bin.000002
+                Relay_Log_Pos: 295895
+        Relay_Source_Log_File: mysql-bin.000001
+           Replica_IO_Running: Yes
+          Replica_SQL_Running: Yes
+              Replicate_Do_DB:
+          Replicate_Ignore_DB:
+           Replicate_Do_Table:
+       Replicate_Ignore_Table:
+      Replicate_Wild_Do_Table:
+  Replicate_Wild_Ignore_Table:
+                   Last_Errno: 0
+                   Last_Error:
+                 Skip_Counter: 0
+          Exec_Source_Log_Pos: 296748
+              Relay_Log_Space: 296099
+              Until_Condition: None
+               Until_Log_File:
+                Until_Log_Pos: 0
+           Source_SSL_Allowed: No
+           Source_SSL_CA_File:
+           Source_SSL_CA_Path:
+              Source_SSL_Cert:
+            Source_SSL_Cipher:
+               Source_SSL_Key:
+        Seconds_Behind_Source: 0
+Source_SSL_Verify_Server_Cert: No
+                Last_IO_Errno: 0
+                Last_IO_Error:
+               Last_SQL_Errno: 0
+               Last_SQL_Error:
+  Replicate_Ignore_Server_Ids:
+             Source_Server_Id: 136
+                  Source_UUID: af179f66-7990-11ee-97cc-fa163e1255d2
+             Source_Info_File: mysql.slave_master_info
+                    SQL_Delay: 0
+          SQL_Remaining_Delay: NULL
+    Replica_SQL_Running_State: Replica has read all relay log; waiting for more updates
+           Source_Retry_Count: 86400
+                  Source_Bind:
+      Last_IO_Error_Timestamp:
+     Last_SQL_Error_Timestamp:
+               Source_SSL_Crl:
+           Source_SSL_Crlpath:
+           Retrieved_Gtid_Set: af179f66-7990-11ee-97cc-fa163e1255d2:1-312
+            Executed_Gtid_Set: af179f66-7990-11ee-97cc-fa163e1255d2:1-312,
+b00ea401-7990-11ee-a316-fa163e3f7e56:1
+                Auto_Position: 1
+         Replicate_Rewrite_DB:
+                 Channel_Name:
+           Source_TLS_Version:
+       Source_public_key_path:
+        Get_Source_public_key: 0
+            Network_Namespace:
+1 row in set (0.00 sec)
+
+ERROR:
+No query specified
+
+
+
+3)主库A操作
+
+mysql> select * from t_user01;
++----+--------+
+| id | name   |
++----+--------+
+|  1 | user01 |
+|  2 | user02 |
+|  3 | user03 |
+|  4 | user04 |
+|  5 | user05 |
+| 10 | user01 |
+| 20 | user02 |
+| 30 | user03 |
+| 40 | user04 |
+| 50 | user05 |
++----+--------+
+10 rows in set (0.00 sec)
+
+mysql>  show replica status\G;
+*************************** 1. row ***************************
+             Replica_IO_State: Waiting for source to send event
+                  Source_Host: 10.20.12.137
+                  Source_User: repl
+                  Source_Port: 3306
+                Connect_Retry: 60
+              Source_Log_File: mysql-bin.000001
+          Read_Source_Log_Pos: 264878
+               Relay_Log_File: relay-bin.000002
+                Relay_Log_Pos: 1487
+        Relay_Source_Log_File: mysql-bin.000001
+           Replica_IO_Running: Yes
+          Replica_SQL_Running: Yes
+              Replicate_Do_DB:
+          Replicate_Ignore_DB:
+           Replicate_Do_Table:
+       Replicate_Ignore_Table:
+      Replicate_Wild_Do_Table:
+  Replicate_Wild_Ignore_Table:
+                   Last_Errno: 0
+                   Last_Error:
+                 Skip_Counter: 0
+          Exec_Source_Log_Pos: 264878
+              Relay_Log_Space: 1691
+              Until_Condition: None
+               Until_Log_File:
+                Until_Log_Pos: 0
+           Source_SSL_Allowed: No
+           Source_SSL_CA_File:
+           Source_SSL_CA_Path:
+              Source_SSL_Cert:
+            Source_SSL_Cipher:
+               Source_SSL_Key:
+        Seconds_Behind_Source: 0
+Source_SSL_Verify_Server_Cert: No
+                Last_IO_Errno: 0
+                Last_IO_Error:
+               Last_SQL_Errno: 0
+               Last_SQL_Error:
+  Replicate_Ignore_Server_Ids:
+             Source_Server_Id: 137
+                  Source_UUID: b00ea401-7990-11ee-a316-fa163e3f7e56
+             Source_Info_File: mysql.slave_master_info
+                    SQL_Delay: 0
+          SQL_Remaining_Delay: NULL
+    Replica_SQL_Running_State: Replica has read all relay log; waiting for more updates
+           Source_Retry_Count: 86400
+                  Source_Bind:
+      Last_IO_Error_Timestamp:
+     Last_SQL_Error_Timestamp:
+               Source_SSL_Crl:
+           Source_SSL_Crlpath:
+           Retrieved_Gtid_Set: b00ea401-7990-11ee-a316-fa163e3f7e56:1
+            Executed_Gtid_Set: af179f66-7990-11ee-97cc-fa163e1255d2:1-291,
+b00ea401-7990-11ee-a316-fa163e3f7e56:1
+                Auto_Position: 1
+         Replicate_Rewrite_DB:
+                 Channel_Name:
+           Source_TLS_Version:
+       Source_public_key_path:
+        Get_Source_public_key: 0
+            Network_Namespace:
+1 row in set (0.00 sec)
+
+ERROR:
+No query specified
+```
+
+
+
+
 
 #### 7、压测
 
