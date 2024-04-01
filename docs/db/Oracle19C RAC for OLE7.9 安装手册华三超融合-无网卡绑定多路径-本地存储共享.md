@@ -1651,7 +1651,10 @@ cat /sys/kernel/mm/transparent_hugepage/enabled
 #若以上命令执行结果显示为“always”，则表示开启了THP
 
 ##修改方法一，必须知道引导是BIOS还是EFI
+
 #可以通过df -h或者cat /etc/fstab查看是否有/boot/efi分区
+#[ -d /sys/firmware/efi ] && echo "UEFI" || echo "BIOS"
+
 #则修改/etc/default/grub，在RUB_CMDLINE_LINUX中添加transparent_hugepage=never
 
 #内容如下
