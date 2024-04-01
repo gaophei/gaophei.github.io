@@ -1250,6 +1250,8 @@ Condition: start condition failed at Wed 2023-11-22 10:12:27 CST; 1s ago
 ```bash
 ls -1cv /dev/sd* | grep -v [0-9] | while read disk; do  echo -n "$disk " ; /usr/lib/udev/scsi_id -g -u -d $disk ; done
 
+# /u01/app/19.0.0/grid/bin/crsctl stop cluster -f
+
 /usr/sbin/iscsiadm -m node -T iqn.2023-11.com.oracle:rac -p 172.18.13.104:3260 --logout
 
 #iscsiadm -m node -T iqn.2023-11.com.oracle:rac -p 172.18.13.104:3260 -o delete
@@ -4672,11 +4674,42 @@ Please see the VKTM trace file for more details:
 
 #解决：
 
-```oracle
+```sql
 alter system set event="10795 trace name context forever, level 2" scope=spfile sid='*';
 
 srvctl stop database -d xydb 
 srvctl start database -d xydb 
+
+#alter system  set event='10949 trace name context forever,level 1','28401 trace name context forever,level 1','10503 trace name context forever, level 4000','10795 trace name context forever, level 2' scope=spfile sid='*';
+
+#10949---"Disable autotune direct path read for full table scan"
+#28401---"关闭密码错误登录延迟"
+#10503---"enable user-specified graduated bind lengths"
+
+SELECT name, value
+FROM v$parameter
+WHERE isdefault = 'FALSE';
+
+
+SET linesize 120
+SET feedback off
+SET SERVEROUTPUT ON
+DECLARE
+err_msg VARCHAR2(120);
+BEGIN
+dbms_output.enable (1000000);
+FOR err_num IN 10000..10999
+LOOP
+err_msg := SQLERRM (-err_num);
+IF err_msg NOT LIKE '%Message '||err_num||' not found%' THEN
+dbms_output.put_line (err_msg);
+END IF;
+END LOOP;
+END;
+
+
+
+
 ```
 
 
@@ -4707,7 +4740,34 @@ and upper (a.ksppinm) LIKE upper ('%&param%')
 order by name
 /
 
+------------------------
+col name for a30
+col value for a20
+col description for a70
+set line 150
+select a.ksppinm name,b.ksppstvl value,a.ksppdesc description
+  from x$ksppi a,x$ksppcv b
+ where a.inst_id = USERENV ('Instance')
+   and b.inst_id = USERENV ('Instance')
+   and a.indx = b.indx
+   and upper(a.ksppinm) LIKE upper('%disable_file_resize_logging%')
+   order by name;
+-----------------------
+
+
  alter system set "_disable_file_resize_logging"=TRUE scope=both sid='*';
+```
+
+
+
+#优化2024
+
+```sql
+alter system  set event='10949 trace name context forever,level 1','28401 trace name context forever,level 1','10503 trace name context forever, level 4000' scope=spfile sid='*';
+
+#直接路径读（直接路径读（direct path read）通常发生在Oracle直接读数据到进程PGA时，这个读取不需要经过SGA。），口令延时读，增大语句中字符串的buffer长度
+
+
 ```
 
 

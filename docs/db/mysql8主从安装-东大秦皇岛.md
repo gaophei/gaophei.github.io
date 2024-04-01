@@ -509,7 +509,8 @@ log_error_verbosity = 3
 
 #跳过临时表缺少binlog错误
 #slave-skip-errors=1032
-replica_skip_errors = 1032
+#replica_skip_errors = 1032
+replica_skip_errors = 1032,1062,1053,1146
 log_error_suppression_list = 'MY-010914,MY-013360,MY-013730,MY-010584,MY-010559'
 
 ####################session######################
@@ -713,7 +714,7 @@ log_throttle_queries_not_using_indexes = 60
 log_timestamps = SYSTEM
 log_error = error.log
 log_error_verbosity = 3
-replica_skip_errors = 1032
+replica_skip_errors = 1032,1062,1053,1146
 log_error_suppression_list = 'MY-010914,MY-013360,MY-013730,MY-010584,MY-010559'
 sort_buffer_size = 2M
 join_buffer_size = 2M
@@ -935,7 +936,8 @@ log_error_verbosity = 3
 
 #跳过临时表缺少binlog错误
 #slave-skip-errors=1032
-replica_skip_errors = 1032
+#replica_skip_errors = 1032
+replica_skip_errors = 1032,1062,1053,1146
 log_error_suppression_list = 'MY-010914,MY-013360,MY-013730,MY-010584,MY-010559'
 
 ####################session######################
@@ -1139,7 +1141,7 @@ log_throttle_queries_not_using_indexes = 60
 log_timestamps = SYSTEM
 log_error = error.log
 log_error_verbosity = 3
-replica_skip_errors = 1032
+replica_skip_errors = 1032,1062,1053,1146
 log_error_suppression_list = 'MY-010914,MY-013360,MY-013730,MY-010584,MY-010559'
 sort_buffer_size = 2M
 join_buffer_size = 2M
@@ -3313,6 +3315,321 @@ No query specified
 ```
 
 
+
+##### 8) 主库误操作: reset master，又执行了DML后 --- 重新导入备份文件后，还原成双主模式---repl密码发生了变动
+
+#执行7)错误恢复时，因为从生产库导入的最新sql，导致repl发生了密码变动
+
+#所以主从间报错
+
+```log
+2024-03-11T15:52:24.709143+08:00 5 [ERROR] [MY-010584] [Repl] Replica I/O for channel '': Error connecting to source 'repl@172.18.13.115:3306'. This was attempt 1/86400, with a delay of 60 seconds between attempts. Message: Authentication plugin 'caching_sha2_password' reported error: Authentication requires secure connection. Error_code: MY-002061
+2024-03-11T15:52:42.080809+08:00 52 [Warning] [MY-013360] [Server] Plugin mysql_native_password reported: ''mysql_native_password' is deprecated and will be removed in a future release. Please use caching_sha2_password instead'
+```
+
+```mysql
+mysql> show replica status\G;
+*************************** 1. row ***************************
+             Replica_IO_State: Connecting to source
+                  Source_Host: 172.18.13.114
+                  Source_User: repl
+                  Source_Port: 3306
+                Connect_Retry: 60
+              Source_Log_File: mysql-bin.000009
+          Read_Source_Log_Pos: 532135560
+               Relay_Log_File: relay-bin.000027
+                Relay_Log_Pos: 4
+        Relay_Source_Log_File: mysql-bin.000009
+           Replica_IO_Running: Connecting
+          Replica_SQL_Running: Yes
+              Replicate_Do_DB: 
+          Replicate_Ignore_DB: 
+           Replicate_Do_Table: 
+       Replicate_Ignore_Table: 
+      Replicate_Wild_Do_Table: 
+  Replicate_Wild_Ignore_Table: 
+                   Last_Errno: 0
+                   Last_Error: 
+                 Skip_Counter: 0
+          Exec_Source_Log_Pos: 532135560
+              Relay_Log_Space: 532136207
+              Until_Condition: None
+               Until_Log_File: 
+                Until_Log_Pos: 0
+           Source_SSL_Allowed: No
+           Source_SSL_CA_File: 
+           Source_SSL_CA_Path: 
+              Source_SSL_Cert: 
+            Source_SSL_Cipher: 
+               Source_SSL_Key: 
+        Seconds_Behind_Source: NULL
+Source_SSL_Verify_Server_Cert: No
+                Last_IO_Errno: 1045
+                Last_IO_Error: Error connecting to source 'repl@172.18.13.114:3306'. This was attempt 12/86400, with a delay of 60 seconds between attempts. Message: Access denied for user 'repl'@'172.18.13.115' (using password: YES)
+               Last_SQL_Errno: 0
+               Last_SQL_Error: 
+  Replicate_Ignore_Server_Ids: 
+             Source_Server_Id: 0
+                  Source_UUID: 6cfaa641-7926-11ee-bb23-fefcfe25467b
+             Source_Info_File: mysql.slave_master_info
+                    SQL_Delay: 0
+          SQL_Remaining_Delay: NULL
+    Replica_SQL_Running_State: Replica has read all relay log; waiting for more updates
+           Source_Retry_Count: 86400
+                  Source_Bind: 
+      Last_IO_Error_Timestamp: 240311 15:50:42
+     Last_SQL_Error_Timestamp: 
+               Source_SSL_Crl: 
+           Source_SSL_Crlpath: 
+           Retrieved_Gtid_Set: 
+            Executed_Gtid_Set: 6cf9ffd3-7926-11ee-84ca-fefcfe0f647a:1-12,
+6cfaa641-7926-11ee-bb23-fefcfe25467b:1-136385
+                Auto_Position: 1
+         Replicate_Rewrite_DB: 
+                 Channel_Name: 
+           Source_TLS_Version: 
+       Source_public_key_path: 
+        Get_Source_public_key: 0
+            Network_Namespace: 
+1 row in set (0.00 sec)
+
+ERROR: 
+No query specified
+
+```
+
+
+
+#生产环境repl密码跟原测试库密码比对，或者在mysql库中的表slave_master_info中查看原密码
+
+#发现不一致
+
+```sql
+select * from mysql.slave_master_info;
+```
+
+
+
+#并且原本授权repl账户带IP段的信息
+
+```sql
+grant replication slave on *.* to 'repl'@'10.20.12.%';
+```
+
+
+
+#解决办法
+
+#首先主库修改或者IP限制
+
+```sql
+update mysql.user set host='172.18.13.%' where user='repl';
+
+#update mysql.user set host='%' where user='repl';
+
+commit;
+```
+
+
+
+#此时从库先进行repl连接主库测试，使用生产环境密码
+
+```bash
+mysql -u repl -p -h 172.18.13.114
+```
+
+
+
+#此时修改从库连接主库的repl账户密码
+
+```sql
+stop replica;
+
+change replication source to SOURCE_PASSWORD='Repl123!@#2023';
+
+start replica;
+
+show replica status\G;
+```
+
+
+
+#因为前面搭建的是双主，我在主从库上都进行了update mysql.user set host='172.18.13.%' where user='repl';操作，所以从库此处有报错
+
+```mysql
+mysql> show replica status\G;
+*************************** 1. row ***************************
+             Replica_IO_State: Waiting for source to send event
+                  Source_Host: 172.18.13.114
+                  Source_User: repl
+                  Source_Port: 3306
+                Connect_Retry: 60
+              Source_Log_File: mysql-bin.000010
+          Read_Source_Log_Pos: 1245
+               Relay_Log_File: relay-bin.000002
+                Relay_Log_Pos: 373
+        Relay_Source_Log_File: mysql-bin.000010
+           Replica_IO_Running: Yes
+          Replica_SQL_Running: No
+              Replicate_Do_DB: 
+          Replicate_Ignore_DB: 
+           Replicate_Do_Table: 
+       Replicate_Ignore_Table: 
+      Replicate_Wild_Do_Table: 
+  Replicate_Wild_Ignore_Table: 
+                   Last_Errno: 1410
+                   Last_Error: Coordinator stopped because there were error(s) in the worker(s). The most recent failure being: Worker 1 failed executing transaction '6cfaa641-7926-11ee-bb23-fefcfe25467b:136387' at source log mysql-bin.000010, end_log_pos 1245. See error log and/or performance_schema.replication_applier_status_by_worker table for more details about this failure or others, if any.
+                 Skip_Counter: 0
+          Exec_Source_Log_Pos: 237
+              Relay_Log_Space: 1585
+              Until_Condition: None
+               Until_Log_File: 
+                Until_Log_Pos: 0
+           Source_SSL_Allowed: No
+           Source_SSL_CA_File: 
+           Source_SSL_CA_Path: 
+              Source_SSL_Cert: 
+            Source_SSL_Cipher: 
+               Source_SSL_Key: 
+        Seconds_Behind_Source: NULL
+Source_SSL_Verify_Server_Cert: No
+                Last_IO_Errno: 0
+                Last_IO_Error: 
+               Last_SQL_Errno: 1410
+               Last_SQL_Error: Coordinator stopped because there were error(s) in the worker(s). The most recent failure being: Worker 1 failed executing transaction '6cfaa641-7926-11ee-bb23-fefcfe25467b:136387' at source log mysql-bin.000010, end_log_pos 1245. See error log and/or performance_schema.replication_applier_status_by_worker table for more details about this failure or others, if any.
+  Replicate_Ignore_Server_Ids: 
+             Source_Server_Id: 114
+                  Source_UUID: 6cfaa641-7926-11ee-bb23-fefcfe25467b
+             Source_Info_File: mysql.slave_master_info
+                    SQL_Delay: 0
+          SQL_Remaining_Delay: NULL
+    Replica_SQL_Running_State: 
+           Source_Retry_Count: 86400
+                  Source_Bind: 
+      Last_IO_Error_Timestamp: 
+     Last_SQL_Error_Timestamp: 240311 15:55:23
+               Source_SSL_Crl: 
+           Source_SSL_Crlpath: 
+           Retrieved_Gtid_Set: 6cfaa641-7926-11ee-bb23-fefcfe25467b:136386-136387
+            Executed_Gtid_Set: 6cf9ffd3-7926-11ee-84ca-fefcfe0f647a:1-12,
+6cfaa641-7926-11ee-bb23-fefcfe25467b:1-136386
+                Auto_Position: 1
+         Replicate_Rewrite_DB: 
+                 Channel_Name: 
+           Source_TLS_Version: 
+       Source_public_key_path: 
+        Get_Source_public_key: 0
+            Network_Namespace: 
+1 row in set (0.00 sec)
+
+ERROR: 
+No query specified
+
+```
+
+
+
+#根据三.4中的报错处理，从库恢复正常
+
+```sql
+mysql> stop replica;
+Query OK, 0 rows affected (0.00 sec)
+
+mysql> set @@session.gtid_next='6cfaa641-7926-11ee-bb23-fefcfe25467b:136387';
+Query OK, 0 rows affected (0.00 sec)
+
+mysql> begin commit;
+ERROR 1064 (42000): You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near 'commit' at line 1
+mysql> begin;
+Query OK, 0 rows affected (0.00 sec)
+
+mysql> commit;
+Query OK, 0 rows affected (0.00 sec)
+
+mysql> set @@session.gtid_next=automatic;  
+Query OK, 0 rows affected (0.00 sec)
+
+mysql> start replica;
+Query OK, 0 rows affected (0.05 sec)
+
+
+mysql> show replica status\G;
+*************************** 1. row ***************************
+             Replica_IO_State: Waiting for source to send event
+                  Source_Host: 172.18.13.114
+                  Source_User: repl
+                  Source_Port: 3306
+                Connect_Retry: 60
+              Source_Log_File: mysql-bin.000010
+          Read_Source_Log_Pos: 1245
+               Relay_Log_File: relay-bin.000003
+                Relay_Log_Pos: 460
+        Relay_Source_Log_File: mysql-bin.000010
+           Replica_IO_Running: Yes
+          Replica_SQL_Running: Yes
+              Replicate_Do_DB: 
+          Replicate_Ignore_DB: 
+           Replicate_Do_Table: 
+       Replicate_Ignore_Table: 
+      Replicate_Wild_Do_Table: 
+  Replicate_Wild_Ignore_Table: 
+                   Last_Errno: 0
+                   Last_Error: 
+                 Skip_Counter: 0
+          Exec_Source_Log_Pos: 1245
+              Relay_Log_Space: 1888
+              Until_Condition: None
+               Until_Log_File: 
+                Until_Log_Pos: 0
+           Source_SSL_Allowed: No
+           Source_SSL_CA_File: 
+           Source_SSL_CA_Path: 
+              Source_SSL_Cert: 
+            Source_SSL_Cipher: 
+               Source_SSL_Key: 
+        Seconds_Behind_Source: 0
+Source_SSL_Verify_Server_Cert: No
+                Last_IO_Errno: 0
+                Last_IO_Error: 
+               Last_SQL_Errno: 0
+               Last_SQL_Error: 
+  Replicate_Ignore_Server_Ids: 
+             Source_Server_Id: 114
+                  Source_UUID: 6cfaa641-7926-11ee-bb23-fefcfe25467b
+             Source_Info_File: mysql.slave_master_info
+                    SQL_Delay: 0
+          SQL_Remaining_Delay: NULL
+    Replica_SQL_Running_State: Replica has read all relay log; waiting for more updates
+           Source_Retry_Count: 86400
+                  Source_Bind: 
+      Last_IO_Error_Timestamp: 
+     Last_SQL_Error_Timestamp: 
+               Source_SSL_Crl: 
+           Source_SSL_Crlpath: 
+           Retrieved_Gtid_Set: 6cfaa641-7926-11ee-bb23-fefcfe25467b:136386-136387
+            Executed_Gtid_Set: 6cf9ffd3-7926-11ee-84ca-fefcfe0f647a:1-12,
+6cfaa641-7926-11ee-bb23-fefcfe25467b:1-136387
+                Auto_Position: 1
+         Replicate_Rewrite_DB: 
+                 Channel_Name: 
+           Source_TLS_Version: 
+       Source_public_key_path: 
+        Get_Source_public_key: 0
+            Network_Namespace: 
+1 row in set (0.00 sec)
+
+ERROR: 
+No query specified
+
+```
+
+
+
+#同样步骤在现在的主库中执行
+
+#双主恢复
+
+#然后恢复keepalived
 
 
 

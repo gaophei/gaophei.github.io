@@ -1413,7 +1413,7 @@ default:
 
 ##### 5.3.5.3.switch语句流程图
 
-![image-20220425090246634](/Volumes/HDD/study/GO/go-pics/switch流程图.png)
+![image-20220425090246634](go-pics/switch流程图.png)
 
 ```
 对流程图的说明：
@@ -3648,7 +3648,7 @@ plz input a int number:
 ```
 
 
-#202401添加fist检测
+#202401添加first检测
 
 ```go
 package main

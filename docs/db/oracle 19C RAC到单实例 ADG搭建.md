@@ -1,5 +1,19 @@
 ## 1.系统环境
 
+### 1.0.主备库架构
+
+#### 1.0.1.使用LGWR进程
+
+![img](oracle19cRAC-singleInstance-ADG\20210710215923216.png)
+
+
+
+#### 1.0.2.使用ARCH进程
+
+![在这里插入图片描述](oracle19cRAC-singleInstance-ADG\2021071021594847.png)
+
+
+
 ### 1.1.主备库信息
 
 |                                                              | 主库                            | 备库                               |
