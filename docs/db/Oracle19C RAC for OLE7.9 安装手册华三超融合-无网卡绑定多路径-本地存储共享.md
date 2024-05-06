@@ -593,9 +593,9 @@ mpatha dm-2  360002ac0000000000000000300021f88
 
 #添加硬盘，创建方式：新磁盘，分配方式：预分配(类似于vsphere的厚置备，置零)
 
-![image-20231117111420348](E:\workpc\git\gitio\gaophei.github.io\docs\db\oracle-store\image-20231117111420348.png)
+![image-20231117111420348](oracle-store\image-20231117111420348.png)
 
-![image-20231117112712657](E:\workpc\git\gitio\gaophei.github.io\docs\db\oracle-store\image-20231117112712657.png)
+![image-20231117112712657](oracle-store\image-20231117112712657.png)
 
 
 
@@ -1279,6 +1279,37 @@ ls -1cv /dev/sd* | grep -v [0-9] | while read disk; do  echo -n "$disk " ; /usr/
 /u01/app/19.0.0/grid/bin/crsctl start cluster
 /u01/app/19.0.0/grid/bin/crsctl status resource -t
 ```
+
+
+
+#有时候oracle-store会报错tgtd.service，需要iscsi服务器端先重启tgtd和target，然后rac01/rac02做上面的配置
+
+```
+Apr 18 21:00:32 k8s-oracle-store tgtd: tgtd: conn_close(140) Forcing release of tx task 0x20aeea0 10000054 1
+Apr 18 21:00:37 k8s-oracle-store kernel: tgtd[25468]: segfault at 0 ip 000000000040b25a sp 00007ffca4e858f0 error 6 in tgtd[400000+4b000]
+Apr 18 21:00:37 k8s-oracle-store kernel: Code: 48 83 ec 08 48 8b 42 98 83 38 0a 74 43 48 8b 88 28 02 00 00 48 8d 72 b0 48 05 20 02 00 00 48 89 70 08 48 89 42 b0 48 89 4a b8 <48> 89 31 be 05 00 00 00 48 8b 7a 98 48 8b 87 68 02 00 00 ff 90 90
+Apr 18 21:00:41 k8s-oracle-store systemd: tgtd.service: main process exited, code=killed, status=11/SEGV
+Apr 18 21:00:41 k8s-oracle-store systemd: Unit tgtd.service entered failed state.
+Apr 18 21:00:41 k8s-oracle-store systemd: tgtd.service failed.
+```
+
+```bash
+systemctl restart tgtd.service
+
+systemctl restart target.service
+
+systemctl enable tgtd
+
+tgt-admin -dump
+
+tgtadm --lld iscsi --mode target --op show
+
+netstat -anp|grep tgt
+```
+
+
+
+
 
 #ocrcheck -local报错处理
 
