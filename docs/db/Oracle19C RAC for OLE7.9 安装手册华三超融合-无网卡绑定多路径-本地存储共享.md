@@ -42,7 +42,7 @@
 ```
 k8s-rac01: 172.18.13.97
 k8s-rac02: 172.18.13.98
-k8s-oracle-store: 172.18.13.97
+k8s-oracle-store: 172.18.13.104
 ```
 
 ### 1.1. 系统版本
@@ -3178,17 +3178,17 @@ cd /u01/app/19.0.0/grid/
 
 #/dev/oracleasm/disks/*
 
-![image-20230925160246882](E:\workpc\git\gitio\gaophei.github.io\docs\db\oracle19cRAC-neuq\image-20230925160246882.png)
+![image-20230925160246882](oracle19cRAC-neuq\image-20230925160246882.png)
 
 
 
-![image-20230925160428599](E:\workpc\git\gitio\gaophei.github.io\docs\db\oracle19cRAC-neuq\image-20230925160428599.png)
+![image-20230925160428599](oracle19cRAC-neuq\image-20230925160428599.png)
 
 
 
 #安装前的忽略
 
-![image-20230925160959650](E:\workpc\git\gitio\gaophei.github.io\docs\db\oracle19cRAC-neuq\image-20230925160959650.png)
+![image-20230925160959650](oracle19cRAC-neuq\image-20230925160959650.png)
 
 
 
@@ -4095,7 +4095,7 @@ DATA/External/(/dev/sdd、/dev/sde、/dev/sdf)，点击OK
 FRA/External/(/dev/sdg)，点击OK
 5. Exit
 ```
-![image-20231118184625244](E:\workpc\git\gitio\gaophei.github.io\docs\db\oracle-store\image-20231118184625244.png)
+![image-20231118184625244](oracle-store\image-20231118184625244.png)
 
 ### 4.2 查看状态
 
@@ -4328,7 +4328,7 @@ Finished running generic part of root script.
 Now product-specific root actions will be performed.
 ```
 
-![image-20230928121556137](E:\workpc\git\gitio\gaophei.github.io\docs\db\oracle19cRAC-neuq\image-20230928121556137.png)
+![image-20230928121556137](oracle19cRAC-neuq\image-20230928121556137.png)
 
 
 
@@ -4337,6 +4337,7 @@ Now product-specific root actions will be performed.
 以 oracle 账户登录。
 ### 6.1. 执行建库 dbca
 #创建RAC数据库步骤
+
 ```
 1. Create a database
 2. Advanced Configuration
@@ -4352,7 +4353,7 @@ Now product-specific root actions will be performed.
        #sga=30G
        #pag=10G
        #此处为总32G，所以sga=15G,pga=5G
-   Sizing: block size: 8192/processes: 3000
+   Sizing: block size: 8192/processes: 
    Character Sets: AL32UTF8
    Connection mode: Dadicated server mode--->Next
 10. 运行CVU和关闭EM
