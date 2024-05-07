@@ -1,9 +1,9 @@
-此文档提供安装mysql8(最新版8.0.34)主从高可用模式的安装
+此文档提供安装elasticsearch8.13(最新版8.13.3)三节点集群模式的安装
 
 ****
 
-#安装开始前，请注意OS系统的优化、服务器内存大小、磁盘分区大小，mysql安装到最大分区里
-#20211228补充OS优化部分，安装版本为8.0.34
+#安装开始前，请注意OS系统的优化、服务器内存大小、磁盘分区大小，es安装到最大分区里
+#20240507安装版本为8.13.3
 
 ## 服务器资源
 
@@ -21,91 +21,26 @@ OS: oracle Linux 7.9(5.4.17-2011.6.2.el7uek.x86_64)
 
 ### 一、系统优化
 
-#### 1、Hostname修改
+#官网必须优化项目
 
-#hostname命名建议规范，以实际IP为准
-
-```bash
-cat >> /etc/hosts <<EOF
-10.20.12.136 mysql01
-10.20.12.137 mysql02
-EOF
-
-#mysql01
-hostnamectl set-hostname mysql01
-#mysql02
-hostnamectl set-hostname mysql02
-
-hostnamectl status
-
-ping mysql01 
-ping mysql02
-
+```
+https://www.elastic.co/guide/en/elasticsearch/reference/current/system-config.html
 ```
 
 ```
-[root@localhost ~]# hostnamectl set-hostname mysql01
-[root@localhost ~]# exit
+The following settings must be considered before going to production:
 
-[root@mysql01 ~]# hostnamectl status
-   Static hostname: mysql01
-         Icon name: computer-vm
-           Chassis: vm
-        Machine ID: 4e99db48ca56469d86d4043965953a54
-           Boot ID: d7b0f5da94ba4c43b9f3432a6c1258c1
-    Virtualization: kvm
-  Operating System: Oracle Linux Server 7.9
-       CPE OS Name: cpe:/o:oracle:linux:7:9:server
-            Kernel: Linux 5.4.17-2011.6.2.el7uek.x86_64
-      Architecture: x86-64
-
-[root@mysql01 ~]# cat >> /etc/hosts <<EOF
-10.20.12.136 mysql01
-10.20.12.137 mysql02
-EOF
-
-[root@mysql01 ~]# cat /etc/hosts
-127.0.0.1   localhost localhost.localdomain localhost4 localhost4.localdomain4
-::1         localhost localhost.localdomain localhost6 localhost6.localdomain6
-10.20.12.136 mysql01
-10.20.12.137 mysql02
-
-[root@mysql01 ~]# ping mysql01 -c 1
-PING mysql01 (10.20.12.136) 56(84) bytes of data.
-64 bytes from mysql01 (10.20.12.136): icmp_seq=1 ttl=64 time=0.065 ms
-
---- mysql01 ping statistics ---
-1 packets transmitted, 1 received, 0% packet loss, time 0ms
-rtt min/avg/max/mdev = 0.065/0.065/0.065/0.000 ms
-[root@mysql01 ~]# ping mysql02 -c 1
-PING mysql02 (10.20.12.137) 56(84) bytes of data.
-64 bytes from mysql02 (10.20.12.137): icmp_seq=1 ttl=64 time=0.619 ms
-
---- mysql02 ping statistics ---
-1 packets transmitted, 1 received, 0% packet loss, time 0ms
-rtt min/avg/max/mdev = 0.619/0.619/0.619/0.000 ms
-[root@mysql01 ~]#
-
+Configure system settings
+Disable swapping
+Increase file descriptors
+Ensure sufficient virtual memory
+Ensure sufficient threads
+JVM DNS cache settings
+Temporary directory not mounted with noexec
+TCP retransmission timeout
 ```
 
-
-
-#### 2、关闭防火墙和selinux
-
-```bash
-#centos关闭防火墙
-systemctl stop firewalld
-systemctl disable firewalld
-
-setenforce 0
-sudo sed -i 's/SELINUX=enforcing/SELINUX=disabled/g' /etc/selinux/config
-
-getenforce
-cat /etc/selinux/config
-
-```
-
-#### 3、修改源文件
+#### 0、修改源文件
 
 ```bash
 #oracle linux server直接使用自己的yum源，此处不做修改
@@ -148,7 +83,147 @@ EOF
 apt update
 ```
 
-#### 4、开始时间同步及修改东8区
+#### 1、Hostname修改
+
+#hostname命名建议规范，以实际IP为准
+
+```bash
+cat >> /etc/hosts <<EOF
+172.18.13.112 k8s-mysql-ole
+172.18.13.117 k8s-mysql-ole-117
+172.18.13.120 k8s-mysql-ole-test
+EOF
+
+#k8s-mysql-ole
+hostnamectl set-hostname k8s-mysql-ole
+#k8s-mysql-ole-117
+hostnamectl set-hostname k8s-mysql-ole-117
+#k8s-mysql-ole-test
+hostnamectl set-hostname k8s-mysql-ole-test
+
+hostnamectl status
+
+ping k8s-mysql-ole  -c 3
+ping k8s-mysql-ole-117  -c 3
+ping k8s-mysql-ole-test -c 3
+
+```
+
+```
+[root@localhost ~]# hostnamectl set-hostname k8s-mysql-ole
+[root@localhost ~]# exit
+
+[root@k8s-mysql-ole ~]# hostnamectl status
+   Static hostname: k8s-mysql-ole
+         Icon name: computer-vm
+           Chassis: vm
+        Machine ID: 4e99db48ca56469d86d4043965953a54
+           Boot ID: d7b0f5da94ba4c43b9f3432a6c1258c1
+    Virtualization: kvm
+  Operating System: Oracle Linux Server 7.9
+       CPE OS Name: cpe:/o:oracle:linux:7:9:server
+            Kernel: Linux 5.4.17-2011.6.2.el7uek.x86_64
+      Architecture: x86-64
+
+[root@k8s-mysql-ole ~]# cat >> /etc/hosts <<EOF
+172.18.13.112 k8s-mysql-ole
+172.18.13.117 k8s-mysql-ole-117
+172.18.13.120 k8s-mysql-ole-test
+EOF
+
+[root@k8s-mysql-ole ~]# cat /etc/hosts
+127.0.0.1   localhost localhost.localdomain localhost4 localhost4.localdomain4
+::1         localhost localhost.localdomain localhost6 localhost6.localdomain6
+172.18.13.112 k8s-mysql-ole
+172.18.13.117 k8s-mysql-ole-117
+172.18.13.120 k8s-mysql-ole-test
+
+[root@k8s-mysql-ole ~]# ping k8s-mysql-ole -c 1
+PING k8s-mysql-ole (172.18.13.112) 56(84) bytes of data.
+64 bytes from k8s-mysql-ole (172.18.13.112): icmp_seq=1 ttl=64 time=0.065 ms
+
+--- k8s-mysql-ole ping statistics ---
+1 packets transmitted, 1 received, 0% packet loss, time 0ms
+rtt min/avg/max/mdev = 0.065/0.065/0.065/0.000 ms
+
+[root@k8s-mysql-ole ~]# ping k8s-mysql-ole-117 -c 1
+PING k8s-mysql-ole-117 (172.18.13.117) 56(84) bytes of data.
+64 bytes from k8s-mysql-ole-117 (172.18.13.117): icmp_seq=1 ttl=64 time=0.619 ms
+
+--- k8s-mysql-ole-117 ping statistics ---
+1 packets transmitted, 1 received, 0% packet loss, time 0ms
+rtt min/avg/max/mdev = 0.619/0.619/0.619/0.000 ms
+
+[root@k8s-mysql-ole ~]# ping k8s-mysql-ole-test -c 1
+PING k8s-mysql-ole-test (172.18.13.120) 56(84) bytes of data.
+64 bytes from k8s-mysql-ole-117 (172.18.13.120): icmp_seq=1 ttl=64 time=0.619 ms
+
+--- k8s-mysql-ole-117 ping statistics ---
+1 packets transmitted, 1 received, 0% packet loss, time 0ms
+rtt min/avg/max/mdev = 0.619/0.619/0.619/0.000 ms
+
+```
+
+
+
+#### 2、关闭防火墙和selinux
+
+```bash
+#centos关闭防火墙
+systemctl stop firewalld
+systemctl disable firewalld
+
+setenforce 0
+sudo sed -i 's/SELINUX=enforcing/SELINUX=disabled/g' /etc/selinux/config
+
+getenforce
+cat /etc/selinux/config
+
+```
+
+#### 3. 禁用swap分区
+
+#临时关闭
+
+```bash
+swapoff -a
+```
+#永久关闭
+
+```bash
+sed -i '/swap/s/^/#/' /etc/fstab
+```
+
+#确认
+
+```bash
+free -m
+
+cat /etc/fstab
+```
+
+
+
+#### 4、创建用户
+
+#es不能用root用户进行部署，得在每个机器上新建一个用户，部署的步骤都在这个新用户上进行。
+```bash
+useradd elasticsearch && echo es123\!\@\# |passwd --stdin elasticsearch
+```
+
+
+
+#logs
+
+```bash
+[root@k8s-mysql-ole-117 ~]# useradd elasticsearch && echo es123\!\@\# |passwd --stdin elasticsearch
+Changing password for user elasticsearch.
+passwd: all authentication tokens updated successfully.
+```
+
+
+
+#### 5、开始时间同步及修改东8区
 
 ```bash
 #安装
@@ -197,19 +272,31 @@ date -R
 ln -sf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime
 ```
 
-#### 5、语言修改为utf8---centos7.9
+#### 6、语言修改为utf8---centos7.9
 
 ```bash
 env|grep LANG
 echo 'LANG="en_US.UTF-8"' >> /etc/profile;source /etc/profile
 ```
 
-#### 6、内核模块调优
+#### 7、内核模块调优
 
 ##### 1）内核模块
 
+#备份
+
+```bash
+cp /etc/sysctl.conf /etc/sysctl.conf.bak
+```
+
+
+
+#优化
+
 ```bash
 echo "
+net.ipv4.tcp_retries2=5
+
 net.bridge.bridge-nf-call-ip6tables=1
 net.bridge.bridge-nf-call-iptables=1
 net.ipv4.ip_forward=1
@@ -235,13 +322,13 @@ kernel.watchdog_thresh=30
 fs.file-max=2097152
 fs.inotify.max_user_instances=8192
 fs.inotify.max_queued_events=16384
-vm.max_map_count=262144
+#vm.max_map_count=262144
+vm.max_map_count=65530
 fs.may_detach_mounts=1
 net.core.netdev_max_backlog=16384
 net.ipv4.tcp_wmem=4096 12582912 16777216
 net.core.wmem_max=16777216
 net.core.somaxconn=32768
-net.ipv4.ip_forward=1
 net.ipv4.tcp_max_syn_backlog=8096
 net.ipv4.tcp_rmem=4096 12582912 16777216
 
@@ -285,7 +372,38 @@ kernel.sysrq=1
 sysctl -p
 ```
 
-##### 2)open-files
+
+
+#检查
+
+```bash
+sysctl net.ipv4.tcp_retries2
+
+sysctl vm.max_map_count
+
+sysctl vm.swappiness
+```
+
+
+
+#logs
+
+```bash
+[root@k8s-mysql-ole ~]# sysctl net.ipv4.tcp_retries2
+net.ipv4.tcp_retries2 = 5
+
+[root@k8s-mysql-ole ~]# sysctl vm.max_map_count
+vm.max_map_count = 65530
+
+[root@k8s-mysql-ole ~]# sysctl vm.swappiness
+vm.swappiness = 0
+```
+
+
+
+
+
+##### 2）open-files
 
 ```bash
 #centos7.9
@@ -315,61 +433,67 @@ cat /etc/security/limits.conf
 #ubuntu 22.04
 cat >> /etc/security/limits.conf <<EOF
 
-root            soft    nofile          65536
-root            hard    nofile          65536
-root            soft    core            unlimited
-root            hard    core            unlimited
-root            soft    sigpending      90000
-root            hard    sigpending      90000
-root            soft    nproc           90000
-root            hard    nproc           90000
-root            soft    stack           90000
-root            hard    stack           90000
-root            soft    memlock         unlimited
-root            hard    memlock         unlimited
+elasticsearch            soft    nofile          65536
+elasticsearch            hard    nofile          65536
+elasticsearch            soft    core            unlimited
+elasticsearch            hard    core            unlimited
+elasticsearch            soft    sigpending      90000
+elasticsearch            hard    sigpending      90000
+elasticsearch            soft    nproc           90000
+elasticsearch            hard    nproc           90000
+elasticsearch            soft    stack           90000
+elasticsearch            hard    stack           90000
+elasticsearch            soft    memlock         unlimited
+elasticsearch            hard    memlock         unlimited
 
 EOF
 ```
 
-### 二、在线安装mysql---centos7.9
 
-#### 1、卸载mariadb
+
+#es查询
 
 ```bash
-rpm -qa |grep -i mariadb
-yum remove -y mariadb-libs.x86_64
+GET _nodes/stats/process?filter_path=**.max_file_descriptors
 ```
 
-#### 2、安装mysql
+
+
+### 二、安装es---centos7.9
+
+#### 1、安装依赖
+
+```bash
+
+```
+
+#### 2、安装es
 
 ```bash
 yum install -y wget net-tools
 
-#8.0.35
-wget https://dev.mysql.com/get/mysql80-community-release-el7-11.noarch.rpm
+#官网
+https://www.elastic.co/downloads/elasticsearch
 
-yum localinstall -y mysql80-community-release-el7-11.noarch.rpm
+#根据服务器OS不同，下载相关压缩包，此处为linux X86_64
+mkdir /root/es
+cd /root/es
 
-yum search mysql-community-server
-yum list mysql-community-server.x86_64  --showduplicates | sort -r
-
-yum install -y mysql-community-server
-
-#指定某版本
-yum install -y mysql-community-{server,client,client-plugins,icu-data-files,common,libs,libs-compat}-8.0.20-1.el7
+#8.13.3
+wget https://artifacts.elastic.co/downloads/elasticsearch/elasticsearch-8.13.3-linux-x86_64.tar.gz
 ```
 
-#### 3、优化mysql---mysql01和mysql02有细微差别
+#### 3、优化es---三个节点有细微差别
 
-#检查my.cnf
+#官网文档
 
 ```bash
-mysqld --defaults-file=/etc/my.cnf  --validate-config --log-error-verbosity=2
+https://www.elastic.co/guide/en/elasticsearch/reference/current/settings.html
 ```
 
 
 
-##### 1) mysql01---/etc/my.cnf
+##### 1) k8s-mysql-ole---/etc/my.cnf
 
 ```bash
 cp /etc/my.cnf /etc/my.cnf.bak
@@ -797,7 +921,7 @@ max_allowed_packet = 32M
 
 
 
-##### 2) mysql02---/etc/my.cnf
+##### 2) k8s-mysql-ole-117---/etc/my.cnf
 
 ```bash
 cp /etc/my.cnf /etc/my.cnf.bak
@@ -1223,7 +1347,7 @@ max_allowed_packet = 32M
 
 
 
-##### 3) mysqld.server---mysql01/mysql02
+##### 3) mysqld.server---k8s-mysql-ole/k8s-mysql-ole-117
 
 ```bash
 sed -i 's/LimitNOFILE = 10000/LimitNOFILE = 65500/g' /usr/lib/systemd/system/mysqld.service
@@ -1268,7 +1392,20 @@ flush privileges;
 
 
 
-### 三、配置基于gtid的高可用
+### 三、安装kibana
+
+#官网
+
+```
+```
+
+#下载与es同版本的
+
+```bash
+wget https://artifacts.elastic.co/downloads/kibana/kibana-8.13.3-linux-x86_64.tar.gz
+```
+
+
 
 #### 1、创建数据库同步账户
 
@@ -1305,7 +1442,7 @@ flush tables with read lock;
 
 /usr/bin/tar -zcvf 20231102.sql.tar.gz 20231102.sql
 
- scp 20231102.sql.tar.gz 10.20.12.136:/root/
+ scp 20231102.sql.tar.gz 172.18.13.112:/root/
 ```
 
 
@@ -1331,7 +1468,7 @@ source /root/20231102.sql
 ```bash
 #SET @@GLOBAL.read_only = ON;
 
-CHANGE REPLICATION SOURCE TO SOURCE_HOST='10.20.12.136',SOURCE_PORT=3306,SOURCE_USER='repl',SOURCE_PASSWORD='Repl123!@#2023',SOURCE_AUTO_POSITION = 1;
+CHANGE REPLICATION SOURCE TO SOURCE_HOST='172.18.13.112',SOURCE_PORT=3306,SOURCE_USER='repl',SOURCE_PASSWORD='Repl123!@#2023',SOURCE_AUTO_POSITION = 1;
 
 show warnings;
 
@@ -2196,7 +2333,7 @@ stop slave;
 reset slave all;
 
 -- 重新指定主
-CHANGE REPLICATION SOURCE TO SOURCE_HOST='10.20.12.136',SOURCE_PORT=3306,SOURCE_USER='repl',SOURCE_PASSWORD='Repl123!@#2023',SOURCE_AUTO_POSITION = 1;
+CHANGE REPLICATION SOURCE TO SOURCE_HOST='172.18.13.112',SOURCE_PORT=3306,SOURCE_USER='repl',SOURCE_PASSWORD='Repl123!@#2023',SOURCE_AUTO_POSITION = 1;
 
 -- 启动slave
 #start slave
@@ -2213,7 +2350,7 @@ reset slave all;
 
 -- 重新建立关系  子厚两个参数查看master状态即可 和主库保持一致
 #change master to master_host = '192.168.22.22', master_user = 'user', master_port=3306, master_password='pwd', master_log_file = 'mysqld-bin.000001', master_log_pos=1234; 
-CHANGE REPLICATION SOURCE TO SOURCE_HOST='10.20.12.137',SOURCE_PORT=3306,SOURCE_USER='repl',SOURCE_PASSWORD='Repl123!@#2023',SOURCE_AUTO_POSITION = 1;
+CHANGE REPLICATION SOURCE TO SOURCE_HOST='172.18.13.117',SOURCE_PORT=3306,SOURCE_USER='repl',SOURCE_PASSWORD='Repl123!@#2023',SOURCE_AUTO_POSITION = 1;
 
 
 -- 启动slave
@@ -2566,7 +2703,7 @@ root@localhost:mysql.sock [(none)]> SHOW MASTER STATUS;
 root@localhost:mysql.sock [(none)]>  SHOW REPLICA STATUS \G;
 *************************** 1. row ***************************
              Replica_IO_State:
-                  Source_Host: 10.20.12.136
+                  Source_Host: 172.18.13.112
                   Source_User: repl
                   Source_Port: 3306
                 Connect_Retry: 60
@@ -2675,7 +2812,7 @@ flush tables with read lock;
 
 -- 传输到从库
 
- scp 20240305.sql.tar.gz 10.20.12.136:/root/
+ scp 20240305.sql.tar.gz 172.18.13.112:/root/
 
 3、从库操作
 
@@ -2689,7 +2826,7 @@ source /root/20240305.sql
 
 -- 重新建立关系  子厚两个参数查看master状态即可 和主库保持一致
 #change master to master_host = '192.168.22.22', master_user = 'user', master_port=3306, master_password='pwd', master_log_file = 'mysqld-bin.000001', master_log_pos=1234; 
-CHANGE REPLICATION SOURCE TO SOURCE_HOST='10.20.12.136',SOURCE_PORT=3306,SOURCE_USER='repl',SOURCE_PASSWORD='Repl123!@#2023',SOURCE_AUTO_POSITION = 1;
+CHANGE REPLICATION SOURCE TO SOURCE_HOST='172.18.13.112',SOURCE_PORT=3306,SOURCE_USER='repl',SOURCE_PASSWORD='Repl123!@#2023',SOURCE_AUTO_POSITION = 1;
 
 
 -- 启动slave
@@ -2867,7 +3004,7 @@ root@localhost:mysql.sock [(none)]> SHOW MASTER STATUS;
 root@localhost:mysql.sock [(none)]>  SHOW REPLICA STATUS \G;
 *************************** 1. row ***************************
              Replica_IO_State:
-                  Source_Host: 10.20.12.136
+                  Source_Host: 172.18.13.112
                   Source_User: repl
                   Source_Port: 3306
                 Connect_Retry: 60
@@ -2976,7 +3113,7 @@ flush tables with read lock;
 
 -- 传输到从库
 
- scp 20240305.sql.tar.gz 10.20.12.136:/root/
+ scp 20240305.sql.tar.gz 172.18.13.112:/root/
 
 3、从库操作
 
@@ -2992,7 +3129,7 @@ reset master;
 
 -- 重新建立关系  子厚两个参数查看master状态即可 和主库保持一致
 #change master to master_host = '192.168.22.22', master_user = 'user', master_port=3306, master_password='pwd', master_log_file = 'mysqld-bin.000001', master_log_pos=1234; 
-CHANGE REPLICATION SOURCE TO SOURCE_HOST='10.20.12.136',SOURCE_PORT=3306,SOURCE_USER='repl',SOURCE_PASSWORD='Repl123!@#2023',SOURCE_AUTO_POSITION = 1;
+CHANGE REPLICATION SOURCE TO SOURCE_HOST='172.18.13.112',SOURCE_PORT=3306,SOURCE_USER='repl',SOURCE_PASSWORD='Repl123!@#2023',SOURCE_AUTO_POSITION = 1;
 
 
 -- 启动slave
@@ -3009,7 +3146,7 @@ SET @@GLOBAL.read_only = OFF;
 stop slave;
 reset slave all;
 
-CHANGE REPLICATION SOURCE TO SOURCE_HOST='10.20.12.137',SOURCE_PORT=3306,SOURCE_USER='repl',SOURCE_PASSWORD='Repl123!@#2023',SOURCE_AUTO_POSITION = 1;
+CHANGE REPLICATION SOURCE TO SOURCE_HOST='172.18.13.117',SOURCE_PORT=3306,SOURCE_USER='repl',SOURCE_PASSWORD='Repl123!@#2023',SOURCE_AUTO_POSITION = 1;
 
 start replica;
 
@@ -3074,7 +3211,7 @@ mysql> select * from testdb01.t_user01;
 mysql> show replica status\G;
 *************************** 1. row ***************************
              Replica_IO_State: Waiting for source to send event
-                  Source_Host: 10.20.12.136
+                  Source_Host: 172.18.13.112
                   Source_User: repl
                   Source_Port: 3306
                 Connect_Retry: 60
@@ -3168,7 +3305,7 @@ mysql> select * from testdb01.t_user01;
 mysql> show replica status\G;
 *************************** 1. row ***************************
              Replica_IO_State: Waiting for source to send event
-                  Source_Host: 10.20.12.136
+                  Source_Host: 172.18.13.112
                   Source_User: repl
                   Source_Port: 3306
                 Connect_Retry: 60
@@ -3257,7 +3394,7 @@ mysql> select * from t_user01;
 mysql>  show replica status\G;
 *************************** 1. row ***************************
              Replica_IO_State: Waiting for source to send event
-                  Source_Host: 10.20.12.137
+                  Source_Host: 172.18.13.117
                   Source_User: repl
                   Source_Port: 3306
                 Connect_Retry: 60
@@ -4103,7 +4240,7 @@ SET @@GLOBAL.read_only = ON;
 #### 10、主从变双主
 #在主节点上执行
 ```mysql
-CHANGE REPLICATION SOURCE TO SOURCE_HOST='10.20.12.137',SOURCE_PORT=3306,SOURCE_USER='repl',SOURCE_PASSWORD='Repl123!@#2023',SOURCE_AUTO_POSITION = 1;
+CHANGE REPLICATION SOURCE TO SOURCE_HOST='172.18.13.117',SOURCE_PORT=3306,SOURCE_USER='repl',SOURCE_PASSWORD='Repl123!@#2023',SOURCE_AUTO_POSITION = 1;
 
 start replica;
 show replica status\G;
@@ -4227,13 +4364,13 @@ virtual_server 10.20.12.117 3306 { #虚拟出来的地址加端口
     persistence_timeout 50           #会话保持时间，单位为秒
     protocol TCP                     #指定转发协议，有 TCP和UDP可选
 
-        real_server 10.20.12.136 3306 {          #实际本地ip+3306端口
+        real_server 172.18.13.112 3306 {          #实际本地ip+3306端口
        weight=5                      #表示服务器的权重值。权重值越高，服务器在负载均衡中被选中的概率就越大
         #当该ip 端口连接异常时，执行该脚本
         notify_down /etc/keepalived/shutdown.sh   #检查mysql服务down掉后执行的脚本
         TCP_CHECK {
             #实际物理机ip地址
-            connect_ip 10.20.12.136
+            connect_ip 172.18.13.112
             #实际物理机port端口
             connect_port 3306
             connect_timeout 3
@@ -4285,11 +4422,11 @@ virtual_server 10.20.12.117 3306 {
     persistence_timeout 50           
     protocol TCP                  
 
-        real_server 10.20.12.136 3306 {      
+        real_server 172.18.13.112 3306 {      
        weight=5                    
         notify_down /etc/keepalived/shutdown.sh  
         TCP_CHECK {
-            connect_ip 10.20.12.136
+            connect_ip 172.18.13.112
             connect_port 3306
             connect_timeout 3
             nb_get_retry 3
@@ -4405,11 +4542,11 @@ virtual_server 10.20.12.117 3306 {
     persistence_timeout 50           
     protocol TCP                   
 
-        real_server 10.20.12.137 3306 {          
+        real_server 172.18.13.117 3306 {          
        weight=5                      
         notify_down /etc/keepalived/shutdown.sh   
         TCP_CHECK {
-            connect_ip 10.20.12.137
+            connect_ip 172.18.13.117
             connect_port 3306
             connect_timeout 3
             nb_get_retry 3
@@ -4488,8 +4625,8 @@ systemctl status keepalived
 #测试条件
 
 ```
-172.18.13.114 mysql01
-172.18.13.115 mysql02
+172.18.13.114 k8s-mysql-ole
+172.18.13.115 k8s-mysql-ole-117
 
 vip: 172.18.13.113
 ```

@@ -67,21 +67,7 @@ PRETTY_NAME="Oracle Linux Server 7.9"
 
 ### 1.2. 操作系统配置部分
 
-#关闭防火墙
 
-```bash
-systemctl stop firewalld
-systemctl disable firewalld
-
-systemctl status firewalld
-```
-#关闭 selinux
-
-```bash
-sed -i 's/SELINUX=enforcing/SELINUX=disabled/g' /etc/selinux/config
-
-setenforce 0
-```
 ### 1.3.多路径配置情况---无
 ```  
 [root@rac02 ~]# cat /etc/multipath/
@@ -1073,12 +1059,24 @@ yum clean all
 
 yum makecache
 ```
-### 2.2. 安装 rpm 依赖包
+### 2.2. 关闭防火墙和selinux
 
-#官网为准
+#关闭防火墙
+
 ```bash
+systemctl stop firewalld
+systemctl disable firewalld
 
+systemctl status firewalld
 ```
+#关闭 selinux
+
+```bash
+sed -i 's/SELINUX=enforcing/SELINUX=disabled/g' /etc/selinux/config
+
+setenforce 0
+```
+
 ### 2.3. 创建用户
 
 #创建用户组及用户前，检查下gid和uid是否已经占用
@@ -1088,7 +1086,7 @@ cat /etc/group
 
 cd /home
 
-id xxx
+id elasticsearch
 ```
 
 
@@ -1171,54 +1169,25 @@ ping k8s-mysql-ole-117-prv -c 1
 
 
 
-### 2.5. 禁用 NTP
+### 2.5. 禁用swap分区
 
-#检查两节点时间，时区是否相同，并禁止 ntp
+#临时关闭
+
 ```bash
-systemctl disable ntpd.service
-systemctl stop ntpd.service
-mv /etc/ntp.conf /etc/ntp.conf.orig
-
-[root@rac01 ~]# systemctl disable ntpd.service
-Failed to execute operation: No such file or directory
-[root@rac01 ~]# systemctl stop ntpd.service
-Failed to stop ntpd.service: Unit ntpd.service not loaded.
-
-systemctl status ntpd
-
-systemctl disable chronyd
-systemctl stop chronyd
-mv /etc/chrony.conf /etc/chrony.conf.bak
-
-systemctl status chronyd
-
-ntpdate pool.ntp.org
+swapoff -a
 ```
-#时区设置
+#永久关闭
+
 ```bash
-#查看是否中国时区
-date -R 
-timedatectl
-clockdiff k8s-mysql-ole
-clockdiff k8s-mysql-ole-117
-
-#同步时间
-rdate -s time.nist.gov
-(clock -w)
-
-#设置中国时区
-ln -sf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime
-#方法二
-timedatectl list-timezones |grep Shanghai #查找中国时区的完整名称
---->Asia/Shanghai
-timedatectl set-timezone Asia/Shanghai
+sed -i '/swap/s/^/#/' /etc/fstab
 ```
 
-#修改系统语言环境
-```
-env|grep LANG
+#确认
 
-sudo echo 'LANG="en_US.UTF-8"' >> /etc/profile;source /etc/profile
+```bash
+free -m
+
+cat /etc/fstab
 ```
 
 ### 2.6. 创建所需要目录
