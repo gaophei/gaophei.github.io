@@ -1644,6 +1644,62 @@ systemctl status kibana
 
 ### 八、 es的压测
 
+#使用Rally进行压测
+
+#官网
+
+```yaml
+https://esrally.readthedocs.io/en/latest/
+```
+
+
+
+#### 1、先决条件
+
+```json
+Python 3.8+ including pip3
+git 1.9+
+jdk 1.8.0+
+```
+
+
+
+#ES支持jdk版本
+
+```
+https://www.elastic.co/cn/support/matrix#matrix_jvm
+```
+
+
+
+##### 1.1.Python 3.8
+
+
+
+
+
+##### 1.2.git 
+
+
+
+
+
+##### 1.3.jdk
+
+#oracle
+
+```json
+https://www.oracle.com/java/technologies/downloads/
+```
+
+
+
+#下载
+
+```
+wget https://download.oracle.com/otn/java/jdk/8u411-b09/43d62d619be4e416215729597d70b8ac/jdk-8u411-linux-x64.tar.gz
+```
+
 
 
 
