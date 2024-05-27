@@ -1708,3 +1708,281 @@ wget https://download.oracle.com/otn/java/jdk/8u411-b09/43d62d619be4e41621572959
 
 ### 九、es的监控
 
+
+### 十、es的测试
+
+#### 1、导入数据
+#官网数据
+```bash
+mkdir /root/es/
+cd /root/es/
+
+#7
+#https://github.com/elastic/elasticsearch/blob/v7.7.1/docs/src/test/resources/accounts.json
+wget https://raw.githubusercontent.com/elastic/elasticsearch/v7.7.1/docs/src/test/resources/accounts.json
+
+
+#8
+#https://github.com/elastic/elasticsearch/blob/v8.13.3/docs/src/yamlRestTest/resources/normalized-T1117-AtomicRed-regsvr32.json
+wget https://raw.githubusercontent.com/elastic/elasticsearch/v8.13.3/docs/src/yamlRestTest/resources/normalized-T1117-AtomicRed-regsvr32.json
+```
+
+
+
+#导入es数据
+
+```bash
+curl -H "Content-Type: application/json" -XPOST "172.18.13.112:9200/bank/_bulk?pretty&refresh" --data-binary "@/root/es/accounts.json"
+```
+
+
+
+#查看状态
+
+```bash
+# curl -XGET "172.18.13.112:9200/_cat/indices?v" | grep bank
+  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                 Dload  Upload   Total   Spent    Left  Speed
+100  4025    0  4025    0     0   194k      0 --:--:-- --:--:-- --:--:--  196k
+green  open   bank                                                               LEZthvWDTd-YIHrQJkkVdw   1   1       1000            0    762.7kb        389.7kb      389.7kb
+```
+
+
+
+#### 2、查询
+
+##### 2.1.查询所有
+
+#查询所有，并按照account_number升序排序
+
+```bash
+GET /bank/_search
+{
+  "query":
+  {
+    "match_all": {}
+  },
+  "sort": [
+    {"account_number": "asc"}
+    ]
+}
+```
+
+#logs
+
+```json
+{
+  "took": 4,
+  "timed_out": false,
+  "_shards": {
+    "total": 1,
+    "successful": 1,
+    "skipped": 0,
+    "failed": 0
+  },
+  "hits": {
+    "total": {
+      "value": 1000,
+      "relation": "eq"
+    },
+    "max_score": null,
+    "hits": [
+      {
+        "_index": "bank",
+        "_id": "0",
+        "_score": null,
+        "_source": {
+          "account_number": 0,
+          "balance": 16623,
+          "firstname": "Bradshaw",
+          "lastname": "Mckenzie",
+          "age": 29,
+          "gender": "F",
+          "address": "244 Columbus Place",
+          "employer": "Euron",
+          "email": "bradshawmckenzie@euron.com",
+          "city": "Hobucken",
+          "state": "CO"
+        },
+        "sort": [
+          0
+        ]
+      },
+      {
+        "_index": "bank",
+        "_id": "1",
+        "_score": null,
+        "_source": {
+          "account_number": 1,
+          "balance": 39225,
+          "firstname": "Amber",
+          "lastname": "Duke",
+          "age": 32,
+          "gender": "M",
+          "address": "880 Holmes Lane",
+          "employer": "Pyrami",
+          "email": "amberduke@pyrami.com",
+          "city": "Brogan",
+          "state": "IL"
+        },
+        "sort": [
+          1
+        ]
+      },
+      ....
+    ]
+  }
+}
+     
+```
+
+
+
+#相关字段解释
+
+```json
+took – Elasticsearch运行查询所花费的时间（以毫秒为单位）
+timed_out – 搜索请求是否超时
+_shards - 搜索了多少个碎片，以及成功，失败或跳过了多少个碎片的细目分类
+max_score – 找到的最相关文档的分数
+hits.total.value - 找到了多少个匹配的文档
+hits.sort - 文档的排序位置（不按相关性得分排序时）
+hits._score - 文档的相关性得分（使用match_all时不适用）
+```
+
+
+
+##### 2.2.分页查询
+
+```bash
+GET /bank/_search
+{
+  "query": {
+    "match_all": {}
+  },
+  "sort": [
+    {
+        "account_number": "desc"
+    }
+  ],
+  "from": 10,
+  "size": 20
+}
+```
+
+
+
+#logs
+
+```json
+{
+  "took": 5,
+  "timed_out": false,
+  "_shards": {
+    "total": 1,
+    "successful": 1,
+    "skipped": 0,
+    "failed": 0
+  },
+  "hits": {
+    "total": {
+      "value": 1000,
+      "relation": "eq"
+    },
+    "max_score": null,
+    "hits": [
+      {
+        "_index": "bank",
+        "_id": "10",
+        "_score": null,
+        "_source": {
+          "account_number": 10,
+          "balance": 46170,
+          "firstname": "Dominique",
+          "lastname": "Park",
+          "age": 37,
+          "gender": "F",
+          "address": "100 Gatling Place",
+          "employer": "Conjurica",
+          "email": "dominiquepark@conjurica.com",
+          "city": "Omar",
+          "state": "NJ"
+        },
+        "sort": [
+          10
+        ]
+      },
+      {
+        "_index": "bank",
+        "_id": "11",
+        "_score": null,
+        "_source": {
+          "account_number": 11,
+          "balance": 20203,
+          "firstname": "Jenkins",
+          "lastname": "Haney",
+          "age": 20,
+          "gender": "M",
+          "address": "740 Ferry Place",
+          "employer": "Qimonk",
+          "email": "jenkinshaney@qimonk.com",
+          "city": "Steinhatchee",
+          "state": "GA"
+        },
+        "sort": [
+          11
+        ]
+      },
+      .......
+      {
+        "_index": "bank",
+        "_id": "29",
+        "_score": null,
+        "_source": {
+          "account_number": 29,
+          "balance": 27323,
+          "firstname": "Leah",
+          "lastname": "Santiago",
+          "age": 33,
+          "gender": "M",
+          "address": "193 Schenck Avenue",
+          "employer": "Isologix",
+          "email": "leahsantiago@isologix.com",
+          "city": "Gerton",
+          "state": "ND"
+        },
+        "sort": [
+          29
+        ]
+      }
+    ]
+  }
+}
+```
+
+
+
+##### 2.3.指定字段查询---match
+
+```bash
+```
+
+
+
+#logs
+
+```json
+```
+
+
+
+
+
+
+
+#### 3、聚合
+
+
+
+
+
