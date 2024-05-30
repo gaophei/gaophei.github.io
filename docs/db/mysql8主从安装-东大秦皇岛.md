@@ -345,19 +345,104 @@ yum remove -y mariadb-libs.x86_64
 ```bash
 yum install -y wget net-tools
 
-#8.0.35
+#
+wget https://dev.mysql.com/get/mysql84-community-release-el7-1.noarch.rpm
+
+#8.0.37
 wget https://dev.mysql.com/get/mysql80-community-release-el7-11.noarch.rpm
 
 yum localinstall -y mysql80-community-release-el7-11.noarch.rpm
 
 yum search mysql-community-server
 yum list mysql-community-server.x86_64  --showduplicates | sort -r
+yum list mysql-community-client-plugins.x86_64  --showduplicates | sort -r
 
 yum install -y mysql-community-server
 
 #指定某版本
 yum install -y mysql-community-{server,client,client-plugins,icu-data-files,common,libs,libs-compat}-8.0.20-1.el7
 ```
+
+#如果在线安装时报错
+
+```bash
+[root@NFS mysql]# yum list mysql-community-client-plugins.x86_64  --showduplicates | sort -r|grep 8.0.37
+mysql-community-client-plugins.x86_64       8.0.37-1.el7       mysql80-community
+[root@NFS mysql]# yum install -y mysql-community-server
+Loaded plugins: fastestmirror
+Loading mirror speeds from cached hostfile
+ * base: mirrors.jlu.edu.cn
+ * extras: mirrors.jlu.edu.cn
+ * updates: mirrors.jlu.edu.cn
+Resolving Dependencies
+--> Running transaction check
+---> Package mysql-community-server.x86_64 0:8.0.37-1.el7 will be installed
+--> Processing Dependency: mysql-community-common(x86-64) = 8.0.37-1.el7 for package: mysql-community-server-8.0.37-1.el7.x86_64
+--> Processing Dependency: mysql-community-icu-data-files = 8.0.37-1.el7 for package: mysql-community-server-8.0.37-1.el7.x86_64
+--> Processing Dependency: mysql-community-client(x86-64) >= 8.0.11 for package: mysql-community-server-8.0.37-1.el7.x86_64
+--> Processing Dependency: net-tools for package: mysql-community-server-8.0.37-1.el7.x86_64
+--> Running transaction check
+---> Package mysql-community-client.x86_64 0:8.0.37-1.el7 will be installed
+--> Processing Dependency: mysql-community-client-plugins = 8.0.37-1.el7 for package: mysql-community-client-8.0.37-1.el7.x86_64
+--> Processing Dependency: mysql-community-libs(x86-64) >= 8.0.11 for package: mysql-community-client-8.0.37-1.el7.x86_64
+---> Package mysql-community-common.x86_64 0:8.0.37-1.el7 will be installed
+---> Package mysql-community-icu-data-files.x86_64 0:8.0.37-1.el7 will be installed
+---> Package net-tools.x86_64 0:2.0-0.25.20131004git.el7 will be installed
+--> Running transaction check
+---> Package mysql-community-client-plugins.x86_64 0:8.0.37-1.el7 will be installed
+---> Package mysql-community-libs.x86_64 0:8.0.37-1.el7 will be installed
+--> Finished Dependency Resolution
+
+Dependencies Resolved
+
+===============================================================================================================================
+ Package                                 Arch            Version                              Repository                  Size
+===============================================================================================================================
+Installing:
+ mysql-community-server                  x86_64          8.0.37-1.el7                         mysql80-community           65 M
+Installing for dependencies:
+ mysql-community-client                  x86_64          8.0.37-1.el7                         mysql80-community           16 M
+ mysql-community-client-plugins          x86_64          8.0.37-1.el7                         mysql80-community          3.5 M
+ mysql-community-common                  x86_64          8.0.37-1.el7                         mysql80-community          666 k
+ mysql-community-icu-data-files          x86_64          8.0.37-1.el7                         mysql80-community          2.2 M
+ mysql-community-libs                    x86_64          8.0.37-1.el7                         mysql80-community          1.5 M
+ net-tools                               x86_64          2.0-0.25.20131004git.el7             base                       306 k
+
+Transaction Summary
+===============================================================================================================================
+Install  1 Package (+6 Dependent packages)
+
+Total size: 89 M
+Total download size: 3.5 M
+Installed size: 417 M
+Downloading packages:
+Delta RPMs disabled because /usr/bin/applydeltarpm not installed.
+mysql-community-client-plugins FAILED
+http://repo.mysql.com/yum/mysql-8.0-community/el/7/x86_64/mysql-community-client-plugins-8.0.37-1.el7.x86_64.rpm: [Errno 14] curl#56 - "Recv failure: Connection reset by peer"
+Trying other mirror.
+
+
+Error downloading packages:
+  mysql-community-client-plugins-8.0.37-1.el7.x86_64: [Errno 256] No more mirrors to try.
+
+
+[root@NFS mysql]# yum list mysql-community-client-plugins.x86_64  --showduplicates | sort -r|grep 8.0.37
+mysql-community-client-plugins.x86_64       8.0.37-1.el7       mysql80-community
+```
+
+#解决办法
+
+```bash
+wget http://repo.mysql.com/yum/mysql-8.0-community/el/7/x86_64/mysql-community-client-plugins-8.0.37-1.el7.x86_64.rpm
+
+yum localinstall -y mysql-community-client-plugins-8.0.37-1.el7.x86_64.rpm
+
+yum install -y mysql-community-server
+```
+
+
+
+
 
 #### 3、优化mysql---mysql01和mysql02有细微差别
 
@@ -4803,7 +4888,8 @@ crontab -e
 #找台外网开通的服务器
 
 ```bash
-wget https://dev.mysql.com/get/Downloads/MySQL-8.0/mysql-8.0.34-1.el7.x86_64.rpm-bundle.tar
+#wget https://dev.mysql.com/get/Downloads/MySQL-8.0/mysql-8.0.34-1.el7.x86_64.rpm-bundle.tar
+wget https://dev.mysql.com/get/Downloads/MySQL-8.0/mysql-8.0.37-1.el7.x86_64.rpm-bundle.tar
 ```
 
 #将mysql-8.0.34-1.el7.x86_64.rpm-bundle.tar拷贝至mysql服务器
