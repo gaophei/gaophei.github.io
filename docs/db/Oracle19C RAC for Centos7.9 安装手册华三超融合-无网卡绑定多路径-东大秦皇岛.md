@@ -94,7 +94,7 @@ grid/FG2jc62xwucD
 oracle/L2jc4l2MAucl
 
 sys/
-system/
+system/Oracle2023#Sys
 ```
 
 #分区---1T
