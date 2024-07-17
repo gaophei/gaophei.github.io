@@ -1314,7 +1314,202 @@ showmount -e
 
 #all_squash 表示客户机写入nfs的数据全部映射为nobody用户 这里设置 all_squash并把目录设置为777 是为防止elasticsearch 集群的每个节点启动的uid和gid 不一致导致在创建快照仓库时无法创建成功
 
-#在这里说明下，并不是要求elasticsearch集群中中每个节点启动的用户id和group id 必须是一致的 只要写入的文件是同一个用户即可，所以这里设置all_squash
+#uid/gid不同时，快照存储库验证失败
+
+```bash
+[elasticsearch@escluster01 log]$ id elasticsearch
+uid=1001(elasticsearch) gid=1001(elasticsearch) groups=1001(elasticsearch)
+
+[elasticsearch@escluster02 log]$ id elasticsearch
+uid=1001(elasticsearch) gid=1001(elasticsearch) groups=1001(elasticsearch)
+
+#escluster03 uid/gid被oracle用户占用
+[elasticsearch@escluster03 log]$ id elasticsearch
+uid=1002(elasticsearch) gid=1003(elasticsearch) groups=1003(elasticsearch)
+[elasticsearch@escluster03 log]$ id 1001
+uid=1001(oracle) gid=1002(oinstall) groups=1002(oinstall),1001(dba)
+
+#此时快照存储库验证报错
+{
+  "error": {
+    "root_cause": [
+      {
+        "type": "repository_verification_exception",
+        "reason": "[es-snp] [[a1DK8XclQean8VwNoXzK3w, 'RemoteTransportException[[node-3][10.40.10.126:9300][internal:admin/repository/verify]]; nested: RepositoryVerificationException[[es-snp] store location [/snp] is not accessible on the node [{node-3}{a1DK8XclQean8VwNoXzK3w}{Eb4f6ayoQmKiR_KZmNwMLw}{10.40.10.126}{10.40.10.126:9300}{dilmrt}{ml.machine_memory=33697431552, xpack.installed=true, transform.node=true, ml.max_open_jobs=20}]]; nested: AccessDeniedException[/snp/tests-rdy0HhrJSxKNL23xkkeSYQ/data-a1DK8XclQean8VwNoXzK3w.dat];']]"
+      }
+    ],
+    "type": "repository_verification_exception",
+    "reason": "[es-snp] [[a1DK8XclQean8VwNoXzK3w, 'RemoteTransportException[[node-3][10.40.10.126:9300][internal:admin/repository/verify]]; nested: RepositoryVerificationException[[es-snp] store location [/snp] is not accessible on the node [{node-3}{a1DK8XclQean8VwNoXzK3w}{Eb4f6ayoQmKiR_KZmNwMLw}{10.40.10.126}{10.40.10.126:9300}{dilmrt}{ml.machine_memory=33697431552, xpack.installed=true, transform.node=true, ml.max_open_jobs=20}]]; nested: AccessDeniedException[/snp/tests-rdy0HhrJSxKNL23xkkeSYQ/data-a1DK8XclQean8VwNoXzK3w.dat];']]"
+  },
+  "status": 500
+}
+
+
+#es报错日志
+
+[2024-07-17T15:24:34,857][WARN ][r.suppressed             ] [node-2] path: /_snapshot/es-snp/_verify, params: {repository=es-snp}
+org.elasticsearch.repositories.RepositoryVerificationException: [es-snp] [[a1DK8XclQean8VwNoXzK3w, 'RemoteTransportException[[node-3][10.40.10.126:9300][internal:admin/repository/verify]]; nested: RepositoryVerificationException[[es-snp] store location [/snp] is not accessible on the node [{node-3}{a1DK8XclQean8VwNoXzK3w}{Eb4f6ayoQmKiR_KZmNwMLw}{10.40.10.126}{10.40.10.126:9300}{dilmrt}{ml.machine_memory=33697431552, xpack.installed=true, transform.node=true, ml.max_open_jobs=20}]]; nested: AccessDeniedException[/snp/tests-rdy0HhrJSxKNL23xkkeSYQ/data-a1DK8XclQean8VwNoXzK3w.dat];']]
+        at org.elasticsearch.repositories.VerifyNodeRepositoryAction.finishVerification(VerifyNodeRepositoryAction.java:118) [elasticsearch-7.7.1.jar:7.7.1]
+        at org.elasticsearch.repositories.VerifyNodeRepositoryAction.access$000(VerifyNodeRepositoryAction.java:49) [elasticsearch-7.7.1.jar:7.7.1]
+        at org.elasticsearch.repositories.VerifyNodeRepositoryAction$1.handleResponse(VerifyNodeRepositoryAction.java:99) [elasticsearch-7.7.1.jar:7.7.1]
+        at org.elasticsearch.repositories.VerifyNodeRepositoryAction$1.handleResponse(VerifyNodeRepositoryAction.java:95) [elasticsearch-7.7.1.jar:7.7.1]
+        at org.elasticsearch.transport.TransportService$ContextRestoreResponseHandler.handleResponse(TransportService.java:1129) [elasticsearch-7.7.1.jar:7.7.1]
+        at org.elasticsearch.transport.InboundHandler$1.doRun(InboundHandler.java:222) [elasticsearch-7.7.1.jar:7.7.1]
+        at org.elasticsearch.common.util.concurrent.AbstractRunnable.run(AbstractRunnable.java:37) [elasticsearch-7.7.1.jar:7.7.1]
+        at org.elasticsearch.common.util.concurrent.EsExecutors$DirectExecutorService.execute(EsExecutors.java:225) [elasticsearch-7.7.1.jar:7.7.1]
+        at org.elasticsearch.transport.InboundHandler.handleResponse(InboundHandler.java:214) [elasticsearch-7.7.1.jar:7.7.1]
+        at org.elasticsearch.transport.InboundHandler.messageReceived(InboundHandler.java:139) [elasticsearch-7.7.1.jar:7.7.1]
+        at org.elasticsearch.transport.InboundHandler.inboundMessage(InboundHandler.java:103) [elasticsearch-7.7.1.jar:7.7.1]
+        at org.elasticsearch.transport.TcpTransport.inboundMessage(TcpTransport.java:676) [elasticsearch-7.7.1.jar:7.7.1]
+        at org.elasticsearch.transport.netty4.Netty4MessageChannelHandler.channelRead(Netty4MessageChannelHandler.java:62) [transport-netty4-client-7.7.1.jar:7.7.1]
+        at io.netty.channel.AbstractChannelHandlerContext.invokeChannelRead(AbstractChannelHandlerContext.java:377) [netty-transport-4.1.45.Final.jar:4.1.45.Final]
+        at io.netty.channel.AbstractChannelHandlerContext.invokeChannelRead(AbstractChannelHandlerContext.java:363) [netty-transport-4.1.45.Final.jar:4.1.45.Final]
+        at io.netty.channel.AbstractChannelHandlerContext.fireChannelRead(AbstractChannelHandlerContext.java:355) [netty-transport-4.1.45.Final.jar:4.1.45.Final]
+        at io.netty.handler.codec.ByteToMessageDecoder.fireChannelRead(ByteToMessageDecoder.java:321) [netty-codec-4.1.45.Final.jar:4.1.45.Final]
+        at io.netty.handler.codec.ByteToMessageDecoder.channelRead(ByteToMessageDecoder.java:295) [netty-codec-4.1.45.Final.jar:4.1.45.Final]
+        at io.netty.channel.AbstractChannelHandlerContext.invokeChannelRead(AbstractChannelHandlerContext.java:377) [netty-transport-4.1.45.Final.jar:4.1.45.Final]
+        at io.netty.channel.AbstractChannelHandlerContext.invokeChannelRead(AbstractChannelHandlerContext.java:363) [netty-transport-4.1.45.Final.jar:4.1.45.Final]
+        at io.netty.channel.AbstractChannelHandlerContext.fireChannelRead(AbstractChannelHandlerContext.java:355) [netty-transport-4.1.45.Final.jar:4.1.45.Final]
+        at io.netty.handler.logging.LoggingHandler.channelRead(LoggingHandler.java:227) [netty-handler-4.1.45.Final.jar:4.1.45.Final]
+        at io.netty.channel.AbstractChannelHandlerContext.invokeChannelRead(AbstractChannelHandlerContext.java:377) [netty-transport-4.1.45.Final.jar:4.1.45.Final]
+        at io.netty.channel.AbstractChannelHandlerContext.invokeChannelRead(AbstractChannelHandlerContext.java:363) [netty-transport-4.1.45.Final.jar:4.1.45.Final]
+        at io.netty.channel.AbstractChannelHandlerContext.fireChannelRead(AbstractChannelHandlerContext.java:355) [netty-transport-4.1.45.Final.jar:4.1.45.Final]
+        at io.netty.channel.DefaultChannelPipeline$HeadContext.channelRead(DefaultChannelPipeline.java:1410) [netty-transport-4.1.45.Final.jar:4.1.45.Final]
+        at io.netty.channel.AbstractChannelHandlerContext.invokeChannelRead(AbstractChannelHandlerContext.java:377) [netty-transport-4.1.45.Final.jar:4.1.45.Final]
+        at io.netty.channel.AbstractChannelHandlerContext.invokeChannelRead(AbstractChannelHandlerContext.java:363) [netty-transport-4.1.45.Final.jar:4.1.45.Final]
+        at io.netty.channel.DefaultChannelPipeline.fireChannelRead(DefaultChannelPipeline.java:919) [netty-transport-4.1.45.Final.jar:4.1.45.Final]
+        at io.netty.channel.nio.AbstractNioByteChannel$NioByteUnsafe.read(AbstractNioByteChannel.java:163) [netty-transport-4.1.45.Final.jar:4.1.45.Final]
+        at io.netty.channel.nio.NioEventLoop.processSelectedKey(NioEventLoop.java:714) [netty-transport-4.1.45.Final.jar:4.1.45.Final]
+        at io.netty.channel.nio.NioEventLoop.processSelectedKeysPlain(NioEventLoop.java:615) [netty-transport-4.1.45.Final.jar:4.1.45.Final]
+        at io.netty.channel.nio.NioEventLoop.processSelectedKeys(NioEventLoop.java:578) [netty-transport-4.1.45.Final.jar:4.1.45.Final]
+        at io.netty.channel.nio.NioEventLoop.run(NioEventLoop.java:493) [netty-transport-4.1.45.Final.jar:4.1.45.Final]
+        at io.netty.util.concurrent.SingleThreadEventExecutor$4.run(SingleThreadEventExecutor.java:989) [netty-common-4.1.45.Final.jar:4.1.45.Final]
+        at io.netty.util.internal.ThreadExecutorMap$2.run(ThreadExecutorMap.java:74) [netty-common-4.1.45.Final.jar:4.1.45.Final]
+        at java.lang.Thread.run(Thread.java:832) [?:?]
+
+
+[2024-07-17T15:24:31,119][WARN ][o.e.r.VerifyNodeRepositoryAction] [node-3] [es-snp] failed to verify repository
+org.elasticsearch.repositories.RepositoryVerificationException: [es-snp] store location [/snp] is not accessible on the node [{node-3}{a1DK8XclQean8VwNoXzK3w}{Eb4f6ayoQmKiR_KZmNwMLw}{10.40.10.126}{10.40.10.126:9300}{dilmrt}{ml.machine_memory=33697431552, xpack.installed=true, transform.node=true, ml.max_open_jobs=20}]
+        at org.elasticsearch.repositories.blobstore.BlobStoreRepository.verify(BlobStoreRepository.java:1893) ~[elasticsearch-7.7.1.jar:7.7.1]
+        at org.elasticsearch.repositories.VerifyNodeRepositoryAction.doVerify(VerifyNodeRepositoryAction.java:126) ~[elasticsearch-7.7.1.jar:7.7.1]
+        at org.elasticsearch.repositories.VerifyNodeRepositoryAction.access$400(VerifyNodeRepositoryAction.java:49) ~[elasticsearch-7.7.1.jar:7.7.1]
+        at org.elasticsearch.repositories.VerifyNodeRepositoryAction$VerifyNodeRepositoryRequestHandler.messageReceived(VerifyNodeRepositoryAction.java:158) [elasticsearch-7.7.1.jar:7.7.1]
+        at org.elasticsearch.repositories.VerifyNodeRepositoryAction$VerifyNodeRepositoryRequestHandler.messageReceived(VerifyNodeRepositoryAction.java:153) [elasticsearch-7.7.1.jar:7.7.1]
+        at org.elasticsearch.transport.RequestHandlerRegistry.processMessageReceived(RequestHandlerRegistry.java:63) [elasticsearch-7.7.1.jar:7.7.1]
+        at org.elasticsearch.transport.InboundHandler$RequestHandler.doRun(InboundHandler.java:264) [elasticsearch-7.7.1.jar:7.7.1]
+        at org.elasticsearch.common.util.concurrent.ThreadContext$ContextPreservingAbstractRunnable.doRun(ThreadContext.java:692) [elasticsearch-7.7.1.jar:7.7.1]
+        at org.elasticsearch.common.util.concurrent.AbstractRunnable.run(AbstractRunnable.java:37) [elasticsearch-7.7.1.jar:7.7.1]
+        at java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1130) [?:?]
+        at java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:630) [?:?]
+        at java.lang.Thread.run(Thread.java:832) [?:?]
+Caused by: java.nio.file.AccessDeniedException: /snp/tests-rdy0HhrJSxKNL23xkkeSYQ/data-a1DK8XclQean8VwNoXzK3w.dat
+        at sun.nio.fs.UnixException.translateToIOException(UnixException.java:90) ~[?:?]
+        at sun.nio.fs.UnixException.rethrowAsIOException(UnixException.java:111) ~[?:?]
+        at sun.nio.fs.UnixException.rethrowAsIOException(UnixException.java:116) ~[?:?]
+        at sun.nio.fs.UnixFileSystemProvider.newByteChannel(UnixFileSystemProvider.java:219) ~[?:?]
+        at java.nio.file.spi.FileSystemProvider.newOutputStream(FileSystemProvider.java:478) ~[?:?]
+        at java.nio.file.Files.newOutputStream(Files.java:224) ~[?:?]
+        at org.elasticsearch.common.blobstore.fs.FsBlobContainer.writeBlob(FsBlobContainer.java:161) ~[elasticsearch-7.7.1.jar:7.7.1]
+        at org.elasticsearch.repositories.blobstore.BlobStoreRepository.verify(BlobStoreRepository.java:1890) ~[elasticsearch-7.7.1.jar:7.7.1]
+        ... 11 more
+```
+
+
+
+#如果存储可以改为all_squash，那么服务器这边不用动
+
+![image-20240717163751146](es\image-20240717163751146.png)
+
+
+
+#但是如果存储为共享目录，已经有其它业务在跑，存储这边参数不建议修改，防止影响其它业务。
+
+#第二个解决办法，就是修改服务器这边的uid/gid
+
+#修改过程
+
+```bash
+#escluster03 uid/gid被oracle用户占用
+[elasticsearch@escluster03 log]$ id elasticsearch
+uid=1002(elasticsearch) gid=1003(elasticsearch) groups=1003(elasticsearch)
+[elasticsearch@escluster03 log]$ id 1001
+uid=1001(oracle) gid=1002(oinstall) groups=1002(oinstall),1001(dba)
+
+[elasticsearch@escluster03 log]$ su - root
+
+[root@escluster03 ~]# userdel -rf oracle
+[root@escluster03 ~]# groupdel dba
+[root@escluster03 ~]# groupdel oinstall
+
+
+[root@escluster03 ~]# getent passwd | awk -F: '{print $3}' | sort -n | grep 1001
+[root@escluster03 ~]# getent group | awk -F: '{print $3}' | sort -n | grep 1001
+
+[root@escluster03 ~]# getent group | awk -F: '{print $3}' | sort -n | grep 1003
+1003
+[root@escluster03 ~]# getent passwd | awk -F: '{print $3}' | sort -n | grep 1002
+1002
+[root@escluster03 ~]# systemctl stop elasticsearch.service
+
+[root@escluster03 home]# userdel -rf elasticsearch
+
+[root@escluster03 home]# getent group | awk -F: '{print $3}' | sort -n | grep 1003
+[root@escluster03 ~]# getent passwd | awk -F: '{print $3}' | sort -n | grep 1002
+
+[root@escluster03 home]#  groupadd -g 1001 elasticsearch
+[root@escluster03 home]#  useradd -u 1001 -g 1001 elasticsearch
+
+
+[root@escluster03 home]# passwd elasticsearch
+Changing password for user elasticsearch.
+New password:
+Retype new password:
+passwd: all authentication tokens updated successfully.
+
+
+#然后重新对elasticsearch用户的目录赋权下
+
+chown -R elasticsearch:elasticsearch /opt/soft
+
+chown -R elasticsearch:elasticsearch /opt/elasticsearch
+
+chown -R elasticsearch:elasticsearch /data/data
+
+chown -R elasticsearch:elasticsearch /data/log
+
+#chown -R elasticsearch:elasticsearch /opt/kibana
+
+#启动es服务
+[root@escluster03 opt]# systemctl start elasticsearch
+[root@escluster03 opt]# systemctl status elasticsearch
+● elasticsearch.service - elasticsearch
+   Loaded: loaded (/usr/lib/systemd/system/elasticsearch.service; enabled; vendor preset: disabled)
+   Active: active (running) since Wed 2024-07-17 16:24:10 CST; 3s ago
+ Main PID: 39879 (java)
+    Tasks: 37
+   CGroup: /system.slice/elasticsearch.service
+           └─39879 /opt/elasticsearch/jdk/bin/java -Xshare:auto -Des.networkaddress.cache.ttl=60 -Des.networkaddress.cache.negative.ttl=10 -XX:+AlwaysPreTouch -Xss1m -Djava.awt.headless=true -Dfil...
+
+Jul 17 16:24:10 escluster03 systemd[1]: Started elasticsearch.
+[root@escluster03 opt]# systemctl status elasticsearch
+● elasticsearch.service - elasticsearch
+   Loaded: loaded (/usr/lib/systemd/system/elasticsearch.service; enabled; vendor preset: disabled)
+   Active: active (running) since Wed 2024-07-17 16:24:10 CST; 4s ago
+ Main PID: 39879 (java)
+    Tasks: 44
+   CGroup: /system.slice/elasticsearch.service
+           ├─39879 /opt/elasticsearch/jdk/bin/java -Xshare:auto -Des.networkaddress.cache.ttl=60 -Des.networkaddress.cache.negative.ttl=10 -XX:+AlwaysPreTouch -Xss1m -Djava.awt.headless=true -Dfil...
+           └─40143 /opt/elasticsearch/modules/x-pack-ml/platform/linux-x86_64/bin/controller
+
+Jul 17 16:24:10 escluster03 systemd[1]: Started elasticsearch.
+Jul 17 16:24:13 escluster03 elasticsearch[39879]: [2024-07-17T16:24:13,865][INFO ][o.e.e.NodeEnvironment    ] [node-3] using [1] data paths, mounts [[/ (rootfs)]], net usable_space [42...pes [rootfs]
+Jul 17 16:24:13 escluster03 elasticsearch[39879]: [2024-07-17T16:24:13,868][INFO ][o.e.e.NodeEnvironment    ] [node-3] heap size [15gb], compressed ordinary object pointers [true]
+Jul 17 16:24:13 escluster03 elasticsearch[39879]: [2024-07-17T16:24:13,995][INFO ][o.e.n.Node               ] [node-3] node name [node-3], node ID [a1DK8XclQean8VwNoXzK3w], cluster name [nwpu-es]
+Jul 17 16:24:13 escluster03 elasticsearch[39879]: [2024-07-17T16:24:13,998][INFO ][o.e.n.Node               ] [node-3] version[7.7.1], pid[39879], build[default/tar/ad56dce891c901a492b....1/14.0.1+7]
+Jul 17 16:24:13 escluster03 elasticsearch[39879]: [2024-07-17T16:24:13,998][INFO ][o.e.n.Node               ] [node-3] JVM home [/opt/elasticsearch/jdk]
+Jul 17 16:24:13 escluster03 elasticsearch[39879]: [2024-07-17T16:24:13,999][INFO ][o.e.n.Node               ] [node-3] JVM arguments [-Xshare:auto, -Des.networkaddress.cache.ttl=60, -D...tackTraceInF
+Hint: Some lines were ellipsized, use -l to show in full.
+```
 
 #### 2、每台es节点创建备份目录，并mount共享目录
 
@@ -1755,6 +1950,8 @@ green  open   bank                                                              
 
 #查询所有，并按照account_number升序排序
 
+#`match_all`表示查询所有的数据，`sort`即按照什么字段排序
+
 ```bash
 GET /bank/_search
 {
@@ -1846,13 +2043,17 @@ timed_out – 搜索请求是否超时
 _shards - 搜索了多少个碎片，以及成功，失败或跳过了多少个碎片的细目分类
 max_score – 找到的最相关文档的分数
 hits.total.value - 找到了多少个匹配的文档
-hits.sort - 文档的排序位置（不按相关性得分排序时）
-hits._score - 文档的相关性得分（使用match_all时不适用）
+hits.hits.sort - 文档的排序位置（不按相关性得分排序时）
+hits.hits._score - 文档的相关性得分（使用match_all时不适用）
 ```
 
 
 
 ##### 2.2.分页查询
+
+#from
+
+#size
 
 ```bash
 GET /bank/_search
@@ -1962,9 +2163,27 @@ GET /bank/_search
 
 
 
-##### 2.3.指定字段查询---match
+##### 2.3.指定字段查询
+
+#match
+
+#如果要在字段中搜索特定字词，可以使用`match`
+
+#如下语句将查询address 字段中包含 mill 或者 lane的数据
+
+#由于ES底层是按照分词索引的，所以上述查询结果是address 字段中包含 mill 或者 lane的数据
 
 ```bash
+GET /bank/_search
+{
+  "query":
+  {
+    "match": {
+      "address": "mill lane"
+    }
+  }
+}
+
 ```
 
 
@@ -1972,17 +2191,635 @@ GET /bank/_search
 #logs
 
 ```json
+{
+  "took": 4,
+  "timed_out": false,
+  "_shards": {
+    "total": 1,
+    "successful": 1,
+    "skipped": 0,
+    "failed": 0
+  },
+  "hits": {
+    "total": {
+      "value": 19,
+      "relation": "eq"
+    },
+    "max_score": 9.507477,
+    "hits": [
+      {
+        "_index": "bank",
+        "_id": "136",
+        "_score": 9.507477,
+        "_source": {
+          "account_number": 136,
+          "balance": 45801,
+          "firstname": "Winnie",
+          "lastname": "Holland",
+          "age": 38,
+          "gender": "M",
+          "address": "198 Mill Lane",
+          "employer": "Neteria",
+          "email": "winnieholland@neteria.com",
+          "city": "Urie",
+          "state": "IL"
+        }
+      },
+      {
+        "_index": "bank",
+        "_id": "970",
+        "_score": 5.4032025,
+        "_source": {
+          "account_number": 970,
+          "balance": 19648,
+          "firstname": "Forbes",
+          "lastname": "Wallace",
+          "age": 28,
+          "gender": "M",
+          "address": "990 Mill Road",
+          "employer": "Pheast",
+          "email": "forbeswallace@pheast.com",
+          "city": "Lopezo",
+          "state": "AK"
+        }
+      },
+.........
+      {
+        "_index": "bank",
+        "_id": "449",
+        "_score": 4.1042743,
+        "_source": {
+          "account_number": 449,
+          "balance": 41950,
+          "firstname": "Barnett",
+          "lastname": "Cantrell",
+          "age": 39,
+          "gender": "F",
+          "address": "945 Bedell Lane",
+          "employer": "Zentility",
+          "email": "barnettcantrell@zentility.com",
+          "city": "Swartzville",
+          "state": "ND"
+        }
+      }
+    ]
+  }
+}
+```
+
+
+
+##### 2.4.查询段落匹配
+
+#如果我们希望查询的条件是 address字段中包含 "mill lane"，则可以使用`match_phrase`
+
+```bash
+GET /bank/_search
+{
+  "query": {
+    "match_phrase": {"address": "mill lane"}
+  }
+}
+```
+
+
+
+#logs
+
+```json
+{
+  "took": 12,
+  "timed_out": false,
+  "_shards": {
+    "total": 1,
+    "successful": 1,
+    "skipped": 0,
+    "failed": 0
+  },
+  "hits": {
+    "total": {
+      "value": 1,
+      "relation": "eq"
+    },
+    "max_score": 9.507477,
+    "hits": [
+      {
+        "_index": "bank",
+        "_id": "136",
+        "_score": 9.507477,
+        "_source": {
+          "account_number": 136,
+          "balance": 45801,
+          "firstname": "Winnie",
+          "lastname": "Holland",
+          "age": 38,
+          "gender": "M",
+          "address": "198 Mill Lane",
+          "employer": "Neteria",
+          "email": "winnieholland@neteria.com",
+          "city": "Urie",
+          "state": "IL"
+        }
+      }
+    ]
+  }
+}
 ```
 
 
 
 
 
+##### 2.5.多条件查询
+
+#bool
+
+#如果要构造更复杂的查询，可以使用`bool`查询来组合多个查询条件。
+
+#例如，以下请求在bank索引中搜索40岁客户的帐户，但不包括居住在爱达荷州（ID）的任何人
+
+```bash
+GET /bank/_search
+{
+  "query": {
+    "bool": {
+      "must": [
+        {"match": {"age": 40}}
+        ],
+      "must_not": [
+        {"match": {"state": "ID"}}
+        ]
+    }
+  }
+}
+```
 
 
-#### 3、聚合
+
+#logs
+
+```json
+{
+  "took": 3,
+  "timed_out": false,
+  "_shards": {
+    "total": 1,
+    "successful": 1,
+    "skipped": 0,
+    "failed": 0
+  },
+  "hits": {
+    "total": {
+      "value": 43,
+      "relation": "eq"
+    },
+    "max_score": 1,
+    "hits": [
+      {
+        "_index": "bank",
+        "_id": "474",
+        "_score": 1,
+        "_source": {
+          "account_number": 474,
+          "balance": 35896,
+          "firstname": "Obrien",
+          "lastname": "Walton",
+          "age": 40,
+          "gender": "F",
+          "address": "192 Ide Court",
+          "employer": "Suremax",
+          "email": "obrienwalton@suremax.com",
+          "city": "Crucible",
+          "state": "UT"
+        }
+      },
+      ............................
+      {
+        "_index": "bank",
+        "_id": "177",
+        "_score": 1,
+        "_source": {
+          "account_number": 177,
+          "balance": 48972,
+          "firstname": "Harris",
+          "lastname": "Gross",
+          "age": 40,
+          "gender": "F",
+          "address": "468 Suydam Street",
+          "employer": "Kidstock",
+          "email": "harrisgross@kidstock.com",
+          "city": "Yettem",
+          "state": "KY"
+        }
+      }
+    ]
+  }
+}
+```
 
 
+
+###### 2.5.1.must与filter的区别
+
+#`must`, `should`, `must_not` 和 `filter` 都是`bool`查询的子句
+
+#`must`：文档 必须 匹配这些条件才能被包含进来，相当于sql中的 and
+
+#`must_not`：文档 必须不 匹配这些条件才能被包含进来，相当于sql中的 not
+
+#`should`：如果满足这些语句中的任意语句，将增加 _score ，否则，无任何影响。它们主要用于修正每个文档的相关性得分。相当于sql中的or
+
+#`filter`：必须 匹配，但它以不评分、过滤模式来进行。这些语句对评分没有贡献，只是根据过滤标准来排除或包含文档。
+
+#must和filter的区别
+
+```
+must：返回的文档必须满足must子句的条件，并且参与计算分值
+
+filter：返回的文档必须满足filter子句的条件。但是跟Must不一样的是，不会计算分值， 并且可以使用缓存
+
+must和filter是一样的。区别是场景不一样。如果结果需要算分就使用must，否则可以考虑使用filter，使查询更高效
+```
+
+
+
+```bash
+GET /bank/_search 
+{
+  "query": {
+    "bool": {
+      "must": [
+        {"match": {"state": "ND"}}  
+      ],
+      "filter": [
+        {"term": {"age": "40"}},
+        {"range": 
+          {"balance": 
+            {"gte": 20000,
+             "lte": 30000
+            }
+          }
+        }
+      ]
+    }
+  }
+}
+```
+
+
+
+#logs
+
+```json
+{
+  "took": 3,
+  "timed_out": false,
+  "_shards": {
+    "total": 1,
+    "successful": 1,
+    "skipped": 0,
+    "failed": 0
+  },
+  "hits": {
+    "total": {
+      "value": 1,
+      "relation": "eq"
+    },
+    "max_score": 3.7100816,
+    "hits": [
+      {
+        "_index": "bank",
+        "_id": "432",
+        "_score": 3.7100816,
+        "_source": {
+          "account_number": 432,
+          "balance": 28969,
+          "firstname": "Preston",
+          "lastname": "Ferguson",
+          "age": 40,
+          "gender": "F",
+          "address": "239 Greenwood Avenue",
+          "employer": "Bitendrex",
+          "email": "prestonferguson@bitendrex.com",
+          "city": "Idledale",
+          "state": "ND"
+        }
+      }
+    ]
+  }
+}
+```
+
+
+
+###### 2.5.2.term与match的区别
+
+#term：代表完全匹配，也就是精确查询，搜索前不会再对搜索词进行分词解析，直接对搜索词进行查找
+
+#match：代表模糊匹配，搜索前会对搜索词进行分词解析，然后按搜索词匹配查找
+
+###### 2.5.3.text和keyword的区别
+
+#text：查询时会进行分词解析
+
+#keyword：keyword类型的词不会被分词器进行解析，直接作为整体进行查询
+
+
+
+##### 2.6.聚合查询
+
+#我们知道SQL中有group by，在ES中它叫Aggregation，即聚合运算
+
+###### 2.6.1.简单聚合
+
+#比如我们希望计算出account每个州的统计数量， 使用`aggs`关键字对`state`字段聚合，被聚合的字段无需对分词统计，所以使用`state.keyword`对整个字段统计
+
+
+
+```bash
+GET /bank/_search
+{
+  "size": 0,
+  "aggs": {
+    "group_by_state": {
+      "terms": {
+        "field": "state.keyword"
+      }
+    }
+  }
+}
+```
+
+
+
+#logs
+
+```json
+{
+  "took": 9,
+  "timed_out": false,
+  "_shards": {
+    "total": 1,
+    "successful": 1,
+    "skipped": 0,
+    "failed": 0
+  },
+  "hits": {
+    "total": {
+      "value": 1000,
+      "relation": "eq"
+    },
+    "max_score": null,
+    "hits": []
+  },
+  "aggregations": {
+    "group_by_state": {
+      "doc_count_error_upper_bound": 0,
+      "sum_other_doc_count": 743,
+      "buckets": [
+        {
+          "key": "TX",
+          "doc_count": 30
+        },
+        {
+          "key": "MD",
+          "doc_count": 28
+        },
+        {
+          "key": "ID",
+          "doc_count": 27
+        },
+        {
+        .................
+        {
+          "key": "ND",
+          "doc_count": 24
+        }
+      ]
+    }
+  }
+}
+```
+
+
+
+#因为无需返回条件的具体数据, 所以设置size=0，返回hits为空
+
+#`doc_count`表示bucket中每个州的数据条数
+
+###### 2.6.2.嵌套聚合
+
+#比如承接上个例子， 计算每个州的平均结余。涉及到的就是在对state分组的基础上，嵌套计算avg(balance)
+
+```bash
+GET /bank/_search
+{
+  "size": 0,
+  "aggs": {
+    "group_by_state": {
+      "terms": {
+        "field": "state.keyword"
+      },
+      "aggs": {
+        "average_balance": {
+          "avg": {
+            "field": "balance"
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+
+
+#logs
+
+```json
+{
+  "took": 13,
+  "timed_out": false,
+  "_shards": {
+    "total": 1,
+    "successful": 1,
+    "skipped": 0,
+    "failed": 0
+  },
+  "hits": {
+    "total": {
+      "value": 1000,
+      "relation": "eq"
+    },
+    "max_score": null,
+    "hits": []
+  },
+  "aggregations": {
+    "group_by_state": {
+      "doc_count_error_upper_bound": 0,
+      "sum_other_doc_count": 743,
+      "buckets": [
+        {
+          "key": "TX",
+          "doc_count": 30,
+          "average_balance": {
+            "value": 26073.3
+          }
+        },
+        {
+          "key": "MD",
+          "doc_count": 28,
+          "average_balance": {
+            "value": 26161.535714285714
+          }
+        },
+        ...............................
+        {
+          "key": "ND",
+          "doc_count": 24,
+          "average_balance": {
+            "value": 26577.333333333332
+          }
+        }
+      ]
+    }
+  }
+}
+```
+
+
+
+
+###### 2.6.3.对聚合结果排序
+
+#比如承接上个例子， 对嵌套计算出的avg(balance)，这里是average_balance，进行排序
+
+```bash
+GET /bank/_search
+{
+  "size": 0,
+  "aggs": {
+    "group_by_state": {
+      "terms": {
+        "field": "state.keyword",
+        "order": {
+          "average_balance": "desc"
+        }
+      },
+      "aggs": {
+        "average_balance": {
+          "avg": {
+            "field": "balance"
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+
+
+#logs
+
+```json
+{
+  "took": 24,
+  "timed_out": false,
+  "_shards": {
+    "total": 1,
+    "successful": 1,
+    "skipped": 0,
+    "failed": 0
+  },
+  "hits": {
+    "total": {
+      "value": 1000,
+      "relation": "eq"
+    },
+    "max_score": null,
+    "hits": []
+  },
+  "aggregations": {
+    "group_by_state": {
+      "doc_count_error_upper_bound": -1,
+      "sum_other_doc_count": 827,
+      "buckets": [
+        {
+          "key": "CO",
+          "doc_count": 14,
+          "average_balance": {
+            "value": 32460.35714285714
+          }
+        },
+        {
+          "key": "NE",
+          "doc_count": 16,
+          "average_balance": {
+            "value": 32041.5625
+          }
+        },
+        {
+          "key": "AZ",
+          "doc_count": 14,
+          "average_balance": {
+            "value": 31634.785714285714
+          }
+        },
+        {
+          "key": "MT",
+          "doc_count": 17,
+          "average_balance": {
+            "value": 31147.41176470588
+          }
+        },
+        {
+          "key": "VA",
+          "doc_count": 16,
+          "average_balance": {
+            "value": 30600.0625
+          }
+        },
+        {
+          "key": "GA",
+          "doc_count": 19,
+          "average_balance": {
+            "value": 30089
+          }
+        },
+        {
+          "key": "MA",
+          "doc_count": 24,
+          "average_balance": {
+            "value": 29600.333333333332
+          }
+        },
+        {
+          "key": "IL",
+          "doc_count": 22,
+          "average_balance": {
+            "value": 29489.727272727272
+          }
+        },
+        {
+          "key": "NM",
+          "doc_count": 14,
+          "average_balance": {
+            "value": 28792.64285714286
+          }
+        },
+        {
+          "key": "LA",
+          "doc_count": 17,
+          "average_balance": {
+            "value": 28791.823529411766
+          }
+        }
+      ]
+    }
+  }
+}
+```
 
 
 
