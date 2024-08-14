@@ -254,8 +254,8 @@ cp mongodb-database-tools-rhel82-aarch64-100.9.4/bin/* /usr/mongodb/bin/
 #备份报错
 
 ```bash
-# mongodump -h 192.168.106.53 -u admin -p 'Supwisdom!@#' --authenticationDatabase admin --gzip -d "swopErrorData" -o /data/mongo/$(date +%Y%m%d)
-2024-05-27T20:36:43.166+0800    Failed: error creating intents to dump: error getting collections for database `swopErrorData`: (Unauthorized) not authorized on swopErrorData to execute command { listCollections: 1, filter: {}, cursor: {}, lsid: { id: UUID("3db0ac0f-6cc8-45fe-99a7-e61e9ea168bf") }, $db: "swopErrorData" }
+# mongodump -h 192.168.106.53 -u admin -p 'Supwisdom!@#' --authenticationDatabase admin --gzip -d "swop" -o /data/mongo/$(date +%Y%m%d)
+2024-05-27T20:36:43.166+0800    Failed: error creating intents to dump: error getting collections for database `swop`: (Unauthorized) not authorized on swop to execute command { listCollections: 1, filter: {}, cursor: {}, lsid: { id: UUID("3db0ac0f-6cc8-45fe-99a7-e61e9ea168bf") }, $db: "swop" }
 
 
 #官网关于role的介绍
@@ -270,6 +270,9 @@ Implicit session: session { "id" : UUID("2d343ad6-97a6-4cce-8ee1-8393d38a4ad2") 
 MongoDB server version: 4.4.29
 > use admin;
 switched to db admin
+
+###> db.auth('admin','Supwisdom!@#');
+#####1
 
 > db.grantRolesToUser("admin",[{role: "backup", db: "admin"}]);
 > db.getUser("admin");
@@ -297,17 +300,17 @@ switched to db admin
 bye
 
 #再次备份测试
-# mongodump -h 192.168.106.53 -u admin -p 'Supwisdom!@#' --authenticationDatabase admin --gzip -d "swopErrorData" -o /data/mongo/$(date +%Y%m%d)
-2024-05-27T21:57:39.637+0800    writing swopErrorData.swopWorkErrorLog to /data/mongo/20240527/swopErrorData/swopWorkErrorLog.bson.gz
-2024-05-27T21:57:39.638+0800    writing swopErrorData.SWOP_TRANS_LOG to /data/mongo/20240527/swopErrorData/SWOP_TRANS_LOG.bson.gz
-2024-05-27T21:57:39.638+0800    writing swopErrorData.SWOP_JOB_LOG to /data/mongo/20240527/swopErrorData/SWOP_JOB_LOG.bson.gz
-2024-05-27T21:57:39.641+0800    done dumping swopErrorData.SWOP_JOB_LOG (0 documents)
-2024-05-27T21:57:39.642+0800    writing swopErrorData.swopErrorData to /data/mongo/20240527/swopErrorData/swopErrorData.bson.gz
-2024-05-27T21:57:39.643+0800    done dumping swopErrorData.SWOP_TRANS_LOG (4 documents)
-2024-05-27T21:57:39.643+0800    writing swopErrorData.swopWorkLog to /data/mongo/20240527/swopErrorData/swopWorkLog.bson.gz
-2024-05-27T21:57:39.645+0800    done dumping swopErrorData.swopWorkErrorLog (5 documents)
-2024-05-27T21:57:39.645+0800    done dumping swopErrorData.swopErrorData (0 documents)
-2024-05-27T21:57:39.662+0800    done dumping swopErrorData.swopWorkLog (556 documents)
+# mongodump -h 192.168.106.53:27017 -u admin -p 'Supwisdom!@#' --authenticationDatabase admin --gzip -d "swop" -o /data/mongo/$(date +%Y%m%d)
+2024-05-27T21:57:39.637+0800    writing swop.swopWorkErrorLog to /data/mongo/20240527/swop/swopWorkErrorLog.bson.gz
+2024-05-27T21:57:39.638+0800    writing swop.SWOP_TRANS_LOG to /data/mongo/20240527/swop/SWOP_TRANS_LOG.bson.gz
+2024-05-27T21:57:39.638+0800    writing swop.SWOP_JOB_LOG to /data/mongo/20240527/swop/SWOP_JOB_LOG.bson.gz
+2024-05-27T21:57:39.641+0800    done dumping swop.SWOP_JOB_LOG (0 documents)
+2024-05-27T21:57:39.642+0800    writing swop.swop to /data/mongo/20240527/swop/swop.bson.gz
+2024-05-27T21:57:39.643+0800    done dumping swop.SWOP_TRANS_LOG (4 documents)
+2024-05-27T21:57:39.643+0800    writing swop.swopWorkLog to /data/mongo/20240527/swop/swopWorkLog.bson.gz
+2024-05-27T21:57:39.645+0800    done dumping swop.swopWorkErrorLog (5 documents)
+2024-05-27T21:57:39.645+0800    done dumping swop.swop (0 documents)
+2024-05-27T21:57:39.662+0800    done dumping swop.swopWorkLog (556 documents)
 
 # cd /data/mongo/
 # ll
@@ -316,18 +319,18 @@ drwxr-xr-x 3 root root 4096 May 27 21:57 20240527
 
 # cd 20240527/
 # ls
-swopErrorData
+swop
 
-# cd swopErrorData/
+# cd swop/
 # ls
-swopErrorData.bson.gz           SWOP_TRANS_LOG.bson.gz             swopWorkLog.bson.gz
-swopErrorData.metadata.json.gz  SWOP_TRANS_LOG.metadata.json.gz    swopWorkLog.metadata.json.gz
+swop.bson.gz           SWOP_TRANS_LOG.bson.gz             swopWorkLog.bson.gz
+swop.metadata.json.gz  SWOP_TRANS_LOG.metadata.json.gz    swopWorkLog.metadata.json.gz
 SWOP_JOB_LOG.bson.gz            swopWorkErrorLog.bson.gz
 SWOP_JOB_LOG.metadata.json.gz   swopWorkErrorLog.metadata.json.gz
 
 
 #测试正常，后面可以使用如下命令
-mongodump -h 192.168.106.53 -u admin -p 'Supwisdom!@#' --authenticationDatabase admin --gzip -d "swopErrorData" -o /data/mongo/$(date +%Y%m%d) >/dev/null 2>&1
+mongodump -h 192.168.106.53:27017 -u admin -p 'Supwisdom!@#' --authenticationDatabase admin --gzip -d "swop" -o /data/mongo/$(date +%Y%m%d) >/dev/null 2>&1
 
 
 ```
@@ -339,14 +342,14 @@ mongodump -h 192.168.106.53 -u admin -p 'Supwisdom!@#' --authenticationDatabase 
 #还原到一个新库报错，因为没有创建库等权限
 
 ```bash
-# mongorestore -h 192.168.106.53 -u admin -p 'Supwisdom!@#' --authenticationDatabase admin --gzip -d "swop01" /data/mongo/$(date +%Y%m%d)/swopErrorData/ --gzip
+# mongorestore -h 192.168.106.53 -u admin -p 'Supwisdom!@#' --authenticationDatabase admin --gzip -d "swop01" /data/mongo/$(date +%Y%m%d)/swop/ --gzip
 2024-05-27T22:07:26.016+0800    The --db and --collection flags are deprecated for this use-case; please use --nsInclude instead, i.e. with --nsInclude=${DATABASE}.${COLLECTION}
-2024-05-27T22:07:26.017+0800    building a list of collections to restore from /data/mongo/20240527/swopErrorData dir
-2024-05-27T22:07:26.017+0800    reading metadata for swop01.SWOP_JOB_LOG from /data/mongo/20240527/swopErrorData/SWOP_JOB_LOG.metadata.json.gz
-2024-05-27T22:07:26.017+0800    reading metadata for swop01.SWOP_TRANS_LOG from /data/mongo/20240527/swopErrorData/SWOP_TRANS_LOG.metadata.json.gz
-2024-05-27T22:07:26.017+0800    reading metadata for swop01.swopErrorData from /data/mongo/20240527/swopErrorData/swopErrorData.metadata.json.gz
-2024-05-27T22:07:26.017+0800    reading metadata for swop01.swopWorkErrorLog from /data/mongo/20240527/swopErrorData/swopWorkErrorLog.metadata.json.gz
-2024-05-27T22:07:26.018+0800    reading metadata for swop01.swopWorkLog from /data/mongo/20240527/swopErrorData/swopWorkLog.metadata.json.gz
+2024-05-27T22:07:26.017+0800    building a list of collections to restore from /data/mongo/20240527/swop dir
+2024-05-27T22:07:26.017+0800    reading metadata for swop01.SWOP_JOB_LOG from /data/mongo/20240527/swop/SWOP_JOB_LOG.metadata.json.gz
+2024-05-27T22:07:26.017+0800    reading metadata for swop01.SWOP_TRANS_LOG from /data/mongo/20240527/swop/SWOP_TRANS_LOG.metadata.json.gz
+2024-05-27T22:07:26.017+0800    reading metadata for swop01.swop from /data/mongo/20240527/swop/swop.metadata.json.gz
+2024-05-27T22:07:26.017+0800    reading metadata for swop01.swopWorkErrorLog from /data/mongo/20240527/swop/swopWorkErrorLog.metadata.json.gz
+2024-05-27T22:07:26.018+0800    reading metadata for swop01.swopWorkLog from /data/mongo/20240527/swop/swopWorkLog.metadata.json.gz
 2024-05-27T22:07:26.019+0800    finished restoring swop01.swopWorkLog (0 documents, 0 failures)
 2024-05-27T22:07:26.019+0800    Failed: swop01.swopWorkLog: error creating collection swop01.swopWorkLog: error running create command: (Unauthorized) not authorized on swop01 to execute command { create: "swopWorkLog", idIndex: { key: { _id: 1 }, ns: "swop01.swopWorkLog", name: "_id_" }, lsid: { id: UUID("6fd065e8-a56a-433a-943a-840a124138a9") }, $db: "swop01" }
 2024-05-27T22:07:26.019+0800    0 document(s) restored successfully. 0 document(s) failed to restore.
@@ -415,29 +418,29 @@ switched to db admin
 > exit
 bye
 
-# mongorestore -h 192.168.106.53 -u admin -p 'Supwisdom!@#' --authenticationDatabase admin --gzip -d "swop01" /data/mongo/$(date +%Y%m%d)/swopErrorData/ --gzip
+# mongorestore -h 192.168.106.53 -u admin -p 'Supwisdom!@#' --authenticationDatabase admin --gzip -d "swop01" /data/mongo/$(date +%Y%m%d)/swop/
 2024-05-27T22:11:33.964+0800    The --db and --collection flags are deprecated for this use-case; please use --nsInclude instead, i.e. with --nsInclude=${DATABASE}.${COLLECTION}
-2024-05-27T22:11:33.965+0800    building a list of collections to restore from /data/mongo/20240527/swopErrorData dir
-2024-05-27T22:11:33.965+0800    reading metadata for swop01.SWOP_JOB_LOG from /data/mongo/20240527/swopErrorData/SWOP_JOB_LOG.metadata.json.gz
-2024-05-27T22:11:33.965+0800    reading metadata for swop01.SWOP_TRANS_LOG from /data/mongo/20240527/swopErrorData/SWOP_TRANS_LOG.metadata.json.gz
-2024-05-27T22:11:33.965+0800    reading metadata for swop01.swopErrorData from /data/mongo/20240527/swopErrorData/swopErrorData.metadata.json.gz
-2024-05-27T22:11:33.965+0800    reading metadata for swop01.swopWorkErrorLog from /data/mongo/20240527/swopErrorData/swopWorkErrorLog.metadata.json.gz
-2024-05-27T22:11:33.965+0800    reading metadata for swop01.swopWorkLog from /data/mongo/20240527/swopErrorData/swopWorkLog.metadata.json.gz
-2024-05-27T22:11:34.145+0800    restoring swop01.swopWorkErrorLog from /data/mongo/20240527/swopErrorData/swopWorkErrorLog.bson.gz
-2024-05-27T22:11:34.145+0800    restoring swop01.swopWorkLog from /data/mongo/20240527/swopErrorData/swopWorkLog.bson.gz
+2024-05-27T22:11:33.965+0800    building a list of collections to restore from /data/mongo/20240527/swop dir
+2024-05-27T22:11:33.965+0800    reading metadata for swop01.SWOP_JOB_LOG from /data/mongo/20240527/swop/SWOP_JOB_LOG.metadata.json.gz
+2024-05-27T22:11:33.965+0800    reading metadata for swop01.SWOP_TRANS_LOG from /data/mongo/20240527/swop/SWOP_TRANS_LOG.metadata.json.gz
+2024-05-27T22:11:33.965+0800    reading metadata for swop01.swop from /data/mongo/20240527/swop/swop.metadata.json.gz
+2024-05-27T22:11:33.965+0800    reading metadata for swop01.swopWorkErrorLog from /data/mongo/20240527/swop/swopWorkErrorLog.metadata.json.gz
+2024-05-27T22:11:33.965+0800    reading metadata for swop01.swopWorkLog from /data/mongo/20240527/swop/swopWorkLog.metadata.json.gz
+2024-05-27T22:11:34.145+0800    restoring swop01.swopWorkErrorLog from /data/mongo/20240527/swop/swopWorkErrorLog.bson.gz
+2024-05-27T22:11:34.145+0800    restoring swop01.swopWorkLog from /data/mongo/20240527/swop/swopWorkLog.bson.gz
 2024-05-27T22:11:34.157+0800    finished restoring swop01.swopWorkErrorLog (5 documents, 0 failures)
-2024-05-27T22:11:34.162+0800    restoring swop01.SWOP_TRANS_LOG from /data/mongo/20240527/swopErrorData/SWOP_TRANS_LOG.bson.gz
+2024-05-27T22:11:34.162+0800    restoring swop01.SWOP_TRANS_LOG from /data/mongo/20240527/swop/SWOP_TRANS_LOG.bson.gz
 2024-05-27T22:11:34.174+0800    finished restoring swop01.SWOP_TRANS_LOG (4 documents, 0 failures)
 2024-05-27T22:11:34.175+0800    finished restoring swop01.swopWorkLog (556 documents, 0 failures)
-2024-05-27T22:11:34.198+0800    restoring swop01.SWOP_JOB_LOG from /data/mongo/20240527/swopErrorData/SWOP_JOB_LOG.bson.gz
+2024-05-27T22:11:34.198+0800    restoring swop01.SWOP_JOB_LOG from /data/mongo/20240527/swop/SWOP_JOB_LOG.bson.gz
 2024-05-27T22:11:34.208+0800    finished restoring swop01.SWOP_JOB_LOG (0 documents, 0 failures)
-2024-05-27T22:11:34.224+0800    restoring swop01.swopErrorData from /data/mongo/20240527/swopErrorData/swopErrorData.bson.gz
-2024-05-27T22:11:34.250+0800    finished restoring swop01.swopErrorData (0 documents, 0 failures)
+2024-05-27T22:11:34.224+0800    restoring swop01.swop from /data/mongo/20240527/swop/swop.bson.gz
+2024-05-27T22:11:34.250+0800    finished restoring swop01.swop (0 documents, 0 failures)
 2024-05-27T22:11:34.250+0800    restoring indexes for collection swop01.SWOP_JOB_LOG from metadata
 2024-05-27T22:11:34.250+0800    index: &idx.IndexDocument{Options:primitive.M{"name":"JOB_LOG_ID_1", "v":2}, Key:primitive.D{primitive.E{Key:"JOB_LOG_ID", Value:1}}, PartialFilterExpression:primitive.D(nil)}
 2024-05-27T22:11:34.250+0800    restoring indexes for collection swop01.SWOP_TRANS_LOG from metadata
 2024-05-27T22:11:34.251+0800    index: &idx.IndexDocument{Options:primitive.M{"name":"TRANS_LOG_ID_1", "v":2}, Key:primitive.D{primitive.E{Key:"TRANS_LOG_ID", Value:1}}, PartialFilterExpression:primitive.D(nil)}
-2024-05-27T22:11:34.251+0800    restoring indexes for collection swop01.swopErrorData from metadata
+2024-05-27T22:11:34.251+0800    restoring indexes for collection swop01.swop from metadata
 2024-05-27T22:11:34.251+0800    index: &idx.IndexDocument{Options:primitive.M{"name":"_swopLogId_1", "v":2}, Key:primitive.D{primitive.E{Key:"_swopLogId", Value:1}}, PartialFilterExpression:primitive.D(nil)}
 2024-05-27T22:11:34.251+0800    index: &idx.IndexDocument{Options:primitive.M{"name":"_createtime_-1", "v":2}, Key:primitive.D{primitive.E{Key:"_createtime", Value:-1}}, PartialFilterExpression:primitive.D(nil)}
 2024-05-27T22:11:34.252+0800    restoring indexes for collection swop01.swopWorkErrorLog from metadata
@@ -458,13 +461,13 @@ config         0.000GB
 dataassets     0.000GB
 local          0.000GB
 swop01         0.000GB
-swopErrorData  0.001GB
+swop  0.001GB
 > use swop01;
 switched to db swop01
 > show collections;
 SWOP_JOB_LOG
 SWOP_TRANS_LOG
-swopErrorData
+swop
 swopWorkErrorLog
 swopWorkLog
 ```

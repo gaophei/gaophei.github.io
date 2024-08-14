@@ -239,7 +239,8 @@
    controller.quorum.voters=1@kafka1:9093,2@kafka2:9093,3@kafka3:9093,4@kafka4:9093,5@kafka5:9093
    
     #将localhost修改为能访问本机的内外或外网IP，内网一般就是本机的IP
-   advertised.listeners=PLAINTEXT://localhost:9092
+   #advertised.listeners=PLAINTEXT://localhost:9092
+   advertised.listeners=PLAINTEXT://10.1.1.7:9092
    
    #参考：cpu个数或者[CPU核数]/2
    num.network.threads=8

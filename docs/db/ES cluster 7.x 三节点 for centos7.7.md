@@ -878,6 +878,8 @@ http://10.40.10.126:9200/_nodes/stats
 
 #### 7、安全配置，开启xpack并配置
 
+#官网地址https://www.elastic.co/guide/en/elasticsearch/reference/7.7/ssl-tls.html
+
 ##### 7.1、开启xpack
 
 ```mysql
