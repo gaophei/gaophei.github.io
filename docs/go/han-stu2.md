@@ -212,6 +212,9 @@ GOROOT---D:\Program Files\Go
 Path---;%GOROOT%\bin
 GOPATH---D:\goproject
 
+#set GOPROXY=https://goproxy.cn
+go env -w GOPROXY=https://goproxy.cn
+
 linux:
 sudo vi /etc/profile
 

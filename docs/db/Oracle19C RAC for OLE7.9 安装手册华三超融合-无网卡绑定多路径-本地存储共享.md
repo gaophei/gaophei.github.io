@@ -1583,6 +1583,14 @@ ping k8s-rac02-prv -c 1
 
 
 
+#如果不配置/etc/hosts，那么在后面的dbca时会报错
+
+```log
+ora-12154 tns could not resolve the connect identifier specified
+```
+
+
+
 ### 2.5. 禁用 NTP
 
 #检查两节点时间，时区是否相同，并禁止 ntp

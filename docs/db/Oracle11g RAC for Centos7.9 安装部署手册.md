@@ -2122,7 +2122,7 @@ su - oracle
 mkdir /home/oracle/backup
 touch /home/oracle/backup/rmanrun.log
 touch /home/oracle/backup/rmanbak.sh
-chmod a+x /home/oracle/backup/rman
+chmod a+x /home/oracle/backup/rmanbak.sh
 ```
 
 #rman全库备份脚本

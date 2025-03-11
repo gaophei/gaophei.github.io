@@ -1,25 +1,202 @@
-此文档提供安装mysql8(最新版8.0.34)主从高可用模式的安装
+此文档提供安装nginx(最新版1.26.1)主从高可用模式的安装
 
 ****
 
-#安装开始前，请注意OS系统的优化、服务器内存大小、磁盘分区大小，mysql安装到最大分区里
-#20211228补充OS优化部分，安装版本为8.0.34
+#安装开始前，请注意OS系统的优化、服务器内存大小、磁盘分区大小，nginx安装到最大分区里
+#20240821补充OS优化部分，安装版本为1.26.1
 
 ## 服务器资源
 
 #建议
 
 ```
-vm: 16核/32G 
+vm: 8核/16G 
 
-OS: oracle Linux 7.9(5.4.17-2011.6.2.el7uek.x86_64)
+OS: Anolis OS 7.9(3.10.0-1160.an7.x86_64)
 
-磁盘LVM管理，挂载第二块磁盘1T，/data为最大分区
+磁盘LVM管理，256G，/为最大分区
 ```
 
 ## 部署过程
 
 ### 一、系统优化
+
+#### 0、将/home分区空间回收，加入/分区
+
+#当前/home分区最大
+
+```bash
+[root@localhost ~]# lsblk
+NAME        MAJ:MIN RM   SIZE RO TYPE MOUNTPOINT
+sr0          11:0    1   1.2G  0 rom
+vda         252:0    0   500G  0 disk
+├─vda1      252:1    0     1G  0 part /boot
+└─vda2      252:2    0   499G  0 part
+  ├─ao-root 253:0    0    50G  0 lvm  /
+  ├─ao-swap 253:1    0  15.7G  0 lvm  [SWAP]
+  └─ao-home 253:2    0 433.3G  0 lvm  /home
+[root@localhost ~]# df -h
+文件系统             容量  已用  可用 已用% 挂载点
+devtmpfs              32G     0   32G    0% /dev
+tmpfs                 32G     0   32G    0% /dev/shm
+tmpfs                 32G  8.8M   32G    1% /run
+tmpfs                 32G     0   32G    0% /sys/fs/cgroup
+/dev/mapper/ao-root   50G  2.9G   48G    6% /
+/dev/mapper/ao-home  434G   33M  434G    1% /home
+/dev/vda1           1014M  175M  840M   18% /boot
+tmpfs                6.3G     0  6.3G    0% /run/user/0
+tmpfs                 60M     0   60M    0% /var/log/rtlog
+```
+
+
+
+#回收/home分区，添加到/分区
+
+```bash
+df -h
+
+umount /home
+
+lvs
+pvs
+vgs
+
+lvremove /dev/mapper/ao-home
+
+vgs
+
+lvextend -l +100%FREE /dev/mapper/ao-root
+
+vgs
+lvs
+
+#xfs_growfs /dev/mapper/ao-root
+#报错：xfs_growfs: /dev/mapper/ao-root is not a mounted XFS filesystem
+
+xfs_growfs /
+
+lvs
+
+vi /etc/fstab
+cat /etc/fstab
+
+df -h
+
+mkdir /data
+```
+
+
+
+#logs
+
+```bash
+[root@localhost ~]# umount /home
+[root@localhost ~]# pvs
+  PV         VG Fmt  Attr PSize    PFree
+  /dev/vda2  ao lvm2 a--  <499.00g 4.00m
+[root@localhost ~]# lvs
+  LV   VG Attr       LSize   Pool Origin Data%  Meta%  Move Log Cpy%Sync Convert
+  home ao -wi-a----- 433.30g
+  root ao -wi-ao----  50.00g
+  swap ao -wi-ao---- <15.69g
+[root@localhost ~]# vgs
+  VG #PV #LV #SN Attr   VSize    VFree
+  ao   1   3   0 wz--n- <499.00g 4.00m
+[root@localhost ~]# lvremove /dev/mapper/ao-home
+Do you really want to remove active logical volume ao/home? [y/n]: y
+  Logical volume "home" successfully removed
+[root@localhost ~]# vgs
+  VG #PV #LV #SN Attr   VSize    VFree
+  ao   1   2   0 wz--n- <499.00g <433.31g
+[root@localhost ~]# lvextend -l +100%FREE /dev/mapper/ao-root
+  Size of logical volume ao/root changed from 50.00 GiB (12800 extents) to <483.31 GiB (123727 extents).
+  Logical volume ao/root successfully resized.
+[root@localhost ~]# vgs
+  VG #PV #LV #SN Attr   VSize    VFree
+  ao   1   2   0 wz--n- <499.00g    0
+[root@localhost ~]# lvs
+  LV   VG Attr       LSize    Pool Origin Data%  Meta%  Move Log Cpy%Sync Convert
+  root ao -wi-ao---- <483.31g
+  swap ao -wi-ao----  <15.69g
+[root@localhost ~]# xfs_growfs /dev/mapper/ao-root
+xfs_growfs: /dev/mapper/ao-root is not a mounted XFS filesystem
+[root@localhost ~]# cat /etc/fstab
+
+#
+# /etc/fstab
+# Created by anaconda on Wed Aug 21 02:32:12 2024
+#
+# Accessible filesystems, by reference, are maintained under '/dev/disk'
+# See man pages fstab(5), findfs(8), mount(8) and/or blkid(8) for more info
+#
+/dev/mapper/ao-root     /                       xfs     defaults        0 0
+UUID=6349a9fd-b175-4645-8182-7b483fca9e09 /boot                   xfs     defaults        0 0
+/dev/mapper/ao-home     /home                   xfs     defaults        0 0
+/dev/mapper/ao-swap     swap                    swap    defaults        0 0
+
+
+[root@localhost ~]# xfs_growfs -h
+xfs_growfs：无效选项 -- h
+Usage: xfs_growfs [options] mountpoint
+
+Options:
+        -d          grow data/metadata section
+        -l          grow log section
+        -r          grow realtime section
+        -n          don't change anything, just show geometry
+        -i          convert log from external to internal format
+        -t          alternate location for mount table (/etc/mtab)
+        -x          convert log from internal to external format
+        -D size     grow data/metadata section to size blks
+        -L size     grow/shrink log section to size blks
+        -R size     grow realtime section to size blks
+        -e size     set realtime extent size to size blks
+        -m imaxpct  set inode max percent to imaxpct
+        -V          print version information
+        
+        
+[root@localhost ~]# xfs_growfs /
+meta-data=/dev/mapper/ao-root    isize=512    agcount=4, agsize=3276800 blks
+         =                       sectsz=512   attr=2, projid32bit=1
+         =                       crc=1        finobt=1, sparse=1, rmapbt=0
+         =                       reflink=0
+data     =                       bsize=4096   blocks=13107200, imaxpct=25
+         =                       sunit=0      swidth=0 blks
+naming   =version 2              bsize=4096   ascii-ci=0, ftype=1
+log      =internal log           bsize=4096   blocks=6400, version=2
+         =                       sectsz=512   sunit=0 blks, lazy-count=1
+realtime =none                   extsz=4096   blocks=0, rtextents=0
+data blocks changed from 13107200 to 126696448
+
+[root@localhost ~]# df -h
+文件系统             容量  已用  可用 已用% 挂载点
+devtmpfs              32G     0   32G    0% /dev
+tmpfs                 32G     0   32G    0% /dev/shm
+tmpfs                 32G  8.8M   32G    1% /run
+tmpfs                 32G     0   32G    0% /sys/fs/cgroup
+/dev/mapper/ao-root  484G  2.9G  481G    1% /
+/dev/vda1           1014M  175M  840M   18% /boot
+tmpfs                6.3G     0  6.3G    0% /run/user/0
+tmpfs                 60M     0   60M    0% /var/log/rtlog
+[root@localhost ~]# vi /etc/fstab
+[root@localhost ~]# cat /etc/fstab
+
+#
+# /etc/fstab
+# Created by anaconda on Wed Aug 21 02:32:12 2024
+#
+# Accessible filesystems, by reference, are maintained under '/dev/disk'
+# See man pages fstab(5), findfs(8), mount(8) and/or blkid(8) for more info
+#
+/dev/mapper/ao-root     /                       xfs     defaults        0 0
+UUID=6349a9fd-b175-4645-8182-7b483fca9e09 /boot                   xfs     defaults        0 0
+#/dev/mapper/ao-home     /home                   xfs     defaults        0 0
+/dev/mapper/ao-swap     swap                    swap    defaults        0 0
+
+[root@nginx01 ~]# mkdir /data
+```
+
+
 
 #### 1、Hostname修改
 
@@ -27,64 +204,64 @@ OS: oracle Linux 7.9(5.4.17-2011.6.2.el7uek.x86_64)
 
 ```bash
 cat >> /etc/hosts <<EOF
-10.20.12.136 mysql01
-10.20.12.137 mysql02
+222.204.70.23 nginx01
+222.204.70.24 nginx02
 EOF
 
-#mysql01
-hostnamectl set-hostname mysql01
-#mysql02
-hostnamectl set-hostname mysql02
+#nginx01
+hostnamectl set-hostname nginx01
+#nginx02
+hostnamectl set-hostname nginx02
 
 hostnamectl status
 
-ping mysql01 
-ping mysql02
+ping nginx01 
+ping nginx02
 
 ```
 
 ```
-[root@localhost ~]# hostnamectl set-hostname mysql01
+[root@localhost ~]# hostnamectl set-hostname nginx01
 [root@localhost ~]# exit
 
-[root@mysql01 ~]# hostnamectl status
-   Static hostname: mysql01
+[root@nginx01 ~]# hostnamectl status
+   Static hostname: nginx01
          Icon name: computer-vm
            Chassis: vm
-        Machine ID: 4e99db48ca56469d86d4043965953a54
-           Boot ID: d7b0f5da94ba4c43b9f3432a6c1258c1
+        Machine ID: 4297f39ad4274e4daac0d4ad8b649309
+           Boot ID: 26507a91dc6c4ccd86b0b3102a2de3fd
     Virtualization: kvm
-  Operating System: Oracle Linux Server 7.9
-       CPE OS Name: cpe:/o:oracle:linux:7:9:server
-            Kernel: Linux 5.4.17-2011.6.2.el7uek.x86_64
+  Operating System: Anolis OS 7.9
+            Kernel: Linux 3.10.0-1160.an7.x86_64
       Architecture: x86-64
+[root@nginx01 ~]#
 
-[root@mysql01 ~]# cat >> /etc/hosts <<EOF
-10.20.12.136 mysql01
-10.20.12.137 mysql02
+[root@nginx01 ~]# cat >> /etc/hosts <<EOF
+222.204.70.23 nginx01
+222.204.70.24 nginx02
 EOF
 
-[root@mysql01 ~]# cat /etc/hosts
+[root@nginx01 ~]# cat /etc/hosts
 127.0.0.1   localhost localhost.localdomain localhost4 localhost4.localdomain4
 ::1         localhost localhost.localdomain localhost6 localhost6.localdomain6
-10.20.12.136 mysql01
-10.20.12.137 mysql02
+222.204.70.23 nginx01
+222.204.70.24 nginx02
 
-[root@mysql01 ~]# ping mysql01 -c 1
-PING mysql01 (10.20.12.136) 56(84) bytes of data.
-64 bytes from mysql01 (10.20.12.136): icmp_seq=1 ttl=64 time=0.065 ms
+[root@nginx01 ~]# ping nginx01 -c 1
+PING nginx01 (222.204.70.23) 56(84) bytes of data.
+64 bytes from nginx01 (222.204.70.23): icmp_seq=1 ttl=64 time=0.065 ms
 
---- mysql01 ping statistics ---
+--- nginx01 ping statistics ---
 1 packets transmitted, 1 received, 0% packet loss, time 0ms
 rtt min/avg/max/mdev = 0.065/0.065/0.065/0.000 ms
-[root@mysql01 ~]# ping mysql02 -c 1
-PING mysql02 (10.20.12.137) 56(84) bytes of data.
-64 bytes from mysql02 (10.20.12.137): icmp_seq=1 ttl=64 time=0.619 ms
+[root@nginx01 ~]# ping nginx02 -c 1
+PING nginx02 (222.204.70.24) 56(84) bytes of data.
+64 bytes from nginx02 (222.204.70.24): icmp_seq=1 ttl=64 time=0.619 ms
 
---- mysql02 ping statistics ---
+--- nginx02 ping statistics ---
 1 packets transmitted, 1 received, 0% packet loss, time 0ms
 rtt min/avg/max/mdev = 0.619/0.619/0.619/0.000 ms
-[root@mysql01 ~]#
+[root@nginx01 ~]#
 
 ```
 
@@ -96,6 +273,8 @@ rtt min/avg/max/mdev = 0.619/0.619/0.619/0.000 ms
 #centos关闭防火墙
 systemctl stop firewalld
 systemctl disable firewalld
+
+systemctl status firewalld
 
 setenforce 0
 sudo sed -i 's/SELINUX=enforcing/SELINUX=disabled/g' /etc/selinux/config
@@ -109,8 +288,25 @@ cat /etc/selinux/config
 
 ```bash
 #oracle linux server直接使用自己的yum源，此处不做修改
+#Anolis OS 直接使用自己的yum源，此处不做修改
 
-#centos
+[root@nginx01 ~]# cat /etc/anolis-release
+Anolis OS release 7.9
+
+[root@nginx01 ~]# ls /etc/yum.repos.d/
+AnolisOS-Debuginfo.repo  AnolisOS-os.repo    AnolisOS-Source.repo
+AnolisOS-extras.repo     AnolisOS-Plus.repo  AnolisOS-updates.repo
+[root@nginx01 ~]# cat /etc/yum.repos.d/AnolisOS-os.repo
+[os]
+name=AnolisOS-7.9 - os
+baseurl=http://mirrors.openanolis.cn/anolis/7.9/os/$basearch/os
+enabled=1
+gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-ANOLIS
+gpgcheck=1
+[root@nginx01 ~]#
+
+
+#centos7.9
 wget -O /etc/yum.repos.d/CentOS-Base.repo https://mirrors.aliyun.com/repo/Centos-7.repo
 
 yum clean all && yum makecache all
@@ -172,13 +368,13 @@ vi /etc/ntp.conf
 #server 2.centos.pool.ntp.org iburst
 #server 3.centos.pool.ntp.org iburst
 
-#学校ntp服务器
+#学校如果有ntp服务器
 #centos7.9配置
 server times.neuq.edu.cn iburst
 #ubuntu22.04
 pool times.neuq.edu.cn iburst
 
-#替换成中国时间服务器
+#学校如果没有ntp服务器替换成中国时间服务器
 #http://www.pool.ntp.org/zone/cn
 server 0.cn.pool.ntp.org
 server 1.cn.pool.ntp.org
@@ -209,6 +405,8 @@ echo 'LANG="en_US.UTF-8"' >> /etc/profile;source /etc/profile
 ##### 1）内核模块
 
 ```bash
+cp /etc/sysctl.conf /etc/sysctl.conf.old
+
 echo "
 net.bridge.bridge-nf-call-ip6tables=1
 net.bridge.bridge-nf-call-iptables=1
@@ -226,6 +424,7 @@ kernel.perf_event_paranoid=-1
 #sysctls for k8s node config
 net.ipv4.tcp_slow_start_after_idle=0
 net.core.rmem_max=16777216
+net.core.rmem_default=16777216
 fs.inotify.max_user_watches=524288
 kernel.softlockup_all_cpu_backtrace=1
 
@@ -280,7 +479,7 @@ net.ipv4.tcp_syncookies=1
 net.ipv4.tcp_fin_timeout=30
 net.ipv4.tcp_synack_retries=2
 kernel.sysrq=1
-" >> /etc/sysctl.conf
+" > /etc/sysctl.conf
 
 sysctl -p
 ```
@@ -310,7 +509,11 @@ EOF
 
 
 cat /etc/security/limits.d/20-nproc.conf
+
 cat /etc/security/limits.conf
+
+#重新登陆后
+ulimit -a
 
 #ubuntu 22.04
 cat >> /etc/security/limits.conf <<EOF
@@ -331,36 +534,37 @@ root            hard    memlock         unlimited
 EOF
 ```
 
-### 二、在线安装mysql---centos7.9
+### 二、在线安装nginx---龙蜥7.9
 
-#### 1、卸载mariadb
+#### 1、配置nginx yum源
 
 ```bash
-rpm -qa |grep -i mariadb
-yum remove -y mariadb-libs.x86_64
+#添加 /etc/yum.repos.d/nginx.repo
+vi /etc/yum.repos.d/nginx.repo
+#输入以下内容：
+[nginx]
+name=nginx repo
+baseurl=http://nginx.org/packages/centos/$releasever/$basearch/
+#baseurl=http://nginx.org/packages/centos/7/x86_64/
+gpgcheck=0
+enabled=1
+
+
+#阿里龙蜥7.9
+[nginx]
+name=nginx repo
+#baseurl=http://nginx.org/packages/centos/$releasever/$basearch/
+baseurl=http://nginx.org/packages/centos/7/x86_64/
+gpgcheck=0
+enabled=1
+
+
 ```
 
-#### 2、安装mysql
+#### 2、安装nginx
 
 ```bash
-yum install -y wget net-tools
-
-#
-wget https://dev.mysql.com/get/mysql84-community-release-el7-1.noarch.rpm
-
-#8.0.37
-wget https://dev.mysql.com/get/mysql80-community-release-el7-11.noarch.rpm
-
-yum localinstall -y mysql80-community-release-el7-11.noarch.rpm
-
-yum search mysql-community-server
-yum list mysql-community-server.x86_64  --showduplicates | sort -r
-yum list mysql-community-client-plugins.x86_64  --showduplicates | sort -r
-
-yum install -y mysql-community-server
-
-#指定某版本
-yum install -y mysql-community-{server,client,client-plugins,icu-data-files,common,libs,libs-compat}-8.0.20-1.el7
+yum install -y nginx
 ```
 
 #如果在线安装时报错
@@ -444,7 +648,7 @@ yum install -y mysql-community-server
 
 
 
-#### 3、优化mysql---mysql01和mysql02有细微差别
+#### 3、优化mysql---nginx01和nginx02有细微差别
 
 #检查my.cnf
 
@@ -452,12 +656,38 @@ yum install -y mysql-community-server
 mysqld --defaults-file=/etc/my.cnf  --validate-config --log-error-verbosity=2
 ```
 
-
-
-##### 1) mysql01---/etc/my.cnf
+#logs
 
 ```bash
-cp /etc/my.cnf /etc/my.cnf.bak
+#启动前
+
+[root@nginx01 ~]# mysqld --defaults-file=/etc/my.cnf  --validate-config --log-error-verbosity=2
+2024-08-21T12:11:55.450283+08:00 0 [Warning] [MY-011070] [Server] 'binlog_format' is deprecated and will be removed in a future release.
+2024-08-21T12:11:55.450361+08:00 0 [Warning] [MY-011069] [Server] The syntax '--master-info-repository' is deprecated and will be removed in a future release.
+2024-08-21T12:11:55.450366+08:00 0 [Warning] [MY-011069] [Server] The syntax '--relay-log-info-repository' is deprecated and will be removed in a future release.
+2024-08-21T12:11:55.450375+08:00 0 [Warning] [MY-011070] [Server] '--sync-relay-log-info' is deprecated and will be removed in a future release.
+2024-08-21T12:11:55.450384+08:00 0 [Warning] [MY-011069] [Server] The syntax '--replica-parallel-type' is deprecated and will be removed in a future release.
+2024-08-21T12:11:55.450471+08:00 0 [Warning] [MY-010091] [Server] Can't create test file /data/mysql/mysqld_tmp_file_case_insensitive_test.lower-test
+[root@nginx01 ~]#
+
+#启动后
+[root@nginx01 data]# mysqld --defaults-file=/etc/my.cnf  --validate-config --log-error-verbosity=2
+2024-08-21T12:16:21.793327+08:00 0 [Warning] [MY-011070] [Server] 'binlog_format' is deprecated and will be removed in a future release.
+2024-08-21T12:16:21.793404+08:00 0 [Warning] [MY-011069] [Server] The syntax '--master-info-repository' is deprecated and will be removed in a future release.
+2024-08-21T12:16:21.793410+08:00 0 [Warning] [MY-011069] [Server] The syntax '--relay-log-info-repository' is deprecated and will be removed in a future release.
+2024-08-21T12:16:21.793419+08:00 0 [Warning] [MY-011070] [Server] '--sync-relay-log-info' is deprecated and will be removed in a future release.
+2024-08-21T12:16:21.793428+08:00 0 [Warning] [MY-011069] [Server] The syntax '--replica-parallel-type' is deprecated and will be removed in a future release.
+[root@nginx01 data]#
+
+
+```
+
+
+
+##### 1) nginx01---/etc/my.cnf
+
+```bash
+#cp /etc/my.cnf /etc/my.cnf.bak
 
 cat > /etc/my.cnf <<EOF
 [client]
@@ -483,8 +713,8 @@ datadir = /data/mysql
 #tmpdir = /tmp
 socket = /data/mysql/mysql.sock
 #服务器唯一id，默认为1，值范围为1～2^32−1. ；主数据库和从数据库的server-id不能重复
-server_id = 136
-#server_id = 137
+server_id = 110
+#server_id = 111
 #mysqlx_port = 33060
 #管理员用来连接的端口号,注意如果admin_address没有设置的话,这个端口号是无效的
 admin_port = 33062
@@ -664,9 +894,12 @@ replica_parallel_workers = 16
 
 ####################innodb#######################
 #内存的50%-70%
-innodb_buffer_pool_size = 16384M
+#32G
+#innodb_buffer_pool_size = 16384M
+#64G
+innodb_buffer_pool_size = 32768M
 #2个G一个instance,一般小于32G配置为4,大于32G配置为8
-innodb_buffer_pool_instances = 4
+innodb_buffer_pool_instances = 8
 #默认启用,指定在MySQL服务器启动时,InnoDB缓冲池通过加载之前保存的相同页面自动预热,通常与innodb_buffer_pool_dump_at_shutdown结合使用.
 innodb_buffer_pool_load_at_startup = 1
 #默认启用,指定在MySQL服务器关闭时是否记录在InnoDB缓冲池中缓存的页面,以便在下次重新启动时缩短预热过程.
@@ -771,7 +1004,7 @@ user = mysql
 port = 3306
 datadir = /data/mysql
 socket = /data/mysql/mysql.sock
-server_id = 136
+server_id = 110
 admin_port = 33062
 admin_address = '127.0.0.1'
 create_admin_listener_thread = on
@@ -837,8 +1070,8 @@ relay_log_recovery = ON
 replica_preserve_commit_order = OFF
 replica_parallel_type = LOGICAL_CLOCK
 replica_parallel_workers = 16
-innodb_buffer_pool_size = 16384M
-innodb_buffer_pool_instances = 4
+innodb_buffer_pool_size = 32768M
+innodb_buffer_pool_instances = 8
 innodb_buffer_pool_load_at_startup = 1
 innodb_buffer_pool_dump_at_shutdown = 1
 innodb_data_file_path = ibdata1:1024M:autoextend
@@ -882,7 +1115,7 @@ max_allowed_packet = 32M
 
 
 
-##### 2) mysql02---/etc/my.cnf
+##### 2) nginx02---/etc/my.cnf
 
 ```bash
 cp /etc/my.cnf /etc/my.cnf.bak
@@ -911,8 +1144,8 @@ datadir = /data/mysql
 #tmpdir = /tmp
 socket = /data/mysql/mysql.sock
 #服务器唯一id，默认为1，值范围为1～2^32−1. ；主数据库和从数据库的server-id不能重复
-#server_id = 136
-server_id = 137
+#server_id = 110
+server_id = 111
 #mysqlx_port = 33060
 #管理员用来连接的端口号,注意如果admin_address没有设置的话,这个端口号是无效的
 admin_port = 33062
@@ -1091,9 +1324,9 @@ replica_parallel_workers = 16
 
 ####################innodb#######################
 #内存的50%-70%
-innodb_buffer_pool_size = 16384M
+innodb_buffer_pool_size = 32768M
 #2个G一个instance,一般小于32G配置为4,大于32G配置为8
-innodb_buffer_pool_instances = 4
+innodb_buffer_pool_instances = 8
 #默认启用,指定在MySQL服务器启动时,InnoDB缓冲池通过加载之前保存的相同页面自动预热,通常与innodb_buffer_pool_dump_at_shutdown结合使用.
 innodb_buffer_pool_load_at_startup = 1
 #默认启用,指定在MySQL服务器关闭时是否记录在InnoDB缓冲池中缓存的页面,以便在下次重新启动时缩短预热过程.
@@ -1198,7 +1431,7 @@ user = mysql
 port = 3306
 datadir = /data/mysql
 socket = /data/mysql/mysql.sock
-server_id = 137
+server_id = 111
 admin_port = 33062
 admin_address = '127.0.0.1'
 create_admin_listener_thread = on
@@ -1264,8 +1497,8 @@ relay_log_recovery = ON
 replica_preserve_commit_order = OFF
 replica_parallel_type = LOGICAL_CLOCK
 replica_parallel_workers = 16
-innodb_buffer_pool_size = 16384M
-innodb_buffer_pool_instances = 4
+innodb_buffer_pool_size = 32768M
+innodb_buffer_pool_instances = 8
 innodb_buffer_pool_load_at_startup = 1
 innodb_buffer_pool_dump_at_shutdown = 1
 innodb_data_file_path = ibdata1:1024M:autoextend
@@ -1308,7 +1541,7 @@ max_allowed_packet = 32M
 
 
 
-##### 3) mysqld.server---mysql01/mysql02
+##### 3) mysqld.server---nginx01/nginx02
 
 ```bash
 sed -i 's/LimitNOFILE = 10000/LimitNOFILE = 65500/g' /usr/lib/systemd/system/mysqld.service
@@ -1366,10 +1599,10 @@ flush privileges;
 ```sql
    set global validate_password.policy=0;
    set global validate_password.length=1;
-create user 'repl'@'10.20.12.%' identified with mysql_native_password by 'Repl123!@#2023';
-grant replication slave on *.* to 'repl'@'10.20.12.%';
+create user 'repl'@'222.204.70.%' identified with mysql_native_password by 'Repl123!@#2024';
+grant replication slave on *.* to 'repl'@'222.204.70.%';
 
-show grants for 'repl'@'10.20.12.%';
+show grants for 'repl'@'222.204.70.%';
 
 SET @@GLOBAL.read_only = ON;
 flush tables with read lock; 
@@ -1390,7 +1623,7 @@ flush tables with read lock;
 
 /usr/bin/tar -zcvf 20231102.sql.tar.gz 20231102.sql
 
- scp 20231102.sql.tar.gz 10.20.12.136:/root/
+ scp 20231102.sql.tar.gz 222.204.70.23:/root/
 ```
 
 
@@ -1416,7 +1649,7 @@ source /root/20231102.sql
 ```bash
 #SET @@GLOBAL.read_only = ON;
 
-CHANGE REPLICATION SOURCE TO SOURCE_HOST='10.20.12.136',SOURCE_PORT=3306,SOURCE_USER='repl',SOURCE_PASSWORD='Repl123!@#2023',SOURCE_AUTO_POSITION = 1;
+CHANGE REPLICATION SOURCE TO SOURCE_HOST='222.204.70.23',SOURCE_PORT=3306,SOURCE_USER='repl',SOURCE_PASSWORD='Repl123!@#2024',SOURCE_AUTO_POSITION = 1;
 
 show warnings;
 
@@ -1520,6 +1753,8 @@ mysql> select * from performance_schema.replication_applier_status_by_worker whe
 ```
 
 ```bash
+#主库
+
 cd /data/mysql/
 
 mysqlbinlog --base64-output=decode-rows -vvv mysql-bin.000002 > 2_binlog
@@ -1680,7 +1915,7 @@ tail -f /data/mysql/error.log
 
 2023-11-02T10:43:19.894271+08:00 47 [Warning] [MY-010897] [Repl] Storing MySQL user name or password information in the connection metadata repository is not secure and is therefore not recommended. Please consider using the USER and PASSWORD connection options for START REPLICA; see the 'START REPLICA Syntax' in the MySQL Manual for more information.
 2023-11-02T10:43:19.951855+08:00 48 [Note] [MY-010581] [Repl] Replica SQL thread for channel '' initialized, starting replication in log 'mysql-bin.000002' at position 157, relay log './relay-bin.000002' position: 373
-2023-11-02T10:43:19.953661+08:00 47 [System] [MY-014002] [Repl] Replica receiver thread for channel '': connected to source 'repl@172.18.13.114:3306' with server_uuid=6cfaa641-7926-11ee-bb23-fefcfe25467b, server_id=114. Starting GTID-based replication.
+2023-11-02T10:43:19.953661+08:00 47 [System] [MY-014002] [Repl] Replica receiver thread for channel '': connected to source 'repl@222.204.70.23:3306' with server_uuid=6cfaa641-7926-11ee-bb23-fefcfe25467b, server_id=114. Starting GTID-based replication.
 
 ```
 
@@ -1693,6 +1928,24 @@ tail -f /data/mysql/error.log
 
 2023-11-02T10:43:19.897307+08:00 12 [Warning] [MY-013360] [Server] Plugin mysql_native_password reported: ''mysql_native_password' is deprecated and will be removed in a future release. Please use caching_sha2_password instead'
 2023-11-02T10:43:19.956046+08:00 12 [Note] [MY-010462] [Repl] Start binlog_dump to source_thread_id(12) replica_server(115), pos(, 4)
+
+```
+
+#主库logs
+
+```bash
+
+[root@nginx01 mysql]# tail -f error.log
+2024-08-21T12:16:03.112680+08:00 0 [Note] [MY-011243] [Server] Plugin mysqlx reported: 'Using OpenSSL for TLS connections'
+2024-08-21T12:16:03.112851+08:00 0 [System] [MY-010931] [Server] /usr/sbin/mysqld: ready for connections. Version: '8.0.39'  socket: '/data/mysql/mysql.sock'  port: 3306  MySQL Community Server - GPL.
+2024-08-21T12:16:03.112865+08:00 0 [System] [MY-013292] [Server] Admin interface ready for connections, address: '127.0.0.1'  port: 33062
+2024-08-21T12:16:03.112859+08:00 0 [System] [MY-011323] [Server] X Plugin ready for connections. Bind-address: '::' port: 33060, socket: /var/run/mysqld/mysqlx.sock
+2024-08-21T12:24:33.377077+08:00 9 [Warning] [MY-011234] [Server] Effective value of validate_password_length is changed. New value is 4
+2024-08-21T14:53:06.704459+08:00 10 [Note] [MY-010462] [Repl] Start binlog_dump to source_thread_id(10) replica_server(111), pos(, 4)
+2024-08-21T15:04:09.102529+08:00 11 [Note] [MY-010014] [Repl] While initializing dump thread for replica with UUID <0f76fa28-5f74-11ef-be67-fefcfe4ed56d>, found a zombie dump thread with the same UUID. Source is killing the zombie dump thread(10).
+2024-08-21T15:04:09.102682+08:00 11 [Note] [MY-010462] [Repl] Start binlog_dump to source_thread_id(11) replica_server(111), pos(, 4)
+2024-08-21T15:06:08.870261+08:00 12 [Note] [MY-010014] [Repl] While initializing dump thread for replica with UUID <0f76fa28-5f74-11ef-be67-fefcfe4ed56d>, found a zombie dump thread with the same UUID. Source is killing the zombie dump thread(11).
+2024-08-21T15:06:08.870411+08:00 12 [Note] [MY-010462] [Repl] Start binlog_dump to source_thread_id(12) replica_server(111), pos(, 4)
 
 ```
 
@@ -1756,77 +2009,75 @@ mysql> select * from testdb.t_user01;
 +----+--------+
 5 rows in set (0.00 sec)
 
-mysql>  SHOW REPLICA STATUS \G;
+root@localhost:mysql.sock [testdb]>  SHOW REPLICA STATUS \G;
 *************************** 1. row ***************************
              Replica_IO_State: Waiting for source to send event
-                  Source_Host: 172.18.13.112
+                  Source_Host: 222.204.70.23
                   Source_User: repl
                   Source_Port: 3306
                 Connect_Retry: 60
-              Source_Log_File: mysql-bin.000006
-          Read_Source_Log_Pos: 3580
-               Relay_Log_File: relay-bin.000017
-                Relay_Log_Pos: 3328
-        Relay_Source_Log_File: mysql-bin.000006
+              Source_Log_File: mysql-bin.000002
+          Read_Source_Log_Pos: 3238
+               Relay_Log_File: relay-bin.000004
+                Relay_Log_Pos: 2012
+        Relay_Source_Log_File: mysql-bin.000002
            Replica_IO_Running: Yes
           Replica_SQL_Running: Yes
-              Replicate_Do_DB: 
-          Replicate_Ignore_DB: 
-           Replicate_Do_Table: 
-       Replicate_Ignore_Table: 
-      Replicate_Wild_Do_Table: 
-  Replicate_Wild_Ignore_Table: 
+              Replicate_Do_DB:
+          Replicate_Ignore_DB:
+           Replicate_Do_Table:
+       Replicate_Ignore_Table:
+      Replicate_Wild_Do_Table:
+  Replicate_Wild_Ignore_Table:
                    Last_Errno: 0
-                   Last_Error: 
+                   Last_Error:
                  Skip_Counter: 0
-          Exec_Source_Log_Pos: 3580
-              Relay_Log_Space: 3835
+          Exec_Source_Log_Pos: 3238
+              Relay_Log_Space: 2519
               Until_Condition: None
-               Until_Log_File: 
+               Until_Log_File:
                 Until_Log_Pos: 0
            Source_SSL_Allowed: No
-           Source_SSL_CA_File: 
-           Source_SSL_CA_Path: 
-              Source_SSL_Cert: 
-            Source_SSL_Cipher: 
-               Source_SSL_Key: 
+           Source_SSL_CA_File:
+           Source_SSL_CA_Path:
+              Source_SSL_Cert:
+            Source_SSL_Cipher:
+               Source_SSL_Key:
         Seconds_Behind_Source: 0
 Source_SSL_Verify_Server_Cert: No
                 Last_IO_Errno: 0
-                Last_IO_Error: 
+                Last_IO_Error:
                Last_SQL_Errno: 0
-               Last_SQL_Error: 
-  Replicate_Ignore_Server_Ids: 
-             Source_Server_Id: 112
-                  Source_UUID: b526a489-7796-11ee-b698-fefcfec91d86
+               Last_SQL_Error:
+  Replicate_Ignore_Server_Ids:
+             Source_Server_Id: 110
+                  Source_UUID: 0cb2951d-5f74-11ef-ae17-fefcfe1fc29a
              Source_Info_File: mysql.slave_master_info
                     SQL_Delay: 0
           SQL_Remaining_Delay: NULL
     Replica_SQL_Running_State: Replica has read all relay log; waiting for more updates
            Source_Retry_Count: 86400
-                  Source_Bind: 
-      Last_IO_Error_Timestamp: 
-     Last_SQL_Error_Timestamp: 
-               Source_SSL_Crl: 
-           Source_SSL_Crlpath: 
-           Retrieved_Gtid_Set: b526a489-7796-11ee-b698-fefcfec91d86:1-4129
-            Executed_Gtid_Set: 0f6d9c97-77c1-11ee-92e4-fefcfebb93d1:1-2981,
-7661d18c-8e10-11e7-8e9c-6c0b84d5a868:298637-298639,
-b526a489-7796-11ee-b698-fefcfec91d86:1-4129
+                  Source_Bind:
+      Last_IO_Error_Timestamp:
+     Last_SQL_Error_Timestamp:
+               Source_SSL_Crl:
+           Source_SSL_Crlpath:
+           Retrieved_Gtid_Set: 0cb2951d-5f74-11ef-ae17-fefcfe1fc29a:1-11
+            Executed_Gtid_Set: 0cb2951d-5f74-11ef-ae17-fefcfe1fc29a:1-11,
+0f76fa28-5f74-11ef-be67-fefcfe4ed56d:1-5
                 Auto_Position: 1
-         Replicate_Rewrite_DB: 
-                 Channel_Name: 
-           Source_TLS_Version: 
-       Source_public_key_path: 
+         Replicate_Rewrite_DB:
+                 Channel_Name:
+           Source_TLS_Version:
+       Source_public_key_path:
         Get_Source_public_key: 0
-            Network_Namespace: 
+            Network_Namespace:
 1 row in set (0.00 sec)
 
-ERROR: 
+ERROR:
 No query specified
 
-mysql > select * from performance_schema.replication_applier_status_by_worker;
-
+root@localhost:mysql.sock [testdb]> select * from performance_schema.replication_applier_status_by_worker;
 ```
 
 #### 6、配置主从或者双主后mysql部分报错处理
@@ -2053,7 +2304,7 @@ mysql> show master status;
 mysql> show replica status\G;
 *************************** 1. row ***************************
              Replica_IO_State: Waiting for source to send event
-                  Source_Host: 172.18.13.115
+                  Source_Host: 222.204.70.24
                   Source_User: repl
                   Source_Port: 3306
                 Connect_Retry: 60
@@ -2128,7 +2379,7 @@ No query specified
 > show replica status\G;
 *************************** 1. row ***************************
              Replica_IO_State: Waiting for source to send event
-                  Source_Host: 172.18.13.114
+                  Source_Host: 222.204.70.23
                   Source_User: repl
                   Source_Port: 3306
                 Connect_Retry: 60
@@ -2198,7 +2449,7 @@ No query specified
 > show replica status\G;
 *************************** 1. row ***************************
              Replica_IO_State: Waiting for source to send event
-                  Source_Host: 172.18.13.114
+                  Source_Host: 222.204.70.23
                   Source_User: repl
                   Source_Port: 3306
                 Connect_Retry: 60
@@ -2281,7 +2532,7 @@ stop slave;
 reset slave all;
 
 -- 重新指定主
-CHANGE REPLICATION SOURCE TO SOURCE_HOST='10.20.12.136',SOURCE_PORT=3306,SOURCE_USER='repl',SOURCE_PASSWORD='Repl123!@#2023',SOURCE_AUTO_POSITION = 1;
+CHANGE REPLICATION SOURCE TO SOURCE_HOST='222.204.70.23',SOURCE_PORT=3306,SOURCE_USER='repl',SOURCE_PASSWORD='Repl123!@#2023',SOURCE_AUTO_POSITION = 1;
 
 -- 启动slave
 #start slave
@@ -2298,7 +2549,7 @@ reset slave all;
 
 -- 重新建立关系  子厚两个参数查看master状态即可 和主库保持一致
 #change master to master_host = '192.168.22.22', master_user = 'user', master_port=3306, master_password='pwd', master_log_file = 'mysqld-bin.000001', master_log_pos=1234; 
-CHANGE REPLICATION SOURCE TO SOURCE_HOST='10.20.12.137',SOURCE_PORT=3306,SOURCE_USER='repl',SOURCE_PASSWORD='Repl123!@#2023',SOURCE_AUTO_POSITION = 1;
+CHANGE REPLICATION SOURCE TO SOURCE_HOST='222.204.70.24',SOURCE_PORT=3306,SOURCE_USER='repl',SOURCE_PASSWORD='Repl123!@#2023',SOURCE_AUTO_POSITION = 1;
 
 
 -- 启动slave
@@ -2367,7 +2618,7 @@ mysql> select * from testdb01.t_user01;
 mysql> show replica status\G;
 *************************** 1. row ***************************
              Replica_IO_State: Waiting for source to send event
-                  Source_Host: 172.18.13.114
+                  Source_Host: 222.204.70.23
                   Source_User: repl
                   Source_Port: 3306
                 Connect_Retry: 60
@@ -2461,7 +2712,7 @@ mysql> select * from testdb01.t_user01;
 mysql> show replica status\G;
 *************************** 1. row ***************************
              Replica_IO_State: Waiting for source to send event
-                  Source_Host: 172.18.13.114
+                  Source_Host: 222.204.70.23
                   Source_User: repl
                   Source_Port: 3306
                 Connect_Retry: 60
@@ -2550,7 +2801,7 @@ mysql> select * from t_user01;
 mysql> show replica status\G;
 *************************** 1. row ***************************
              Replica_IO_State: Waiting for source to send event
-                  Source_Host: 172.18.13.115
+                  Source_Host: 222.204.70.24
                   Source_User: repl
                   Source_Port: 3306
                 Connect_Retry: 60
@@ -2651,7 +2902,7 @@ root@localhost:mysql.sock [(none)]> SHOW MASTER STATUS;
 root@localhost:mysql.sock [(none)]>  SHOW REPLICA STATUS \G;
 *************************** 1. row ***************************
              Replica_IO_State:
-                  Source_Host: 10.20.12.136
+                  Source_Host: 222.204.70.23
                   Source_User: repl
                   Source_Port: 3306
                 Connect_Retry: 60
@@ -2760,7 +3011,7 @@ flush tables with read lock;
 
 -- 传输到从库
 
- scp 20240305.sql.tar.gz 10.20.12.136:/root/
+ scp 20240305.sql.tar.gz 222.204.70.23:/root/
 
 3、从库操作
 
@@ -2774,7 +3025,7 @@ source /root/20240305.sql
 
 -- 重新建立关系  子厚两个参数查看master状态即可 和主库保持一致
 #change master to master_host = '192.168.22.22', master_user = 'user', master_port=3306, master_password='pwd', master_log_file = 'mysqld-bin.000001', master_log_pos=1234; 
-CHANGE REPLICATION SOURCE TO SOURCE_HOST='10.20.12.136',SOURCE_PORT=3306,SOURCE_USER='repl',SOURCE_PASSWORD='Repl123!@#2023',SOURCE_AUTO_POSITION = 1;
+CHANGE REPLICATION SOURCE TO SOURCE_HOST='222.204.70.23',SOURCE_PORT=3306,SOURCE_USER='repl',SOURCE_PASSWORD='Repl123!@#2023',SOURCE_AUTO_POSITION = 1;
 
 
 -- 启动slave
@@ -2952,7 +3203,7 @@ root@localhost:mysql.sock [(none)]> SHOW MASTER STATUS;
 root@localhost:mysql.sock [(none)]>  SHOW REPLICA STATUS \G;
 *************************** 1. row ***************************
              Replica_IO_State:
-                  Source_Host: 10.20.12.136
+                  Source_Host: 222.204.70.23
                   Source_User: repl
                   Source_Port: 3306
                 Connect_Retry: 60
@@ -3061,7 +3312,7 @@ flush tables with read lock;
 
 -- 传输到从库
 
- scp 20240305.sql.tar.gz 10.20.12.136:/root/
+ scp 20240305.sql.tar.gz 222.204.70.23:/root/
 
 3、从库操作
 
@@ -3077,7 +3328,7 @@ reset master;
 
 -- 重新建立关系  子厚两个参数查看master状态即可 和主库保持一致
 #change master to master_host = '192.168.22.22', master_user = 'user', master_port=3306, master_password='pwd', master_log_file = 'mysqld-bin.000001', master_log_pos=1234; 
-CHANGE REPLICATION SOURCE TO SOURCE_HOST='10.20.12.136',SOURCE_PORT=3306,SOURCE_USER='repl',SOURCE_PASSWORD='Repl123!@#2023',SOURCE_AUTO_POSITION = 1;
+CHANGE REPLICATION SOURCE TO SOURCE_HOST='222.204.70.23',SOURCE_PORT=3306,SOURCE_USER='repl',SOURCE_PASSWORD='Repl123!@#2023',SOURCE_AUTO_POSITION = 1;
 
 
 -- 启动slave
@@ -3094,7 +3345,7 @@ SET @@GLOBAL.read_only = OFF;
 stop slave;
 reset slave all;
 
-CHANGE REPLICATION SOURCE TO SOURCE_HOST='10.20.12.137',SOURCE_PORT=3306,SOURCE_USER='repl',SOURCE_PASSWORD='Repl123!@#2023',SOURCE_AUTO_POSITION = 1;
+CHANGE REPLICATION SOURCE TO SOURCE_HOST='222.204.70.24',SOURCE_PORT=3306,SOURCE_USER='repl',SOURCE_PASSWORD='Repl123!@#2023',SOURCE_AUTO_POSITION = 1;
 
 start replica;
 
@@ -3159,7 +3410,7 @@ mysql> select * from testdb01.t_user01;
 mysql> show replica status\G;
 *************************** 1. row ***************************
              Replica_IO_State: Waiting for source to send event
-                  Source_Host: 10.20.12.136
+                  Source_Host: 222.204.70.23
                   Source_User: repl
                   Source_Port: 3306
                 Connect_Retry: 60
@@ -3253,7 +3504,7 @@ mysql> select * from testdb01.t_user01;
 mysql> show replica status\G;
 *************************** 1. row ***************************
              Replica_IO_State: Waiting for source to send event
-                  Source_Host: 10.20.12.136
+                  Source_Host: 222.204.70.23
                   Source_User: repl
                   Source_Port: 3306
                 Connect_Retry: 60
@@ -3342,7 +3593,7 @@ mysql> select * from t_user01;
 mysql>  show replica status\G;
 *************************** 1. row ***************************
              Replica_IO_State: Waiting for source to send event
-                  Source_Host: 10.20.12.137
+                  Source_Host: 222.204.70.24
                   Source_User: repl
                   Source_Port: 3306
                 Connect_Retry: 60
@@ -3417,7 +3668,7 @@ No query specified
 #所以主从间报错
 
 ```log
-2024-03-11T15:52:24.709143+08:00 5 [ERROR] [MY-010584] [Repl] Replica I/O for channel '': Error connecting to source 'repl@172.18.13.115:3306'. This was attempt 1/86400, with a delay of 60 seconds between attempts. Message: Authentication plugin 'caching_sha2_password' reported error: Authentication requires secure connection. Error_code: MY-002061
+2024-03-11T15:52:24.709143+08:00 5 [ERROR] [MY-010584] [Repl] Replica I/O for channel '': Error connecting to source 'repl@222.204.70.24:3306'. This was attempt 1/86400, with a delay of 60 seconds between attempts. Message: Authentication plugin 'caching_sha2_password' reported error: Authentication requires secure connection. Error_code: MY-002061
 2024-03-11T15:52:42.080809+08:00 52 [Warning] [MY-013360] [Server] Plugin mysql_native_password reported: ''mysql_native_password' is deprecated and will be removed in a future release. Please use caching_sha2_password instead'
 ```
 
@@ -3425,7 +3676,7 @@ No query specified
 mysql> show replica status\G;
 *************************** 1. row ***************************
              Replica_IO_State: Connecting to source
-                  Source_Host: 172.18.13.114
+                  Source_Host: 222.204.70.23
                   Source_User: repl
                   Source_Port: 3306
                 Connect_Retry: 60
@@ -3459,7 +3710,7 @@ mysql> show replica status\G;
         Seconds_Behind_Source: NULL
 Source_SSL_Verify_Server_Cert: No
                 Last_IO_Errno: 1045
-                Last_IO_Error: Error connecting to source 'repl@172.18.13.114:3306'. This was attempt 12/86400, with a delay of 60 seconds between attempts. Message: Access denied for user 'repl'@'172.18.13.115' (using password: YES)
+                Last_IO_Error: Error connecting to source 'repl@222.204.70.23:3306'. This was attempt 12/86400, with a delay of 60 seconds between attempts. Message: Access denied for user 'repl'@'222.204.70.24' (using password: YES)
                Last_SQL_Errno: 0
                Last_SQL_Error: 
   Replicate_Ignore_Server_Ids: 
@@ -3529,7 +3780,7 @@ commit;
 #此时从库先进行repl连接主库测试，使用生产环境密码
 
 ```bash
-mysql -u repl -p -h 172.18.13.114
+mysql -u repl -p -h 222.204.70.23
 ```
 
 
@@ -3554,7 +3805,7 @@ show replica status\G;
 mysql> show replica status\G;
 *************************** 1. row ***************************
              Replica_IO_State: Waiting for source to send event
-                  Source_Host: 172.18.13.114
+                  Source_Host: 222.204.70.23
                   Source_User: repl
                   Source_Port: 3306
                 Connect_Retry: 60
@@ -3650,7 +3901,7 @@ Query OK, 0 rows affected (0.05 sec)
 mysql> show replica status\G;
 *************************** 1. row ***************************
              Replica_IO_State: Waiting for source to send event
-                  Source_Host: 172.18.13.114
+                  Source_Host: 222.204.70.23
                   Source_User: repl
                   Source_Port: 3306
                 Connect_Retry: 60
@@ -4188,7 +4439,7 @@ SET @@GLOBAL.read_only = ON;
 #### 10、主从变双主
 #在主节点上执行
 ```mysql
-CHANGE REPLICATION SOURCE TO SOURCE_HOST='10.20.12.137',SOURCE_PORT=3306,SOURCE_USER='repl',SOURCE_PASSWORD='Repl123!@#2023',SOURCE_AUTO_POSITION = 1;
+CHANGE REPLICATION SOURCE TO SOURCE_HOST='222.204.70.24',SOURCE_PORT=3306,SOURCE_USER='repl',SOURCE_PASSWORD='Repl123!@#2024',SOURCE_AUTO_POSITION = 1;
 
 start replica;
 show replica status\G;
@@ -4196,7 +4447,18 @@ show replica status\G;
 mysql> select * from performance_schema.replication_applier_status_by_worker where LAST_ERROR_NUMBER=1396;
 
  stop replica;
- set @@session.gtid_next='b00ea401-7990-11ee-a316-fa163e3f7e56:1'; 
+ set @@session.gtid_next='0f76fa28-5f74-11ef-be67-fefcfe4ed56d:1'; 
+ begin; 
+ commit; 
+ 
+ set @@session.gtid_next=automatic;  
+ 
+ start replica; 
+ 
+ SHOW REPLICA STATUS \G;
+ 
+ stop replica;
+ set @@session.gtid_next='0f76fa28-5f74-11ef-be67-fefcfe4ed56d:4'; 
  begin; 
  commit; 
  
@@ -4220,12 +4482,14 @@ show replica status\G;
 
 ### 四、配置keepalived
 
+#龙蜥自带keepalived
+
 #可以在线安装，也可以下载程序安装
 
 #### 1、安装依赖包
 
 ```bash
-yum install -y pcre-devel openssl-devel popt-devel libnl libnl-devel psmisc
+yum install -y pcre-devel openssl-devel popt-devel libnl libnl-devel psmisc gcc
 ```
 
 
@@ -4240,6 +4504,21 @@ yum install -y keepalived
 keepalived -v
 ```
 
+
+
+#logs
+
+```bash
+[root@nginx01 network-scripts]# keepalived -v
+Keepalived v1.3.5 (03/19,2017), git commit v1.3.5-6-g6fa32f2
+
+#如果版本过低，低于2.2.8，那么可以离线部署
+```
+
+
+
+
+
 #离线部署
 
 #官网https://www.keepalived.org/download.html
@@ -4248,6 +4527,7 @@ keepalived -v
 wget --no-check-certificate https://www.keepalived.org/software/keepalived-2.2.8.tar.gz
 tar -zxvf keepalived-2.2.8.tar.gz
 cd keepalived-2.2.8
+#yum install -y gcc
 ./configure --prefix=/usr/local/keepalived-2.2.8
 make && make install
 
@@ -4269,7 +4549,188 @@ chmod +x /etc/keepalived/shutdown.sh
 
 #### 3、修改/etc/keepalived/keepalived.conf
 
-###主库
+###主cas-nginx
+
+```
+root@nginx01:~# cat /etc/keepalived/keepalived.conf
+global_defs {
+    router_id nginx_master
+}
+vrrp_script chk_nginx_port {
+    script "/etc/nginx/check_nginx_pid.sh"
+    interval 2
+    weight 2
+}
+vrrp_instance VI_1 {
+    state MASTER
+    interface eth0
+    virtual_router_id 26
+    priority 100
+    advert_int 1
+    authentication {
+        auth_type PASS
+        auth_pass 1111
+    }
+    track_script {
+    chk_nginx_port
+    }
+    virtual_ipaddress {
+                222.204.70.26/24 dev eth0 label eth0:1
+    }
+}
+
+root@nginx02:~#  cat /etc/nginx/check_nginx_pid.sh
+#!/bin/bash
+counter=$(ps -C nginx --no-heading|wc -l)
+if [ "${counter}" = "0" ]; then
+    systemctl restart nginx
+    sleep 2
+    counter=$(ps -C nginx --no-heading|wc -l)
+    if [ "${counter}" = "0" ]; then
+        killall keepalived
+    fi
+fi
+
+```
+
+#从cas-nginx
+
+```bash
+
+root@nginx02:~# cat /etc/keepalived/keepalived.conf
+global_defs {
+    router_id nginx_backup
+}
+vrrp_script chk_nginx_port {
+    script "/etc/nginx/check_nginx_pid.sh"
+    interval 2
+    weight 2
+}
+vrrp_instance VI_1 {
+    state BACKUP
+    interface eth0
+    virtual_router_id 26
+    priority 99
+    advert_int 1
+    authentication {
+        auth_type PASS
+        auth_pass 1111
+    }
+    track_script {
+        chk_nginx_port
+    }
+    virtual_ipaddress {
+                222.204.70.26/24 dev eth0 label eth0:1
+    }
+}
+
+
+root@nginx02:~# cat /etc/nginx/check_nginx_pid.sh
+#!/bin/bash
+counter=$(ps -C nginx --no-heading|wc -l)
+if [ "${counter}" = "0" ]; then
+    systemctl restart nginx
+    sleep 2
+    counter=$(ps -C nginx --no-heading|wc -l)
+    if [ "${counter}" = "0" ]; then
+        killall keepalived
+    fi
+fi
+
+```
+
+
+###主nginx
+
+```
+root@nginx01:~# cat /etc/keepalived/keepalived.conf
+global_defs {
+    router_id nginx_master
+}
+vrrp_script chk_nginx_port {
+    script "/etc/nginx/check_nginx_pid.sh"
+    interval 2
+    weight 2
+}
+vrrp_instance VI_1 {
+    state MASTER
+    interface eth0
+    virtual_router_id 60
+    priority 100
+    advert_int 1
+    authentication {
+        auth_type PASS
+        auth_pass 1111
+    }
+    track_script {
+    chk_nginx_port
+    }
+    virtual_ipaddress {
+                222.204.70.60/24 dev eth0 label eth0:1
+    }
+}
+
+root@nginx02:~#  cat /etc/nginx/check_nginx_pid.sh
+#!/bin/bash
+counter=$(ps -C nginx --no-heading|wc -l)
+if [ "${counter}" = "0" ]; then
+    systemctl restart nginx
+    sleep 2
+    counter=$(ps -C nginx --no-heading|wc -l)
+    if [ "${counter}" = "0" ]; then
+        killall keepalived
+    fi
+fi
+
+```
+
+#从nginx
+```bash
+
+root@nginx02:~# cat /etc/keepalived/keepalived.conf
+global_defs {
+    router_id nginx_backup
+}
+vrrp_script chk_nginx_port {
+    script "/etc/nginx/check_nginx_pid.sh"
+    interval 2
+    weight 2
+}
+vrrp_instance VI_1 {
+    state BACKUP
+    interface eth0
+    virtual_router_id 60
+    priority 99
+    advert_int 1
+    authentication {
+        auth_type PASS
+        auth_pass 1111
+    }
+    track_script {
+        chk_nginx_port
+    }
+    virtual_ipaddress {
+                222.204.70.60/24 dev eth0 label eth0:1
+    }
+}
+
+
+root@nginx02:~# cat /etc/nginx/check_nginx_pid.sh
+#!/bin/bash
+counter=$(ps -C nginx --no-heading|wc -l)
+if [ "${counter}" = "0" ]; then
+    systemctl restart nginx
+    sleep 2
+    counter=$(ps -C nginx --no-heading|wc -l)
+    if [ "${counter}" = "0" ]; then
+        killall keepalived
+    fi
+fi
+
+```
+
+
+
 
 ```bash
  mv /etc/keepalived/keepalived.conf  /etc/keepalived/keepalived.conf.bak
@@ -4279,7 +4740,7 @@ cat >> /etc/keepalived/keepalived.conf <<EOF
 
 #主要配置故障发生时的通知对象及机器标识
 global_defs {
-   router_id MYSQL-136                   #主机标识符，唯一即可
+   router_id MYSQL-110                   #主机标识符，唯一即可
    vrrp_skip_check_adv_addr
    vrrp_strict
    vrrp_garp_interval 0
@@ -4292,7 +4753,7 @@ global_defs {
 vrrp_instance VI_1 {
     state BACKUP                     #表示keepalived角色，都是设成BACKUP则以优先级为主要参考
     interface eth0                 #指定HA监听的网络接口，刚才ifconfig查看的接口名称
-    virtual_router_id 117            #虚拟路由标识，取值0-255，master-1和master-2保持一致
+    virtual_router_id 112            #虚拟路由标识，取值0-255，master-1和master-2保持一致
     priority 100                     #优先级，用来选举master，取值范围1-255
     advert_int 1                     #发VRRP包时间间隔，即多久进行一次master选举
     authentication {
@@ -4300,25 +4761,25 @@ vrrp_instance VI_1 {
         auth_pass 1111
     }
     virtual_ipaddress {              #虚拟出来的地址
-        10.20.12.117
+        222.204.70.112
     }
 }
 
 #虚拟服务器定义
-virtual_server 10.20.12.117 3306 { #虚拟出来的地址加端口
+virtual_server 222.204.70.112 3306 { #虚拟出来的地址加端口
     delay_loop 2                     #设置运行情况检查时间，单位为秒
     lb_algo rr                       #设置后端调度器算法，rr为轮询算法
     lb_kind DR                       #设置LVS实现负载均衡的机制，有DR、NAT、TUN三种模式可选
     persistence_timeout 50           #会话保持时间，单位为秒
     protocol TCP                     #指定转发协议，有 TCP和UDP可选
 
-        real_server 10.20.12.136 3306 {          #实际本地ip+3306端口
+        real_server 222.204.70.23 3306 {          #实际本地ip+3306端口
        weight=5                      #表示服务器的权重值。权重值越高，服务器在负载均衡中被选中的概率就越大
         #当该ip 端口连接异常时，执行该脚本
         notify_down /etc/keepalived/shutdown.sh   #检查mysql服务down掉后执行的脚本
         TCP_CHECK {
             #实际物理机ip地址
-            connect_ip 10.20.12.136
+            connect_ip 222.204.70.23
             #实际物理机port端口
             connect_port 3306
             connect_timeout 3
@@ -4337,7 +4798,7 @@ cat >> /etc/keepalived/keepalived.conf <<EOF
 ! Configuration File for keepalived
 
 global_defs {
-   router_id MYSQL-136                   
+   router_id MYSQL-110                   
    vrrp_skip_check_adv_addr
    vrrp_strict
    vrrp_garp_interval 0
@@ -4350,7 +4811,7 @@ global_defs {
 vrrp_instance VI_1 {
     state BACKUP                    
     interface eth0                
-    virtual_router_id 117            
+    virtual_router_id 112            
     priority 100                     
     advert_int 1                    
     authentication {
@@ -4358,23 +4819,23 @@ vrrp_instance VI_1 {
         auth_pass 1111
     }
     virtual_ipaddress {             
-        10.20.12.117
+        222.204.70.112
     }
 }
 
 
-virtual_server 10.20.12.117 3306 { 
+virtual_server 222.204.70.112 3306 { 
     delay_loop 2                   
     lb_algo rr                      
     lb_kind DR                     
     persistence_timeout 50           
     protocol TCP                  
 
-        real_server 10.20.12.136 3306 {      
+        real_server 222.204.70.23 3306 {      
        weight=5                    
         notify_down /etc/keepalived/shutdown.sh  
         TCP_CHECK {
-            connect_ip 10.20.12.136
+            connect_ip 222.204.70.23
             connect_port 3306
             connect_timeout 3
             nb_get_retry 3
@@ -4398,7 +4859,7 @@ cat >> /etc/keepalived/keepalived.conf <<EOF
 
 #主要配置故障发生时的通知对象及机器标识
 global_defs {
-   router_id MYSQL-115                   #主机标识符，唯一即可
+   router_id MYSQL-111                   #主机标识符，唯一即可
    vrrp_skip_check_adv_addr
    vrrp_strict
    vrrp_garp_interval 0
@@ -4411,7 +4872,7 @@ global_defs {
 vrrp_instance VI_1 {
     state BACKUP                     #表示keepalived角色，都是设成BACKUP则以优先级为主要参考
     interface eth0                 #指定HA监听的网络接口，刚才ifconfig查看的接口名称
-    virtual_router_id 113            #虚拟路由标识，取值0-255，master-1和master-2保持一致
+    virtual_router_id 112            #虚拟路由标识，取值0-255，master-1和master-2保持一致
     priority 40                      #优先级，用来选举master，取值范围1-255
     advert_int 1                     #发VRRP包时间间隔，即多久进行一次master选举
     authentication {
@@ -4419,25 +4880,25 @@ vrrp_instance VI_1 {
         auth_pass 1111
     }
     virtual_ipaddress {              #虚拟出来的地址
-        172.18.13.113
+        222.204.70.112
     }
 }
 
 #虚拟服务器定义
-virtual_server 172.18.13.113 3306 { #虚拟出来的地址加端口
+virtual_server 222.204.70.112 3306 { #虚拟出来的地址加端口
     delay_loop 2                     #设置运行情况检查时间，单位为秒
     lb_algo rr                       #设置后端调度器算法，rr为轮询算法
     lb_kind DR                       #设置LVS实现负载均衡的机制，有DR、NAT、TUN三种模式可选
     persistence_timeout 50           #会话保持时间，单位为秒
     protocol TCP                     #指定转发协议，有 TCP和UDP可选
 
-        real_server 172.18.13.115 3306 {          #实际本地ip+3306端口
+        real_server 222.204.70.24 3306 {          #实际本地ip+3306端口
        weight=5                      #表示服务器的权重值。权重值越高，服务器在负载均衡中被选中的概率就越大
         #当该ip 端口连接异常时，执行该脚本
         notify_down /etc/keepalived/shutdown.sh   #检查mysql服务down掉后执行的脚本
         TCP_CHECK {
             #实际物理机ip地址
-            connect_ip 172.18.13.115
+            connect_ip 222.204.70.24
             #实际物理机port端口
             connect_port 3306
             connect_timeout 3
@@ -4457,7 +4918,7 @@ cat >> /etc/keepalived/keepalived.conf <<EOF
 
 
 global_defs {
-   router_id MYSQL-137
+   router_id MYSQL-111
    vrrp_skip_check_adv_addr
    vrrp_strict
    vrrp_garp_interval 0
@@ -4470,7 +4931,7 @@ global_defs {
 vrrp_instance VI_1 {
     state BACKUP                     
     interface eth0                 
-    virtual_router_id 117            
+    virtual_router_id 112            
     priority 40                     
     advert_int 1                     
     authentication {
@@ -4478,23 +4939,23 @@ vrrp_instance VI_1 {
         auth_pass 1111
     }
     virtual_ipaddress {              
-        10.20.12.117
+        222.204.70.112
     }
 }
 
 
-virtual_server 10.20.12.117 3306 { 
+virtual_server 222.204.70.112 3306 { 
     delay_loop 2                     
     lb_algo rr                       
     lb_kind DR                       
     persistence_timeout 50           
     protocol TCP                   
 
-        real_server 10.20.12.137 3306 {          
+        real_server 222.204.70.24 3306 {          
        weight=5                      
         notify_down /etc/keepalived/shutdown.sh   
         TCP_CHECK {
-            connect_ip 10.20.12.137
+            connect_ip 222.204.70.24
             connect_port 3306
             connect_timeout 3
             nb_get_retry 3
@@ -4523,26 +4984,28 @@ systemctl enable keepalived
 
 ```bash
 ip a
+
+ping xxx.xxx.xx.xx
+
+#如果此时ping不通第二个IP，那么可以关闭keepalived后，手动添加第二个IP，再ping测试
+ip addr add 192.168.1.100/24 dev eth0
+ping 192.168.1.100
+
 ```
 
 发现vip在主库上：
 ```
-# ip a
+[root@nginx01 ~]# ip a
 1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN group default qlen 1000
     link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
     inet 127.0.0.1/8 scope host lo
        valid_lft forever preferred_lft forever
-    inet6 ::1/128 scope host 
-       valid_lft forever preferred_lft forever
 2: eth0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc mq state UP group default qlen 1000
-    link/ether fe:fc:fe:25:46:7b brd ff:ff:ff:ff:ff:ff
-    inet 172.18.13.114/16 brd 172.18.255.255 scope global noprefixroute eth0
+    link/ether fe:fc:fe:1f:c2:9a brd ff:ff:ff:ff:ff:ff
+    inet 222.204.70.23/25 brd 222.204.70.127 scope global noprefixroute eth0
        valid_lft forever preferred_lft forever
-    inet 172.18.13.113/32 scope global eth0
+    inet 222.204.70.112/32 scope global eth0
        valid_lft forever preferred_lft forever
-    inet6 fe80::bc1a:7ab1:f794:2418/64 scope link noprefixroute 
-       valid_lft forever preferred_lft forever
-
 ```
 
 #### 6、主库关闭mysqld/keepalived测试
@@ -4573,10 +5036,10 @@ systemctl status keepalived
 #测试条件
 
 ```
-172.18.13.114 mysql01
-172.18.13.115 mysql02
+222.204.70.23 nginx01
+222.204.70.24 nginx02
 
-vip: 172.18.13.113
+vip: 222.204.70.112
 ```
 
 
@@ -4600,7 +5063,7 @@ mysql> select * from nowdate;
 +------+---------------------+
 | id   | ctime               |
 +------+---------------------+
-| NULL | 2023-11-03 21:27:05 |
+| NULL | 2024-08-21 17:30:14 |
 +------+---------------------+
 1 row in set (0.00 sec)
 
@@ -4609,7 +5072,7 @@ mysql> select * from nowdate;
 #执行脚本
 
 ```bash
-while true; do date;mysql -u testuser -pQwert123.. -h 172.18.13.113 -e 'use testdb;insert into nowdate values (null, now());'; sleep 1;done
+while true; do date;mysql -u testuser -pQwert123.. -h 222.204.70.112 -e 'use testdb;insert into nowdate values (null, now());'; sleep 1;done
 ```
 
 #此时主库关闭mysqld
@@ -4643,8 +5106,42 @@ ip addr
 
 #因为是双主，中间无缝切换
 
+#### 8、开启防火墙
 
-#### 8、Mysql双主双活+keepalived高可用整体测试
+```bash
+sudo firewall-cmd --permanent --add-port=112/udp
+
+sudo firewall-cmd --permanent --add-port=80/tcp
+
+sudo firewall-cmd --permanent --add-port=443/tcp
+
+sudo firewall-cmd --permanent --add-port=8443/tcp
+
+firewall-cmd --add-rich-rule='rule protocol value="vrrp" accept' --permanent
+firewall-cmd --reload
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 ##### 1) 启动服务（启动过不需要再启动）
 #首先将master-1、master-2两台服务器mysql、keepalived应用全部启动，然后新建一个用户，配置权限可以外网访问
@@ -4678,10 +5175,10 @@ mysql> select user,host from mysql.user;
 
 
 ##### 2) 连接keepalived虚拟服务器
-#用mysql连接工具连接keepalived虚拟出来的172.18.13.113服务器
+#用mysql连接工具连接keepalived虚拟出来的222.204.70.112服务器
 
 ##### 3) 建立测试数据 
-#在172.18.13.113数据库mydb测试库新建一张表，表中插入一些数据
+#在222.204.70.112数据库mydb测试库新建一张表，表中插入一些数据
 
 ```mysql
 drop table ceshi1;
@@ -4703,10 +5200,10 @@ select * from ceshi1;
 #此时可以查看master-1、master-2数据库，数据已同步
 
 ##### 5) 查看100服务器实际物理机ip
-#使用ip addr命令查看实际使用的物理机为172.18.13.114，所以master-1(172.18.13.114)服务器mysql为主数据库。
+#使用ip addr命令查看实际使用的物理机为222.204.70.23，所以master-1(222.204.70.23)服务器mysql为主数据库。
 
 ##### 6) 停止物理机mysql服务
-#此时手动将master-1服务器mysql停止，keepalived检测到172.18.13.114服务3306端口连接失败，会执行/etc/keepalived/shutdown.sh脚本，将172.18.13.114服务器keepalived应用结束
+#此时手动将master-1服务器mysql停止，keepalived检测到222.204.70.23服务3306端口连接失败，会执行/etc/keepalived/shutdown.sh脚本，将222.204.70.23服务器keepalived应用结束
 
 ```bash
 service mysql stop
@@ -4715,10 +5212,10 @@ Shutting down MySQL............. SUCCESS!
 
 
 ##### 7) 查看漂移ip执行情况
-#此时再连接172.18.13.115服务下，ip addr查看，发现已经实际将物理机由master-1(172.18.13.114)到master-2(172.18.13.115)服务器上
+#此时再连接222.204.70.24服务下，ip addr查看，发现已经实际将物理机由master-1(222.204.70.23)到master-2(222.204.70.24)服务器上
 
 ##### 8) 在新的主服务器插入数据
-#再使用mysql连接工具连接172.18.13.115的mysql，插入一条数据，测试是否将数据存入master-2(172.18.13.115)服务器mysql中
+#再使用mysql连接工具连接222.204.70.24的mysql，插入一条数据，测试是否将数据存入master-2(222.204.70.24)服务器mysql中
 
 ```mysql
 insert into ceshi1 values(6,'李四','英语',94);
@@ -4730,7 +5227,7 @@ insert into ceshi1 values(6,'李四','英语',94);
 #查看master-2服务器mysql数据，数据已同步，说明keepalived搭建高可用成功，当master-1服务器mysql出现问题后keepalived自动漂移IP到实体机master-2服务器上，从而使master-2服务器mysql作为主数据库。
 
 ##### 10) 重启master-1服务，查看数据同步情况
-#此时再启动master-1(172.18.13.114)服务器mysql、keepalived应用
+#此时再启动master-1(222.204.70.23)服务器mysql、keepalived应用
 
 ```bash
 systemctl start mysql

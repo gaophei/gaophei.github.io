@@ -1203,7 +1203,7 @@ chown -R grid:oinstall /u01
 chown -R oracle:oinstall /u01/app/oracle
 chmod -R 775 /u01
 ```
-### 2.7. 其它优化配置：
+### 2.7. 其它优化配置
 
 #修改/etc/security/limits.d/20-nproc.con
 

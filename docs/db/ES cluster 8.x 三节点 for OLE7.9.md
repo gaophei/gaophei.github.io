@@ -3721,3 +3721,867 @@ GET /bank/_search
 
 
 
+
+### 十一、es的web管理工具
+
+#chrome插件 es-client
+#chrome插件 elasticsearch-head
+
+#本地web客户端ElasticView
+
+```bash
+
+# 拉取项目源代码
+git clone https://github.com/1340691923/ElasticView.git
+ 
+# 同步前端项目依赖
+cd resources/vue && npm install
+ 
+# 构建前端包
+npm run build:prod
+ 
+# 构建项目二进制程序
+#CGO_ENABLED=0 GOOS=linux go build -ldflags '-w -s' -o ev cmd/ev/main.go
+
+#windows cmder下
+
+go build  -o ev.exe cmd/ev/main.go
+
+#生成linux版本
+
+set GOOS=linux
+
+go build  -o ev-linux cmd/ev/main.go
+
+
+#生成mac版本
+ 
+set GOOS=darwin
+ 
+go build  -o ev-mac cmd/ev/main.go
+ 
+```
+
+#本地执行程序后，默认端口8090，账户密码admin/admin
+
+```url
+http://127.0.0.1:8090
+```
+
+### 十二、500G大小json的导入
+#### 1、通过split将文件分割成100M/份，然后循环导入
+
+```bash
+#!/bin/bash
+
+# 定义变量
+ES_HOST="172.18.13.120:9200"
+INDEX_NAME="cat"
+BULK_SIZE=100M   # 每个小文件的大小，可以根据实际情况调整
+SOURCE_FILE="/newdata/cat.json"
+SPLIT_DIR="/newdata/split_files"
+CONTENT_TYPE="application/json"
+
+# 创建保存分割文件的目录
+mkdir -p $SPLIT_DIR
+
+# 1. 分割大文件为多个小文件
+echo "Splitting large file into smaller chunks..."
+split -b $BULK_SIZE $SOURCE_FILE $SPLIT_DIR/cat_split_
+
+# 2. 批量导入到 Elasticsearch
+echo "Starting bulk import into Elasticsearch..."
+
+for file in $SPLIT_DIR/cat_split_*; do
+  echo "Importing file: $file"
+  curl -H "Content-Type: $CONTENT_TYPE" -XPOST "$ES_HOST/$INDEX_NAME/_bulk?pretty&refresh" --data-binary "@$file"
+  
+  # 检查导入结果，如果导入失败则退出循环
+  if [ $? -ne 0 ]; then
+    echo "Error occurred during import of file $file. Exiting..."
+    exit 1
+  fi
+done
+
+echo "Bulk import completed."
+
+# 3. 删除临时文件
+echo "Cleaning up temporary files..."
+rm -rf $SPLIT_DIR
+
+echo "All done!"
+
+```
+
+```
+#脚本说明
+#定义变量：
+
+ES_HOST: Elasticsearch 集群的地址。
+INDEX_NAME: 要导入数据的索引名称。
+BULK_SIZE: 每次分割后的文件大小（可调整）。
+SOURCE_FILE: 原始大文件的路径。
+SPLIT_DIR: 用于存储分割文件的临时目录。
+CONTENT_TYPE: HTTP 请求的内容类型。
+分割文件：使用 split 命令将大文件分割为多个小文件。每个小文件的大小由 BULK_SIZE 控制。
+
+批量导入：使用 curl 命令循环遍历每个分割后的文件，并将其批量导入到 Elasticsearch 集群中。通过 --data-binary 选项读取每个小文件并发送到 Elasticsearch。
+
+检查导入结果：每次导入后检查 curl 的退出状态码。如果发生错误，脚本会立即退出并打印错误信息。
+
+清理临时文件：导入完成后，删除所有分割的临时文件。
+```
+
+
+
+#### 2、通过调用API接口
+
+#基于go
+
+##### 2.1.linux-go
+
+```
+使用Golang语言结合Elasticsearch官方的Go客户端库，可以更高效地处理批量数据导入任务。下面是一个完整的Golang程序示例，它将大文件分割成小批次，并通过批量API将数据导入到Elasticsearch中。
+根据提供的Elasticsearch集群地址和认证信息，以下是完整的Golang代码。这个程序将连接到指定的Elasticsearch集群，使用提供的账户和密码进行认证，并将大文件中的JSON数据批量导入到集群中。
+```
+
+```go
+package main
+
+import (
+	"bufio"
+	"context"
+	"encoding/json"
+	"fmt"
+	"log"
+	"os"
+	"strings"
+	"time"
+
+	"github.com/elastic/go-elasticsearch/v8"
+	"github.com/elastic/go-elasticsearch/v8/esapi"
+)
+
+// Document represents a single JSON document structure
+type Document map[string]interface{}
+
+func main() {
+	// Elasticsearch configuration
+	es, err := elasticsearch.NewDefaultClient()
+	if err != nil {
+		log.Fatalf("Error creating the client: %s", err)
+	}
+
+	// File paths and settings
+	sourceFile := "/newdata/cat.json"
+	bulkSize := 10000 // Number of documents per batch
+	indexName := "cat"
+
+	// Open the source file
+	file, err := os.Open(sourceFile)
+	if err != nil {
+		log.Fatalf("Error opening file: %s", err)
+	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	batch := make([]string, 0, bulkSize)
+	count := 0
+
+	fmt.Println("Starting bulk import...")
+
+	for scanner.Scan() {
+		line := scanner.Text()
+		batch = append(batch, line)
+
+		// When the batch size is reached, process the batch
+		if len(batch) >= bulkSize {
+			err := processBatch(es, batch, indexName)
+			if err != nil {
+				log.Fatalf("Error importing batch: %s", err)
+			}
+			batch = batch[:0] // Clear the batch
+			count++
+			fmt.Printf("Processed batch %d\n", count)
+		}
+	}
+
+	// Process any remaining documents
+	if len(batch) > 0 {
+		err := processBatch(es, batch, indexName)
+		if err != nil {
+			log.Fatalf("Error importing final batch: %s", err)
+		}
+		fmt.Printf("Processed final batch\n")
+	}
+
+	if err := scanner.Err(); err != nil {
+		log.Fatalf("Error reading file: %s", err)
+	}
+
+	fmt.Println("Bulk import completed.")
+}
+
+// processBatch processes a batch of documents and sends them to Elasticsearch
+func processBatch(es *elasticsearch.Client, batch []string, indexName string) error {
+	var b strings.Builder
+
+	for _, line := range batch {
+		// Convert line to a map
+		var doc Document
+		if err := json.Unmarshal([]byte(line), &doc); err != nil {
+			return fmt.Errorf("error unmarshalling line: %v", err)
+		}
+
+		// Convert map back to JSON
+		data, err := json.Marshal(doc)
+		if err != nil {
+			return fmt.Errorf("error marshalling document: %v", err)
+		}
+
+		// Prepare bulk request
+		meta := []byte(fmt.Sprintf(`{ "index" : { "_index" : "%s" } }%s`, indexName, "\n"))
+		b.Write(meta)
+		b.Write(data)
+		b.WriteString("\n")
+	}
+
+	req := esapi.BulkRequest{
+		Body: strings.NewReader(b.String()),
+	}
+
+	res, err := req.Do(context.Background(), es)
+	if err != nil {
+		return fmt.Errorf("bulk request failed: %v", err)
+	}
+	defer res.Body.Close()
+
+	if res.IsError() {
+		return fmt.Errorf("bulk request error: %s", res.String())
+	}
+
+	return nil
+}
+
+```
+
+
+
+```
+#代码说明
+#Elasticsearch配置：
+
+使用 elasticsearch.NewDefaultClient() 创建一个Elasticsearch客户端。可以根据需要自定义Elasticsearch配置，例如认证信息或集群地址。
+文件处理：
+
+使用 bufio.Scanner 逐行读取大文件 cat.json。
+批次大小设为 bulkSize（例如 10000 条文档），每当达到批次大小时，将文档批量发送到Elasticsearch。
+批量处理函数 processBatch：
+
+这个函数接收Elasticsearch客户端、文档批次和索引名称，将文档转换为Elasticsearch Bulk API 的格式，并发送到集群。
+文档以 meta 和 data 组合的形式发送，meta 部分指明索引的相关信息，data 部分是文档内容。
+错误处理：
+
+如果批次处理过程中出现错误，程序会立即终止并报告错误信息。每次批次成功导入后会输出处理进度。
+```
+
+
+
+#升级
+
+```go
+package main
+
+import (
+	"bufio"
+	"context"
+	"encoding/json"
+	"fmt"
+	"log"
+	"os"
+	"strings"
+	"time"
+
+	"github.com/elastic/go-elasticsearch/v8"
+	"github.com/elastic/go-elasticsearch/v8/esapi"
+)
+
+// Document represents a single JSON document structure
+type Document map[string]interface{}
+
+func main() {
+	// Elasticsearch configuration with basic authentication
+	es, err := elasticsearch.NewClient(elasticsearch.Config{
+		Addresses: []string{
+			"https://172.18.13.112:9200",
+		},
+		Username: "elastic",
+		Password: "elastic123",
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{
+				InsecureSkipVerify: true, // Ignore SSL certificate errors (not recommended for production)
+			},
+		},
+	})
+	if err != nil {
+		log.Fatalf("Error creating the client: %s", err)
+	}
+
+	// File paths and settings
+	sourceFile := "/newdata/cat.json"
+	bulkSize := 10000 // Number of documents per batch
+	indexName := "cat"
+
+	// Open the source file
+	file, err := os.Open(sourceFile)
+	if err != nil {
+		log.Fatalf("Error opening file: %s", err)
+	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	batch := make([]string, 0, bulkSize)
+	count := 0
+
+	fmt.Println("Starting bulk import...")
+
+	for scanner.Scan() {
+		line := scanner.Text()
+		batch = append(batch, line)
+
+		// When the batch size is reached, process the batch
+		if len(batch) >= bulkSize {
+			err := processBatch(es, batch, indexName)
+			if err != nil {
+				log.Fatalf("Error importing batch: %s", err)
+			}
+			batch = batch[:0] // Clear the batch
+			count++
+			fmt.Printf("Processed batch %d\n", count)
+		}
+	}
+
+	// Process any remaining documents
+	if len(batch) > 0 {
+		err := processBatch(es, batch, indexName)
+		if err != nil {
+			log.Fatalf("Error importing final batch: %s", err)
+		}
+		fmt.Printf("Processed final batch\n")
+	}
+
+	if err := scanner.Err(); err != nil {
+		log.Fatalf("Error reading file: %s", err)
+	}
+
+	fmt.Println("Bulk import completed.")
+}
+
+// processBatch processes a batch of documents and sends them to Elasticsearch
+func processBatch(es *elasticsearch.Client, batch []string, indexName string) error {
+	var b strings.Builder
+
+	for _, line := range batch {
+		// Convert line to a map
+		var doc Document
+		if err := json.Unmarshal([]byte(line), &doc); err != nil {
+			return fmt.Errorf("error unmarshalling line: %v", err)
+		}
+
+		// Convert map back to JSON
+		data, err := json.Marshal(doc)
+		if err != nil {
+			return fmt.Errorf("error marshalling document: %v", err)
+		}
+
+		// Prepare bulk request
+		meta := []byte(fmt.Sprintf(`{ "index" : { "_index" : "%s" } }%s`, indexName, "\n"))
+		b.Write(meta)
+		b.Write(data)
+		b.WriteString("\n")
+	}
+
+	req := esapi.BulkRequest{
+		Body: strings.NewReader(b.String()),
+	}
+
+	res, err := req.Do(context.Background(), es)
+	if err != nil {
+		return fmt.Errorf("bulk request failed: %v", err)
+	}
+	defer res.Body.Close()
+
+	if res.IsError() {
+		return fmt.Errorf("bulk request error: %s", res.String())
+	}
+
+	return nil
+}
+
+```
+
+
+
+
+
+```
+#代码说明
+Elasticsearch配置：
+
+使用 elasticsearch.NewClient() 创建了一个Elasticsearch客户端。
+设置了 Addresses 来指定Elasticsearch集群的URL。
+使用 Username 和 Password 来进行基本认证。
+InsecureSkipVerify: true 使得客户端忽略SSL证书错误。这仅适用于测试环境或自签名证书场景，不建议在生产环境中使用。
+文件处理：
+
+通过 bufio.Scanner 逐行读取大文件 cat.json。
+每批处理 bulkSize（设置为10000条文档），将文档批量发送到Elasticsearch。
+批量处理函数 processBatch：
+
+该函数将文档转换为Elasticsearch Bulk API 的格式，并发送到Elasticsearch集群。
+批量导入是通过 esapi.BulkRequest 实现的，并通过 Do 方法发送请求。
+错误处理：
+
+如果在批次处理过程中出现错误，程序会立即终止并打印错误信息。每个批次成功导入后会输出处理进度。
+```
+
+
+
+```go
+#运行程序
+#确保已安装Go语言并配置环境。
+#初始化项目并安装Elasticsearch Go客户端：
+go mod init es_bulk_import
+go get github.com/elastic/go-elasticsearch/v8
+
+#将代码保存为 main.go。
+#通过以下命令编译并运行程序：
+
+go run main.go
+#此程序将大文件中的数据逐行读取并分批次导入到指定的Elasticsearch集群，确保有效利用Elasticsearch的批量导入功能。
+```
+
+
+
+##### 2.2.windows-go
+
+```
+要在Windows环境中执行上述Golang代码，并处理位于 c:\work\cat.json 的文件，你只需要对文件路径做一些小调整。Windows使用反斜杠（\）作为路径分隔符，但在Go代码中，需要将反斜杠转义为双反斜杠（\\）。此外，其他部分的代码逻辑保持不变。
+```
+
+
+
+```go
+package main
+
+import (
+	"bufio"
+	"context"
+	"encoding/json"
+	"fmt"
+	"log"
+	"os"
+	"strings"
+	"crypto/tls"
+	"net/http"
+
+	"github.com/elastic/go-elasticsearch/v8"
+	"github.com/elastic/go-elasticsearch/v8/esapi"
+)
+
+// Document represents a single JSON document structure
+type Document map[string]interface{}
+
+func main() {
+	// Elasticsearch configuration with basic authentication
+	es, err := elasticsearch.NewClient(elasticsearch.Config{
+		Addresses: []string{
+			"https://172.18.13.112:9200",
+			"https://172.18.13.117:9200",
+			"https://172.18.13.120:9200",
+		},
+		Username: "elastic",
+		Password: "elastic123",
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{
+				InsecureSkipVerify: true, // Ignore SSL certificate errors (not recommended for production)
+			},
+		},
+	})
+	if err != nil {
+		log.Fatalf("Error creating the client: %s", err)
+	}
+
+	// File paths and settings
+	sourceFile := `c:\work\cat.json` // Windows file path
+	bulkSize := 10000                // Number of documents per batch
+	indexName := "cat"
+
+	// Open the source file
+	file, err := os.Open(sourceFile)
+	if err != nil {
+		log.Fatalf("Error opening file: %s", err)
+	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	batch := make([]string, 0, bulkSize)
+	count := 0
+
+	fmt.Println("Starting bulk import...")
+
+	for scanner.Scan() {
+		line := scanner.Text()
+		batch = append(batch, line)
+
+		// When the batch size is reached, process the batch
+		if len(batch) >= bulkSize {
+			err := processBatch(es, batch, indexName)
+			if err != nil {
+				log.Fatalf("Error importing batch: %s", err)
+			}
+			batch = batch[:0] // Clear the batch
+			count++
+			fmt.Printf("Processed batch %d\n", count)
+		}
+	}
+
+	// Process any remaining documents
+	if len(batch) > 0 {
+		err := processBatch(es, batch, indexName)
+		if err != nil {
+			log.Fatalf("Error importing final batch: %s", err)
+		}
+		fmt.Printf("Processed final batch\n")
+	}
+
+	if err := scanner.Err(); err != nil {
+		log.Fatalf("Error reading file: %s", err)
+	}
+
+	fmt.Println("Bulk import completed.")
+}
+
+// processBatch processes a batch of documents and sends them to Elasticsearch
+func processBatch(es *elasticsearch.Client, batch []string, indexName string) error {
+	var b strings.Builder
+
+	for _, line := range batch {
+		// Convert line to a map
+		var doc Document
+		if err := json.Unmarshal([]byte(line), &doc); err != nil {
+			return fmt.Errorf("error unmarshalling line: %v", err)
+		}
+
+		// Convert map back to JSON
+		data, err := json.Marshal(doc)
+		if err != nil {
+			return fmt.Errorf("error marshalling document: %v", err)
+		}
+
+		// Prepare bulk request
+		meta := []byte(fmt.Sprintf(`{ "index" : { "_index" : "%s" } }%s`, indexName, "\n"))
+		b.Write(meta)
+		b.Write(data)
+		b.WriteString("\n")
+	}
+
+	req := esapi.BulkRequest{
+		Body: strings.NewReader(b.String()),
+	}
+
+	res, err := req.Do(context.Background(), es)
+	if err != nil {
+		return fmt.Errorf("bulk request failed: %v", err)
+	}
+	defer res.Body.Close()
+
+	if res.IsError() {
+		return fmt.Errorf("bulk request error: %s", res.String())
+	}
+
+	return nil
+}
+
+```
+
+
+
+
+
+```
+关键调整
+文件路径：
+
+在Windows中，文件路径通常使用反斜杠（\），但在Golang中，反斜杠需要转义成双反斜杠（\\）。
+在代码中，sourceFile := c:\work\cat.json 使用了反引号（ ` ``）来定义原始字符串，以避免反斜杠转义问题。这种方式更方便处理Windows路径。
+TLS配置：
+
+InsecureSkipVerify: true 是为了忽略SSL证书验证错误，这在自签名证书或测试环境中是常见的做法。如果在生产环境中使用，请确保SSL证书是正确配置的，并移除这个配置。
+其他代码保持不变：
+
+除了路径格式的修改，其余部分的代码与Linux版本相同，逻辑也完全一致。
+
+```
+
+
+
+```bash
+#运行程序
+#确保在Windows系统中已安装Go语言并配置好环境变量。
+#打开命令提示符或PowerShell，导航到包含代码文件的目录。
+#初始化项目并安装Elasticsearch Go客户端：
+#go env -w GOPROXY=https://goproxy.cn,direct
+
+go mod init es_bulk_import
+go get github.com/elastic/go-elasticsearch/v8
+
+#将代码保存为 main.go。
+#在命令行中运行以下命令：
+
+go run main.go
+
+#这个程序将在Windows环境中读取指定位置的文件，并通过Elasticsearch Bulk API 将数据批量导入到指定的Elasticsearch集群中。
+```
+
+
+
+##### 2.3.windows-go 基于证书校验
+
+```
+要完善上述Golang代码以支持多个Elasticsearch节点以及SSL证书认证，您需要以下几个步骤：
+
+配置多个Elasticsearch节点的连接：指定多个节点地址。
+加载SSL证书：使用自定义的证书加载方式来处理客户端认证。
+CA证书加载：
+
+使用 ioutil.ReadFile 读取CA证书文件 elastic-stack-ca.p12。不过 .p12 格式文件一般需要密码解锁并处理，因此通常建议使用 .pem 格式的证书。你需要首先将 .p12 转换为 .pem。转换命令如下：
+
+openssl pkcs12 -in elastic-stack-ca.p12 -out elastic-stack-ca.pem -clcerts -nokeys
+使用 x509.NewCertPool 创建一个新的证书池并将CA证书加入其中。
+
+根据openssl pkcs12 -in elastic-stack-ca.p12 -out elastic-stack-ca.pem -clcerts -nokeys
+这条命令生成了elastic-stack-ca.pem
+同时将elastic-stack-ca.pem、elastic-stack-ca.p12、elastic-certificates.p12、http.p12四个证书放到了c:\work\certs
+
+#elastic-stack-ca.pem和Kibana的es证书elasticsearch-ca.pem内容一致
+
+配置认证：基于提供的用户名和密码进行认证。
+下面是基于您提供的 elasticsearch.yml 配置文件信息的完整Golang代码示例：
+```
+
+
+
+```go
+package main
+
+import (
+	"bufio"
+	"context"
+	"crypto/tls"
+	"crypto/x509"
+	"encoding/json"
+	"fmt"
+	"io/ioutil"
+	"log"
+	"net/http"
+	"os"
+	"strings"
+
+	"github.com/elastic/go-elasticsearch/v8"
+	"github.com/elastic/go-elasticsearch/v8/esapi"
+)
+
+// Document represents a single JSON document structure
+type Document map[string]interface{}
+
+func main() {
+	// Load CA certificate
+	caCertPath := `c:\work\certs\elastic-stack-ca.pem`
+
+	// Read the CA certificate
+	caCert, err := ioutil.ReadFile(caCertPath)
+	if err != nil {
+		log.Fatalf("Failed to read CA certificate: %v", err)
+	}
+
+	// Create a CA certificate pool and add the CA certificate
+	caCertPool := x509.NewCertPool()
+	if ok := caCertPool.AppendCertsFromPEM(caCert); !ok {
+		log.Fatalf("Failed to add CA certificate to pool")
+	}
+
+	// Configure TLS settings
+	tlsConfig := &tls.Config{
+		RootCAs: caCertPool,
+	}
+
+	// Elasticsearch configuration with multiple nodes and TLS settings
+	es, err := elasticsearch.NewClient(elasticsearch.Config{
+		Addresses: []string{
+			"https://172.18.13.112:9200",
+			"https://172.18.13.117:9200",
+			"https://172.18.13.120:9200",
+		},
+		Username: "elastic",
+		Password: "elastic123",
+		Transport: &http.Transport{
+			TLSClientConfig: tlsConfig,
+		},
+	})
+	if err != nil {
+		log.Fatalf("Error creating the Elasticsearch client: %s", err)
+	}
+
+	// File paths and settings
+	sourceFile := `c:\work\cat.json` // Windows file path
+	bulkSize := 10000                // Number of documents per batch
+	indexName := "cat"
+
+	// Open the source file
+	file, err := os.Open(sourceFile)
+	if err != nil {
+		log.Fatalf("Error opening file: %s", err)
+	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	batch := make([]string, 0, bulkSize)
+	count := 0
+
+	fmt.Println("Starting bulk import...")
+
+	for scanner.Scan() {
+		line := scanner.Text()
+		batch = append(batch, line)
+
+		// When the batch size is reached, process the batch
+		if len(batch) >= bulkSize {
+			err := processBatch(es, batch, indexName)
+			if err != nil {
+				log.Fatalf("Error importing batch: %s", err)
+			}
+			batch = batch[:0] // Clear the batch
+			count++
+			fmt.Printf("Processed batch %d\n", count)
+		}
+	}
+
+	// Process any remaining documents
+	if len(batch) > 0 {
+		err := processBatch(es, batch, indexName)
+		if err != nil {
+			log.Fatalf("Error importing final batch: %s", err)
+		}
+		fmt.Printf("Processed final batch\n")
+	}
+
+	if err := scanner.Err(); err != nil {
+		log.Fatalf("Error reading file: %s", err)
+	}
+
+	fmt.Println("Bulk import completed.")
+}
+
+// processBatch processes a batch of documents and sends them to Elasticsearch
+func processBatch(es *elasticsearch.Client, batch []string, indexName string) error {
+	var b strings.Builder
+
+	for _, line := range batch {
+		// Convert line to a map
+		var doc Document
+		if err := json.Unmarshal([]byte(line), &doc); err != nil {
+			return fmt.Errorf("error unmarshalling line: %v", err)
+		}
+
+		// Convert map back to JSON
+		data, err := json.Marshal(doc)
+		if err != nil {
+			return fmt.Errorf("error marshalling document: %v", err)
+		}
+
+		// Prepare bulk request
+		meta := []byte(fmt.Sprintf(`{ "index" : { "_index" : "%s" } }%s`, indexName, "\n"))
+		b.Write(meta)
+		b.Write(data)
+		b.WriteString("\n")
+	}
+
+	req := esapi.BulkRequest{
+		Body: strings.NewReader(b.String()),
+	}
+
+	res, err := req.Do(context.Background(), es)
+	if err != nil {
+		return fmt.Errorf("bulk request failed: %v", err)
+	}
+	defer res.Body.Close()
+
+	if res.IsError() {
+		return fmt.Errorf("bulk request error: %s", res.String())
+	}
+
+	return nil
+}
+
+```
+
+
+
+
+
+```
+关键点总结
+CA证书加载：
+
+使用 ioutil.ReadFile 读取CA证书文件 elastic-stack-ca.pem。
+使用 x509.NewCertPool() 创建一个新的证书池，并通过 AppendCertsFromPEM() 方法将证书添加到池中。
+TLS配置：
+
+使用 RootCAs 配置客户端信任的CA证书，这样可以确保与Elasticsearch的SSL连接是安全的。
+多节点配置：
+
+代码中配置了多个Elasticsearch节点地址，客户端会自动选择可用的节点并进行负载均衡。
+运行程序
+确保所有证书文件（特别是 .pem 文件）已正确生成并放置在 c:\work\certs 目录下。
+打开命令提示符或PowerShell，导航到包含代码文件的目录。
+运行Go程序：
+go run main.go
+
+此代码将从本地读取 cat.json 文件，并使用指定的SSL证书连接到Elasticsearch集群，将数据批量导入到指定的索引中。
+```
+
+
+
+
+
+
+
+### 十三、ES的优化
+
+#### 1、配置参数
+
+1.1.系统配置参数查询
+
+```bash
+GET _cluster/settings?include_defaults&flat_settings
+```
+
+
+
+1.2.系统配置参数的优化
+
+1.2.1."http.max_content_length": "100mb"
+
+默认此值时，如果批量导入json数据时，超过100mb，会报错：
+
+```log
+Starting bulk import...
+2024/08/17 14:35:52 Error importing batch: bulk request error: [413 Request Entity Too Large]
+exit status 1
+```
+
+
+
+修改到200mb后，重启es，重新导入
+

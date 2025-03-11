@@ -224,7 +224,7 @@ apt install -y ntp
 
 #centos启动
 systemctl start ntpd
-system enable ntpd
+systemctl enable ntpd
 
 #ubuntu启动
 systemctl start ntp
