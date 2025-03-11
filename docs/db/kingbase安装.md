@@ -854,5 +854,55 @@ platform_openapi
 
 #备份
 
+```bash
+su - root
+
+vi /home/kingbase/.kbpass
+#hostname:port:database:username:password
+192.168.106.57:54321:*:system:system
+
+
+chmod 0600 /home/kingbase/.kbpass
+chown kingbase:kingbase /home/kingbase/.kbpass
+
+[kingbase@DBServer backup]$ ls
+kingbase_backup.sh  kingbase_cron.log
+[kingbase@DBServer backup]$ cat kingbase_backup.sh
+#!/bin/bash
+
+HOST="10.50.50.79"
+PORT="54321"
+USER="system"
+DATENOW="$(date +"%Y-%m-%d")"
+OUTPUT_BASE_DIR=/data/backup
+OUTPUT_DIR="${OUTPUT_BASE_DIR}/$DATENOW/"
+
+mkdir -p ${OUTPUT_DIR}
+
+echo "---------------${DATENOW}开始备份----------------"| tee -a ${OUTPUT_BASE_DIR}/backup.log
+
+# 获取要导出的数据库列表
+DATABASES=$(/opt/Kingbase/ES/V8/Server/bin/ksql -h $HOST -p $PORT -U $USER -d test -t -c "SELECT datname FROM pg_database WHERE datname NOT IN ('template0', 'template1');")
+
+# 导出每个数据库
+for DB in $DATABASES; do
+    echo "Dumping database: $DB"
+    /opt/Kingbase/ES/V8/Server/bin/sys_dump -h $HOST -p $PORT -U $USER -d $DB -f "$OUTPUT_DIR/$DB.sql"
+done
+
+
+echo "---------------压缩备份文件$(date +"%Y-%m-%d %H:%M:%S")----------------"
+cd ${OUTPUT_BASE_DIR}
+tar -czvf ${DATENOW}.tar.gz ${DATENOW} --remove-files
+
+echo "---------------删除五天前备份的文件$(date +"%Y-%m-%d %H:%M:%S")----------------"
+cd /data/backup && find . -type f -name "*.tar.gz" -mtime +5 | tee -a delete_list.log | xargs rm -f
+echo "---------------备份结束$(date +"%Y-%m-%d %H:%M:%S")----------------"
+echo "---------------${DATENOW}结束备份----------------"| tee -a ${OUTPUT_BASE_DIR}/backup.log
+[kingbase@DBServer backup]$ crontab -l
+42 15 * * * /home/kingbase/backup/kingbase_backup.sh >> /home/kingbase/backup/kingbase_cron.log
+[kingbase@DBServer backup]$
+```
+
 
 
