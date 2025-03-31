@@ -1,4 +1,8 @@
-#kingbase
+[TOC]
+
+## kingbase
+
+### 1. 系统优化
 
 su - root
 
@@ -182,6 +186,8 @@ yum remove firefox -y
 ```
 
 
+
+### 2.kingbase安装
 
 
 
@@ -430,7 +436,7 @@ source /etc/profile
 
 
 
-#优化kingbase数据库参数
+### 3.优化kingbase数据库参数
 
 ```bash
 su - kingbase
@@ -467,10 +473,12 @@ max_stack_depth = 3MB
 
 #temp_buffers = 8 MB
 
-work_mem = 20MB
-maintenance_work_mem = 64MB
+work_mem = 64MB
+maintenance_work_mem = 1G
 
 dynamic_shared_memory_type = posix
+
+statement_timeout = 60min
 
 
 max_wal_size = 1GB
@@ -564,8 +572,7 @@ sys_ctl -w start -D /opt/Kingbase/ES/V8/data -l "/opt/Kingbase/ES/V8/data/sys_lo
 
 
 
-
-#创建生产库
+### 4.创建生产库
 
 su - root
 
@@ -773,6 +780,18 @@ CREATE TABLESPACE idc_data_dashboard OWNER dataassets LOCATION '/data/tbs/dataas
 CREATE TABLESPACE idc_data_swopwork OWNER dataassets LOCATION '/data/tbs/dataassets_kingbase/idc_data_swopwork';
 CREATE TABLESPACE idc_data_ods OWNER dataassets LOCATION '/data/tbs/dataassets_kingbase/idc_data_ods';
 
+
+
+
+create user dataassetszusi connection limit -1 password 'Authxuser123';
+
+create tablespace dataassetszusi owner dataassetszusi location '/data/tbs/dataassets-zusi';
+
+create database dataassetszusi with owner dataassetszusi tablespace dataassetszusi encoding utf8;
+
+alter user dataassetszusi superuser;
+
+
 ```
 
 
@@ -852,6 +871,8 @@ platform_openapi
 
 
 
+### 5.备份与还原
+
 #备份
 
 ```bash
@@ -905,4 +926,672 @@ echo "---------------${DATENOW}结束备份----------------"| tee -a ${OUTPUT_BA
 ```
 
 
+
+#还原
+
+```bash
+/opt/Kingbase/ES/V8/Server/bin/sys_restore -h 127.0.0.1 -p 54321 -d db_demo -U system /opt/backup/db_demo.sql >> /opt/backup/restore.log  2>&1
+
+
+/opt/Kingbase/ES/V8/Server/bin/ksql -h 127.0.0.1 -p 54321 -d db_demo -U system /opt/backup/db_demo.sql >> /opt/backup/restore.log  2>&1
+```
+
+
+
+### 6.常用sql
+
+#### 6.0.常用查询
+
+```sql
+#Connection
+  \c[onnect] {[DBNAME|- USER|- HOST|- PORT|-] | conninfo}
+                         connect to new database (currently "dataassetszusi")
+  \conninfo              display information about current connection
+
+#Informational
+  (options: S = show system objects, + = additional detail)
+  \d[S+]                 list tables, views, and sequences
+  \d[S+]  NAME           describe table, view, sequence, or index
+  \da[S]  [PATTERN]      list aggregates
+  \dA[+]  [PATTERN]      list access methods
+  \db[+]  [PATTERN]      list tablespaces
+  \dc[S+] [PATTERN]      list conversions
+  \dC[+]  [PATTERN]      list casts
+  \dd[S]  [PATTERN]      show object descriptions not displayed elsewhere
+  \dD[S+] [PATTERN]      list domains
+  \ddp    [PATTERN]      list default privileges
+  \dE[S+] [PATTERN]      list foreign tables
+  \det[+] [PATTERN]      list foreign tables
+  \des[+] [PATTERN]      list foreign servers
+  \deu[+] [PATTERN]      list user mappings
+  \dew[+] [PATTERN]      list foreign-data wrappers
+  \df[anptw][S+] [PATRN] list [only agg/normal/procedures/trigger/window] functions
+  \dF[+]  [PATTERN]      list text search configurations
+  \dFd[+] [PATTERN]      list text search dictionaries
+  \dFp[+] [PATTERN]      list text search parsers
+  \dFt[+] [PATTERN]      list text search templates
+  \dg[S+] [PATTERN]      list roles
+  \di[S+] [PATTERN]      list indexes
+  \dl                    list large objects, same as \lo_list
+  \dL[S+] [PATTERN]      list procedural languages
+  \dm[S+] [PATTERN]      list materialized views
+  \dn[S+] [PATTERN]      list schemas
+  \do[S]  [PATTERN]      list operators
+  \dO[S+] [PATTERN]      list collations
+  \dp     [PATTERN]      list table, view, and sequence access privileges
+  \dpkg[S+] [PATTERN]    list packages
+  \dP[itn+] [PATTERN]    list [only index/table] partitioned relations [n=nested]
+  \drds [PATRN1 [PATRN2]] list per-database role settings
+  \dRp[+] [PATTERN]      list replication publications
+  \dRs[+] [PATTERN]      list replication subscriptions
+  \ds[S+] [PATTERN]      list sequences
+  \dt[S+] [PATTERN]      list tables
+  \dT[S+] [PATTERN]      list data types
+  \du[S+] [PATTERN]      list roles
+  \dv[S+] [PATTERN]      list views
+  \dx[+]  [PATTERN]      list extensions
+  \dy     [PATTERN]      list event triggers
+  \l[+]   [PATTERN]      list databases
+  \sf[+]  FUNCNAME       show a function's definition
+  \sv[+]  VIEWNAME       show a view's definition
+  \z      [PATTERN]      same as \dp
+
+```
+
+
+
+#### 6.1.死元组
+
+```sql
+#慢sql
+EXPLAIN ANALYZE SELECT MT.TABLE_NAME,MC.COL_NAME 
+FROM METADATA_COLUMN MC 
+JOIN METADATA_TABLE MT ON MT.ID=MC.TABLE_ID 
+WHERE MT.DS_ID='-1' AND MC.ENCRYPT_TYPE=1;
+
+
+#查询死元组排名前十的表
+SELECT
+    schemaname,
+    relname,
+    n_dead_tup,
+    n_live_tup,
+    round(n_dead_tup * 100.0 / nullif(n_live_tup, 0), 2) AS dead_percentage
+FROM pg_stat_user_tables
+ORDER BY n_dead_tup DESC
+LIMIT 10;
+
+#单个表的膨胀清空
+SELECT
+  schemaname,
+  relname,
+  n_dead_tup,
+  n_live_tup,
+  round(n_dead_tup * 100.0 / nullif(n_live_tup, 0), 2) AS dead_percentage
+FROM pg_stat_user_tables
+WHERE relname = 'METADATA_COLUMN';
+
+#在数据库log中也有记录
+#automatic vacuum
+#57131970 remain, 57080282 are dead but not yet removable
+#system usage: CPU: user: 8.35 s, system: 1.74 s, elapsed: 37.68
+
+/opt/Kingbase/ES/V8/data/sys_log/kingbase-2025-03-20_150538.log
+
+2025-03-20 15:07:29 CST [31269]:  user=,db=,app=,client= LOG:  automatic vacuum of table "dataassets.idc_data_assets.METADATA_COLUMN": index scans: 0
+	pages: 0 removed, 1336325 remain, 0 skipped due to pins, 0 skipped frozen
+	tuples: 0 removed, 57131970 remain, 57080282 are dead but not yet removable, oldest xmin: 142139
+	tuples: 0 removed by snapshotcsn, Number Snapcsn Segments: 0
+	buffer usage: 2672020 hits, 1184 misses, 0 dirtied
+	avg read rate: 0.245 MB/s, avg write rate: 0.000 MB/s
+	system usage: CPU: user: 8.35 s, system: 1.74 s, elapsed: 37.68 sWAL usage: 0 records, 0 full page images, 0 bytes
+	ref LSN: start: 2A/76E510B8 end: 2A/76E5F6A8
+	
+	
+
+#定期分析表以更新统计信息
+ANALYZE METADATA_COLUMN;
+
+
+#设置较长的语句超时时间，因为操作可能需要很长时间
+SET statement_timeout = 0;
+#手动清理死元组
+vacuum full verbose METADATA_COLUMN;
+
+#REINDEX TABLE dataassets.idc_data_assets.METADATA_COLUMN;
+
+#分析表
+ANALYZE METADATA_TABLE;
+ANALYZE METADATA_COLUMN;
+
+#再次执行sql
+EXPLAIN ANALYZE SELECT MT.TABLE_NAME,MC.COL_NAME 
+FROM METADATA_COLUMN MC 
+JOIN METADATA_TABLE MT ON MT.ID=MC.TABLE_ID 
+WHERE MT.DS_ID='-1' AND MC.ENCRYPT_TYPE=1;
+
+
+#死元组未被清理的主要原因可能是存在 长事务 或 未提交的事务
+#检查当前活动的事务
+SELECT
+    pid,
+    usename,
+    state,
+    query,
+    age(clock_timestamp(), xact_start) AS transaction_duration
+FROM pg_stat_activity
+WHERE state IN ('idle in transaction', 'active')
+ORDER BY transaction_duration DESC;
+
+#查找长时间运行的事务
+SELECT pid, datname, usename, state, backend_xmin, 
+       now() - xact_start AS xact_runtime,
+       now() - state_change AS state_runtime
+FROM pg_stat_activity 
+WHERE state != 'idle' AND backend_xmin IS NOT NULL
+ORDER BY xact_runtime DESC;
+
+
+#如果发现存在运行时间过长的事务，尝试终止它们
+#终止超过 1 天的事务
+SELECT pg_terminate_backend(pid)
+FROM pg_stat_activity
+WHERE state = 'idle in transaction'
+  AND now() - xact_start > interval '1 day'; 
+  
+#如果需要终止特定事务（例如 PID 为 26664 的事务）
+SELECT pg_terminate_backend(26664);
+
+#长时间的 idle in transaction 通常是由于应用程序未正确关闭事务或连接造成的
+
+#手动冻结表
+#冻结表中的事务 ID，减少死元组引用
+VACUUM FREEZE METADATA_COLUMN;
+
+
+
+
+
+
+```
+
+
+
+#logs
+
+```sql
+#现在有个库，执行一条sql比较慢：
+dataassets=# ANALYZE METADATA_TABLE;
+ANALYZE
+dataassets=# ANALYZE METADATA_COLUMN;
+ANALYZE
+
+dataassets=# explain analyze SELECT MT.TABLE_NAME,MC.COL_NAME
+dataassets-# FROM METADATA_COLUMN MC
+dataassets-# JOIN METADATA_TABLE MT ON MT.ID=MC.TABLE_ID
+dataassets-# WHERE MT.DS_ID='-1' AND MC.ENCRYPT_TYPE=1;
+QUERY PLAN
+
+----------------------------------------------------------------------------------------------------------------------------------
+----------------
+Nested Loop (cost=2108.73..679505.32 rows=1 width=22) (actual time=4023.673..4023.675 rows=0 loops=1)
+-> Seq Scan on METADATA_TABLE MT (cost=0.00..346.98 rows=273 width=48) (actual time=2.196..2.613 rows=273 loops=1)
+Filter: ((ds_id)::text = '-1'::text)
+Rows Removed by Filter: 3325
+-> Bitmap Heap Scan on METADATA_COLUMN MC (cost=2108.73..2487.75 rows=1 width=40) (actual time=14.727..14.727 rows=0 loops=27
+3)
+Recheck Cond: ((table_id)::text = (MT.id)::text)
+Filter: (ENCRYPT_TYPE = '1'::numeric)
+Rows Removed by Filter: 19
+Heap Blocks: exact=689
+-> Bitmap Index Scan on ind_metadata_column_tid (cost=0.00..2108.73 rows=95 width=0) (actual time=10.448..10.448 rows=2
+3359 loops=273)
+Index Cond: ((table_id)::text = (MT.id)::text)
+Planning Time: 4.101 ms
+Execution Time: 4023.712 ms
+(13 rows)
+
+dataassets=#
+
+#死元组强制清理
+dataassets=# vacuum full verbose METADATA_COLUMN;
+INFO:  vacuuming "idc_data_assets.METADATA_COLUMN"
+INFO:  "METADATA_COLUMN": found 0 removable, 57236244 nonremovable row versions in 1338779 pages
+DETAIL:  57184549 dead row versions cannot be removed yet.
+CPU: user: 129.42 s, system: 17.01 s, elapsed: 158.22 s.
+
+#这些死元组未被清理，可能是因为存在未提交的长事务或快照引用，导致 PostgreSQL 无法回收这些行
+
+dataassets=# vacuum full verbose METADATA_COLUMN;
+INFO:  vacuuming "idc_data_assets.METADATA_COLUMN"
+INFO:  "METADATA_COLUMN": found 46119343 removable, 3572147 nonremovable row versions in 1337917 pages
+DETAIL:  3520452 dead row versions cannot be removed yet.
+CPU: user: 28.10 s, system: 2.09 s, elapsed: 30.89 s.
+VACUUM
+
+
+dataassets=# vacuum full verbose METADATA_COLUMN;
+INFO:  vacuuming "idc_data_assets.METADATA_COLUMN"
+INFO:  "METADATA_COLUMN": found 0 removable, 3572147 nonremovable row versions in 83733 pages
+DETAIL:  3520452 dead row versions cannot be removed yet.
+CPU: user: 3.62 s, system: 0.64 s, elapsed: 4.83 s.
+VACUUM
+dataassets=#
+
+
+dataassets=# ANALYZE METADATA_TABLE;
+ANALYZE
+dataassets=# ANALYZE METADATA_COLUMN;
+ANALYZE
+
+dataassets=# EXPLAIN ANALYZE SELECT MT.TABLE_NAME,MC.COL_NAME
+dataassets-# FROM METADATA_COLUMN MC
+dataassets-# JOIN METADATA_TABLE MT ON MT.ID=MC.TABLE_ID
+dataassets-# WHERE MT.DS_ID='-1' AND MC.ENCRYPT_TYPE=1;
+                                                       QUERY PLAN
+------------------------------------------------------------------------------------------------------------------------
+ Nested Loop  (cost=0.28..1869.55 rows=1 width=22) (actual time=12.738..12.739 rows=0 loops=1)
+   ->  Seq Scan on METADATA_COLUMN MC  (cost=0.00..1861.19 rows=1 width=40) (actual time=12.737..12.737 rows=0 loops=1)
+         Filter: (ENCRYPT_TYPE = '1'::numeric)
+         Rows Removed by Filter: 51695
+   ->  Index Scan using METADATA_TABLE_pkey on METADATA_TABLE MT  (cost=0.28..8.30 rows=1 width=48) (never executed)
+         Index Cond: ((id)::text = (MC.table_id)::text)
+         Filter: ((ds_id)::text = '-1'::text)
+ Planning Time: 1.406 ms
+ Execution Time: 12.773 ms
+(9 rows)
+
+```
+
+
+
+
+
+#### 6.2.索引膨胀
+
+```sql
+#检查索引膨胀
+SELECT
+    schemaname,
+    relname AS table_name,
+    indexrelname AS index_name,
+    pg_size_pretty(pg_relation_size(indexrelid)) AS index_size
+FROM pg_stat_user_indexes
+ORDER BY pg_relation_size(indexrelid) DESC;
+
+
+#重建膨胀索引
+REINDEX INDEX index_name;
+
+#创建覆盖索引
+#如果查询频繁过滤某些字段，可以创建覆盖索引提高性能
+CREATE INDEX idx_metadata_column_tableid_encrypt
+ON METADATA_COLUMN (TABLE_ID, ENCRYPT_TYPE);
+
+```
+
+
+
+#### 6.3.慢sql处理
+
+```sql
+#postgresql
+#安装并启用 pg_stat_statements 扩展
+CREATE EXTENSION pg_stat_statements;
+
+#分析慢查询
+SELECT * FROM pg_stat_statements ORDER BY total_time DESC LIMIT 10;
+
+#使用 pg_stat_statements 分析慢查询
+SELECT query, calls, total_time, rows
+FROM pg_stat_statements
+WHERE query LIKE '%METADATA_COLUMN%'
+ORDER BY total_time DESC LIMIT 10;
+
+#人大金仓
+#安装并启用 sys_stat_statements 扩展
+CREATE EXTENSION sys_stat_statements;
+
+#分析慢查询
+SELECT * FROM sys_stat_statements ORDER BY total_time DESC LIMIT 10;
+
+#使用 pg_stat_statements 分析慢查询
+SELECT query, calls, total_time, rows
+FROM sys_stat_statements
+WHERE query LIKE '%METADATA_COLUMN%'
+ORDER BY total_time DESC LIMIT 10;
+
+```
+
+
+
+#### 6.4.**确保事务 ID 不溢出**
+
+#PostgreSQL 使用事务 ID（`XID`）来管理表中的行版本。如果事务 ID 接近溢出（`autovacuum_freeze_max_age`），可能会导致死元组无法清理
+
+```sql
+#查看值
+show autovacuum_freeze_max_age;
+
+#检查数据库事务 ID 的使用情况
+SELECT datname, age(datfrozenxid) AS xid_age FROM pg_database;
+
+#如果事务 ID 接近溢出，执行全库冻结
+VACUUM FREEZE;
+
+
+```
+
+
+
+#logs
+
+```sql
+dataassets=# show autovacuum_freeze_max_age;
+ autovacuum_freeze_max_age
+---------------------------
+ 200000000
+(1 row)
+
+dataassets=# SELECT datname, age(datfrozenxid) AS xid_age FROM pg_database;
+  datname   | xid_age
+------------+---------
+ test       | 8190006
+ kingbase   | 8190006
+ template1  | 8190006
+ template0  | 8190006
+ security   | 8190006
+ dataassets | 8190006
+(6 rows)
+
+dataassets=#
+
+```
+
+
+
+
+
+#### 6.5.长事务处理
+
+```sql
+#死元组未被清理的主要原因可能是存在 长事务 或 未提交的事务
+
+#检查当前活动的事务
+#带sql
+SELECT
+    pid,
+    usename,
+    application_name,
+    state,
+    query,
+    age(clock_timestamp(), xact_start) AS transaction_duration
+FROM pg_stat_activity
+WHERE state IN ('idle in transaction', 'active')
+ORDER BY transaction_duration DESC;
+
+#查找长时间运行的事务
+SELECT pid, datname, usename, application_name, state, backend_xmin, 
+       now() - xact_start AS xact_runtime,
+       now() - state_change AS state_runtime
+FROM pg_stat_activity 
+WHERE state != 'idle' AND backend_xmin IS NOT NULL
+ORDER BY xact_runtime DESC;
+
+#查找长时间运行的事务,带相关sql语句
+SELECT pid, datname, usename, application_name, state, query, backend_xmin, 
+       now() - xact_start AS xact_runtime,
+       now() - state_change AS state_runtime
+FROM pg_stat_activity 
+WHERE state != 'idle' AND backend_xmin IS NOT NULL
+ORDER BY xact_runtime DESC;
+
+
+#如果发现存在运行时间过长的事务，尝试终止它们
+#终止超过 1 天的事务
+SELECT pg_terminate_backend(pid)
+FROM pg_stat_activity
+WHERE state = 'idle in transaction'
+  AND now() - xact_start > interval '1 day'; 
+  
+#终止阻碍清理的事务（如运行时间超过 1 小时的事务）
+SELECT pg_terminate_backend(pid)
+FROM pg_stat_activity
+WHERE state = 'idle in transaction'
+  AND now() - xact_start > interval '1 hour';
+
+  
+#如果需要终止特定事务（例如 PID 为 26664 的事务）
+SELECT pg_terminate_backend(26664);
+
+#长时间的 idle in transaction 通常是由于应用程序未正确关闭事务或连接造成的
+
+#手动执行 VACUUM FULL
+#在确保没有阻碍的事务后，尝试执行 VACUUM FULL 强制清理死元组
+VACUUM FULL VERBOSE METADATA_COLUMN;
+
+#VACUUM FULL 会强制回收死元组并重建表，但需要注意：
+#它会锁定整个表，期间无法进行读写操作
+#表可能会暂时占用额外的磁盘空间
+
+#设置事务超时时间
+#在 PostgreSQL 配置文件（postgresql.conf）中，设置 idle_in_transaction_session_timeout 参数
+idle_in_transaction_session_timeout = '10min'  # 超过 10 分钟的空闲事务将被自动终止
+#也可以针对当前会话设置
+SET idle_in_transaction_session_timeout = '10min';
+
+
+#配置监控系统，实时监控长时间运行的事务，并设置报警机制
+#超过 1 小时的事务
+SELECT pid, datname, usename, state, backend_xmin,
+       now() - xact_start AS xact_runtime
+FROM pg_stat_activity
+WHERE state = 'idle in transaction'
+  AND now() - xact_start > interval '1 hour'; 
+
+
+#防止查询运行时间过长
+ALTER SYSTEM SET statement_timeout = '30min'; 
+```
+
+#logs
+
+```sql
+dataassets=#    -- 查找长时间运行的事务
+dataassets=# SELECT pid, datname, usename, state, backend_xmin,
+dataassets-#        now() - xact_start AS xact_runtime,
+dataassets-#        now() - state_change AS state_runtime
+dataassets-# FROM pg_stat_activity
+dataassets-# WHERE state != 'idle' AND backend_xmin IS NOT NULL
+dataassets-# ORDER BY xact_runtime DESC;
+  pid  |  datname   |  usename   |        state        | backend_xmin |         xact_runtime          |         state_runtime
+-------+------------+------------+---------------------+--------------+-------------------------------+-------------------------------
+ 26664 | dataassets | dataassets | idle in transaction |       142139 | +000000030 07:20:29.596678000 | +000000030 07:20:29.587738000
+ 26772 | dataassets | dataassets | idle in transaction |       142139 | +000000030 07:20:01.277137000 | +000000030 07:20:01.268629000
+ 26775 | dataassets | dataassets | idle in transaction |       142139 | +000000030 07:19:58.919943000 | +000000030 07:19:58.910549000
+ 21621 | dataassets | dataassets | idle in transaction |      5519844 | +000000009 04:39:41.630038000 | +000000009 04:39:41.621582000
+ 26872 | dataassets | dataassets | idle in transaction |      7559279 | +000000002 01:04:10.628936000 | +000000002 01:04:10.620923000
+ 27241 | dataassets | dataassets | idle in transaction |      7572576 | +000000002 00:44:26.895387000 | +000000002 00:06:30.855989000
+ 25506 | dataassets | dataassets | idle in transaction |      7566922 | +000000002 00:33:42.496160000 | +000000002 00:27:30.273175000
+ 27519 | dataassets | dataassets | idle in transaction |      7566560 | +000000002 00:30:18.472414000 | +000000002 00:30:18.463454000
+ 27520 | dataassets | dataassets | idle in transaction |      7566560 | +000000002 00:30:13.350303000 | +000000002 00:30:13.341882000
+ 30121 | dataassets | dataassets | idle in transaction |      7596145 | +000000001 22:15:18.776720000 | +000000001 21:36:45.295175000
+  6531 | dataassets | dataassets | idle in transaction |      7680999 | +000000001 16:53:07.226865000 | +000000001 16:53:07.029764000
+ 19919 | dataassets | dataassets | idle in transaction |      7794808 | +000000001 06:55:45.156024000 | +000000001 06:55:36.591725000
+ 25286 | dataassets | dataassets | idle in transaction |      7846074 | +000000001 02:59:48.307466000 | +000000001 02:56:43.950883000
+ 29687 | dataassets | dataassets | idle in transaction |      7881155 | +000000001 00:12:46.842577000 | +000000001 00:12:41.750036000
+ 29841 | dataassets | dataassets | idle in transaction |      7889609 | +000000000 23:58:53.849443000 | +000000000 23:41:02.010867000
+  4355 | dataassets | dataassets | idle in transaction |      7928090 | +000000000 20:03:18.691553000 | +000000000 20:02:23.095052000
+  5514 | dataassets | dataassets | idle in transaction |      7993401 | +000000000 16:55:06.966126000 | +000000000 16:55:06.778411000
+ 31503 | dataassets | dataassets | idle in transaction |      8139053 | +000000000 01:58:13.319848000 | +000000000 01:58:13.070423000
+ 31515 | dataassets | dataassets | idle in transaction |      8154617 | +000000000 01:17:11.831062000 | +000000000 01:12:28.993400000
+  2186 | dataassets | dataassets | idle in transaction |      8174755 | +000000000 00:46:49.444542000 | +000000000 00:46:49.191591000
+  1715 | dataassets | dataassets | active              |      8176940 | +000000000 00:28:37.905016000 | +000000000 00:28:37.905014000
+  4113 | dataassets | dataassets | active              |      8176940 | +000000000 00:28:37.905016000 | +000000000 00:11:48.629471000
+ 31936 | dataassets | dataassets | active              |      8176941 | +000000000 00:15:43.044923000 | +000000000 00:15:43.044872000
+ 31935 | dataassets | dataassets | active              |      8176941 | +000000000 00:15:43.021288000 | +000000000 00:15:43.021194000
+ 32554 | dataassets | dataassets | active              |      8176941 | +000000000 00:15:42.869546000 | +000000000 00:15:42.869488000
+ 31937 | dataassets | dataassets | active              |      8176941 | +000000000 00:14:42.959485000 | +000000000 00:14:42.959383000
+ 31938 | dataassets | dataassets | active              |      8176941 | +000000000 00:13:43.129444000 | +000000000 00:13:43.125687000
+ 31939 | dataassets | dataassets | active              |      8176941 | +000000000 00:13:42.950825000 | +000000000 00:13:42.950724000
+  3955 | dataassets | dataassets | active              |      8176941 | +000000000 00:12:44.974388000 | +000000000 00:12:44.974317000
+  4114 | dataassets | dataassets | active              |      8176941 | +000000000 00:11:39.498623000 | +000000000 00:11:39.498546000
+ 17991 | dataassets | dataassets | active              |      8176941 | +000000000 00:10:59.649776000 | +000000000 00:10:59.649772000
+ 17989 | dataassets | dataassets | active              |      8176941 | +000000000 00:09:59.649542000 | +000000000 00:09:59.649536000
+ 32640 | dataassets | dataassets | active              |      8176941 | +000000000 00:09:39.645307000 | +000000000 00:09:39.645305000
+ 17993 | dataassets | dataassets | active              |      8176941 | +000000000 00:08:39.638817000 | +000000000 00:08:39.638814000
+ 30410 | dataassets | dataassets | active              |      8176941 | +000000000 00:08:29.804668000 | +000000000 00:08:29.804536000
+  4126 | dataassets | dataassets | active              |      8176941 | +000000000 00:08:29.796979000 | +000000000 00:08:29.796884000
+  4215 | dataassets | dataassets | active              |      8176941 | +000000000 00:08:25.745648000 | +000000000 00:08:25.745595000
+  4216 | dataassets | dataassets | active              |      8176941 | +000000000 00:08:25.704434000 | +000000000 00:08:25.704344000
+  4219 | dataassets | dataassets | active              |      8176941 | +000000000 00:08:14.243242000 | +000000000 00:08:14.243239000
+  4217 | dataassets | dataassets | active              |      8176941 | +000000000 00:07:25.747215000 | +000000000 00:07:25.747082000
+  4220 | dataassets | dataassets | active              |      8176941 | +000000000 00:07:25.746392000 | +000000000 00:07:25.746279000
+  4221 | dataassets | dataassets | active              |      8176941 | +000000000 00:07:14.236567000 | +000000000 00:07:14.236564000
+ 32555 | dataassets | dataassets | active              |      8176941 | +000000000 00:05:02.415726000 | +000000000 00:05:02.415668000
+  4284 | dataassets | dataassets | active              |      8176941 | +000000000 00:05:02.385263000 | +000000000 00:05:02.385167000
+  4286 | dataassets | dataassets | active              |      8176941 | +000000000 00:05:02.356889000 | +000000000 00:05:02.356774000
+  4287 | dataassets | dataassets | active              |      8176941 | +000000000 00:05:02.356361000 | +000000000 00:05:02.356282000
+  4285 | dataassets | dataassets | active              |      8176941 | +000000000 00:05:02.353723000 | +000000000 00:05:02.353677000
+  4288 | dataassets | dataassets | active              |      8176941 | +000000000 00:05:02.330997000 | +000000000 00:05:02.330908000
+  4289 | dataassets | dataassets | active              |      8176941 | +000000000 00:05:02.323003000 | +000000000 00:05:02.322936000
+  4290 | dataassets | dataassets | active              |      8176941 | +000000000 00:05:02.264578000 | +000000000 00:05:02.264472000
+  4291 | dataassets | dataassets | active              |      8176941 | +000000000 00:05:02.165782000 | +000000000 00:05:02.165632000
+  4292 | dataassets | dataassets | active              |      8176941 | +000000000 00:05:00.278588000 | +000000000 00:05:00.278488000
+  4293 | dataassets | dataassets | active              |      8176941 | +000000000 00:05:00.253448000 | +000000000 00:05:00.253353000
+  4297 | dataassets | dataassets | active              |      8176941 | +000000000 00:04:45.783605000 | +000000000 00:04:45.783593000
+  4298 | dataassets | dataassets | active              |      8176941 | +000000000 00:04:37.550862000 | +000000000 00:04:37.550859000
+  4296 | dataassets | dataassets | active              |      8176941 | +000000000 00:04:32.331673000 | +000000000 00:04:32.331671000
+ 32556 | dataassets | dataassets | active              |      8176941 | +000000000 00:04:02.454729000 | +000000000 00:04:02.454647000
+  4308 | dataassets | dataassets | active              |      8176941 | +000000000 00:04:02.454217000 | +000000000 00:04:02.454112000
+  4294 | dataassets | dataassets | active              |      8176941 | +000000000 00:04:02.447682000 | +000000000 00:04:02.447633000
+  4312 | dataassets | dataassets | active              |      8176941 | +000000000 00:04:02.427154000 | +000000000 00:04:02.427045000
+  4313 | dataassets | dataassets | active              |      8176941 | +000000000 00:04:02.417442000 | +000000000 00:04:02.417324000
+  4314 | dataassets | dataassets | active              |      8176941 | +000000000 00:04:02.402802000 | +000000000 00:04:02.402726000
+  4315 | dataassets | dataassets | active              |      8176941 | +000000000 00:04:02.390856000 | +000000000 00:04:02.390777000
+  4316 | dataassets | dataassets | active              |      8176941 | +000000000 00:04:02.261082000 | +000000000 00:04:02.261018000
+  4317 | dataassets | dataassets | active              |      8176941 | +000000000 00:04:02.232575000 | +000000000 00:04:02.232480000
+  4318 | dataassets | dataassets | active              |      8176941 | +000000000 00:04:00.251063000 | +000000000 00:04:00.250996000
+  4319 | dataassets | dataassets | active              |      8176941 | +000000000 00:04:00.249787000 | +000000000 00:04:00.249697000
+  4322 | dataassets | dataassets | active              |      8176941 | +000000000 00:03:45.755152000 | +000000000 00:03:45.755150000
+  4325 | dataassets | dataassets | active              |      8176941 | +000000000 00:03:37.526375000 | +000000000 00:03:37.526373000
+  4334 | dataassets | dataassets | active              |      8176941 | +000000000 00:03:32.306059000 | +000000000 00:03:32.306057000
+  4335 | dataassets | dataassets | active              |      8176941 | +000000000 00:03:13.735063000 | +000000000 00:03:13.735060000
+  4336 | dataassets | dataassets | active              |      8176941 | +000000000 00:03:02.456917000 | +000000000 00:03:02.456792000
+  4337 | dataassets | dataassets | active              |      8176941 | +000000000 00:03:02.454125000 | +000000000 00:03:02.454045000
+ 32553 | dataassets | dataassets | active              |      8176941 | +000000000 00:03:02.448360000 | +000000000 00:03:02.448282000
+  4340 | dataassets | dataassets | active              |      8176941 | +000000000 00:03:02.447022000 | +000000000 00:03:02.446882000
+  4341 | dataassets | dataassets | active              |      8176941 | +000000000 00:03:02.422912000 | +000000000 00:03:02.422859000
+  4342 | dataassets | dataassets | active              |      8176941 | +000000000 00:03:02.403562000 | +000000000 00:03:02.403481000
+  4343 | dataassets | dataassets | active              |      8176941 | +000000000 00:03:02.379386000 | +000000000 00:03:02.379325000
+  4344 | dataassets | dataassets | active              |      8176941 | +000000000 00:03:02.261472000 | +000000000 00:03:02.261391000
+  4345 | dataassets | dataassets | active              |      8176941 | +000000000 00:03:02.235790000 | +000000000 00:03:02.235717000
+  4346 | dataassets | dataassets | active              |      8176941 | +000000000 00:03:02.034610000 | +000000000 00:03:02.034607000
+  4347 | dataassets | dataassets | active              |      8176941 | +000000000 00:02:48.415670000 | +000000000 00:02:48.415667000
+  4350 | dataassets | dataassets | active              |      8176941 | +000000000 00:01:48.410383000 | +000000000 00:01:48.410380000
+  4382 | dataassets | dataassets | active              |      8176941 | +000000000 00:00:48.385916000 | +000000000 00:00:48.385914000
+  3662 | dataassets | dataassets | active              |      8176941 | +000000000 00:00:00.000000000 | -000000000 00:00:00.000003000
+(85 rows)
+
+dataassets=#
+```
+
+
+
+#### 6.6.关于某个表相关的sql
+
+```sql
+#查询当前正在执行的与METADATA_COLUMN相关的SQL
+SELECT pid, usename, application_name, client_addr, 
+       state, query_start, now() - query_start AS duration, 
+       wait_event_type, wait_event, query
+FROM pg_stat_activity 
+WHERE query ILIKE '%METADATA_COLUMN%' 
+  AND state != 'idle'
+ORDER BY query_start;
+
+SELECT pid,
+       usename AS username,
+       datname AS database_name,
+       state,
+       query,
+       query_start,
+       now() - query_start AS duration,
+       application_name
+FROM pg_stat_activity
+WHERE query LIKE '%METADATA_COLUMN%'
+  AND state <> 'idle';
+
+
+#查询表上的锁情况
+SELECT l.pid, a.usename, a.application_name, l.locktype, l.mode, 
+       l.granted, a.query_start, now() - a.query_start AS duration, a.query
+FROM pg_locks l
+JOIN pg_stat_activity a ON l.pid = a.pid
+WHERE l.relation = 'METADATA_COLUMN'::regclass
+ORDER BY l.granted, a.query_start;
+
+
+SELECT pg_locks.pid,
+       pg_stat_activity.usename AS username,
+       pg_stat_activity.query AS active_query,
+       pg_locks.locktype,
+       pg_locks.mode,
+       pg_locks.granted,
+       pg_class.relname AS locked_table
+FROM pg_locks
+JOIN pg_stat_activity ON pg_locks.pid = pg_stat_activity.pid
+JOIN pg_class ON pg_locks.relation = pg_class.oid
+WHERE pg_class.relname = 'METADATA_COLUMN';
+
+
+
+#查询阻塞其他会话的锁
+SELECT blocked.pid AS blocked_pid, 
+       blocked.usename AS blocked_user,
+       blocking.pid AS blocking_pid,
+       blocking.usename AS blocking_user,
+       blocked.query AS blocked_query,
+       blocking.query AS blocking_query,
+       now() - blocked.query_start AS blocked_duration
+FROM pg_stat_activity blocked
+JOIN pg_locks blockedl ON blocked.pid = blockedl.pid
+JOIN pg_locks blockingl ON blockedl.relation = blockingl.relation 
+  AND blockedl.pid != blockingl.pid
+JOIN pg_stat_activity blocking ON blocking.pid = blockingl.pid
+WHERE NOT blockedl.granted
+  AND blockingl.granted
+  AND blockedl.relation = 'METADATA_COLUMN'::regclass;
+
+
+SELECT waiting_activity.pid AS waiting_pid,
+       waiting_activity.usename AS waiting_user,
+       waiting_activity.query AS waiting_query,
+       blocking_activity.pid AS blocking_pid,
+       blocking_activity.usename AS blocking_user,
+       blocking_activity.query AS blocking_query
+FROM pg_stat_activity waiting_activity
+JOIN pg_locks waiting_locks ON waiting_activity.pid = waiting_locks.pid
+JOIN pg_locks blocking_locks ON waiting_locks.locktype = blocking_locks.locktype
+                              AND waiting_locks.database = blocking_locks.database
+                              AND waiting_locks.relation = blocking_locks.relation
+                              AND waiting_locks.pid <> blocking_locks.pid
+JOIN pg_stat_activity blocking_activity ON blocking_locks.pid = blocking_activity.pid
+WHERE NOT waiting_locks.granted
+  AND waiting_activity.query LIKE '%METADATA_COLUMN%';
+
+
+#查询长时间运行的事务
+SELECT pid, usename, application_name, 
+       xact_start, now() - xact_start AS xact_age,
+       query_start, now() - query_start AS query_age,
+       backend_xid, backend_xmin, query
+FROM pg_stat_activity
+WHERE xact_start IS NOT NULL
+  AND (query ILIKE '%METADATA_COLUMN%' OR backend_xmin = 8190358)
+ORDER BY xact_start;
+
+#
+
+```
 
