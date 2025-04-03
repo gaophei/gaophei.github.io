@@ -3414,6 +3414,25 @@ ssh  k8s-19rac01 date -Ins;ssh  k8s-19rac02 date -Ins;ssh  k8s-19rac01-prv date 
 
 #alias scp="scp -O"
 
+```bash
+# Rename the original scp.
+mv /usr/bin/scp /usr/bin/scp.orig
+
+# Create a new file </usr/bin/scp>.
+vi /usr/bin/scp
+
+# Add the below line to the new created file </usr/bin/scp>.
+/usr/bin/scp.orig -T -O $*
+
+# Change the file permission.
+chmod 555 /usr/bin/scp
+
+# Begin operation（sush as installation, opatch(auto), CVU and so on）
+
+# After operation
+mv /usr/bin/scp.orig /usr/bin/scp
+```
+
 #grid用户
 
 #k8s123#@!
@@ -3656,10 +3675,12 @@ cd /u01/app/19.0.0/grid/
 2. 配置独立的集群(configure an oracle standalone cluster)
 3. 配置集群名称以及 scan 名称(rac-cluster/rac-scan/1521)
 4. 添加节点2并测试节点互信(Add k8s-19rac02/k8s-19rac02-vip, SSH connectivity--->Test)
-5. 公网、私网网段选择(eth1-10.100.100.0-ASM&private/eth0-172.18.0.0-public)
+5. 公网、私网网段选择(eth1-10.100.100.0-ASM&private/eth0-172.18.0.0-public/eth2-3.3.3.0-Do Not Use)
 6. 选择 asm 存储(use oracle flex ASM for storage)
-7. 选择不单独为GIMR配置磁盘组
-8. 选择 asm 磁盘组(ORC/normal/50G三块磁盘/扫描的磁盘路径: /dev/sd*)
+7. 选择不单独为GIMR配置磁盘组(No)
+#uuid固定时：8. 选择 asm 磁盘组(ORC/normal/50G三块磁盘/扫描的磁盘路径: /dev/sd*)
+#uuid不固定时，走以下配置：/dev/oracleasm/disks/OCR01|OCR02|OCR03
+8. 选择 asm 磁盘组(ORC/normal/50G三块磁盘/扫描的磁盘路径: /dev/oracleasm/disks/)
 9. 输入密码Oracle2023#Sys
 10. 保持默认No IPMI
 11. 保持默认No EM
@@ -3684,11 +3705,13 @@ cd /u01/app/19.0.0/grid/
     
     执行完毕后,点击OK
     INS-20802 oracle cluster verification utility failed--->OK
-    Next
+    --->Next
     INS-43080--->YES
 19. Close     
 ```
 #基于asmlib的磁盘选择
+
+#或者uuid不固定时
 
 #/dev/oracleasm/disks/*
 
@@ -3703,6 +3726,32 @@ cd /u01/app/19.0.0/grid/
 #安装前的忽略
 
 ![image-20230925160959650](oracle19cRAC-neuq\image-20230925160959650.png)
+
+
+
+#采用uudi不固定时的报错
+
+![image-20250401162917867](oracle19cRacole7threenodes\image-20250401162917867.png)
+
+![image-20250401163117345](oracle19cRacole7threenodes\image-20250401163117345.png)
+
+```error
+Device Checks for ASM - This is a prerequisite check to verify that the specified devices meet the requirements for ASM.
+  Operation Failed on Nodes: [k8s-19rac02,  k8s-19rac01]  
+Verification result of failed node: k8s-19rac02 Back to Top  
+Verification result of failed node: k8s-19rac01  Details: 
+ - 
+PRVG-2043 : Command "/usr/sbin/oracleasm listdisks" failed on node "k8s-19rac01" and produced the following output: sh: /usr/sbin/oracleasm: No such file or directory  - Cause:  An executed command failed.  - Action:  Respond based on the failing command and the reported results. 
+ - 
+PRVG-10524 : failed to determine whether disk "OCR03" is managed by ASMLib  - Cause:  An attempt to validate whether the indicated disk was managed by ASMLib failed.  - Action:  Ensure that the ASMLib is correctly configured on all the cluster nodes and that the indicated disk is listed by ''oracleasm'' on the Linux operating system platform. 
+ - 
+PRVG-10524 : failed to determine whether disk "OCR02" is managed by ASMLib  - Cause:  An attempt to validate whether the indicated disk was managed by ASMLib failed.  - Action:  Ensure that the ASMLib is correctly configured on all the cluster nodes and that the indicated disk is listed by ''oracleasm'' on the Linux operating system platform. 
+ - 
+PRVG-10524 : failed to determine whether disk "OCR01" is managed by ASMLib  - Cause:  An attempt to validate whether the indicated disk was managed by ASMLib failed.  - Action:  Ensure that the ASMLib is correctly configured on all the cluster nodes and that the indicated disk is listed by ''oracleasm'' on the Linux operating system platform. 
+Back to Top  
+```
+
+
 
 
 
@@ -4590,6 +4639,259 @@ CRS-2677: Stop of 'ora.cssd' on 'oracle01' succeeded
 
 ```
 
+### 3.6. root脚本执行日志
+
+#k8s-19rac01
+
+```bash
+[root@k8s-19rac01 ~]# /u01/app/oraInventory/orainstRoot.sh
+Changing permissions of /u01/app/oraInventory.
+Adding read,write permissions for group.
+Removing read,write,execute permissions for world.
+
+Changing groupname of /u01/app/oraInventory to oinstall.
+The execution of the script is complete.
+
+[root@k8s-19rac01 ~]# /u01/app/19.0.0/grid/root.sh
+Performing root user operation.
+
+The following environment variables are set as:
+    ORACLE_OWNER= grid
+    ORACLE_HOME=  /u01/app/19.0.0/grid
+
+Enter the full pathname of the local bin directory: [/usr/local/bin]: 
+   Copying dbhome to /usr/local/bin ...
+   Copying oraenv to /usr/local/bin ...
+   Copying coraenv to /usr/local/bin ...
+
+
+Creating /etc/oratab file...
+Entries will be added to the /etc/oratab file as needed by
+Database Configuration Assistant when a database is created
+Finished running generic part of root script.
+Now product-specific root actions will be performed.
+Relinking oracle with rac_on option
+Using configuration parameter file: /u01/app/19.0.0/grid/crs/install/crsconfig_params
+The log of current session can be found at:
+  /u01/app/grid/crsdata/k8s-19rac01/crsconfig/rootcrs_k8s-19rac01_2025-04-01_04-36-12PM.log
+2025/04/01 16:36:20 CLSRSC-594: Executing installation step 1 of 19: 'SetupTFA'.
+2025/04/01 16:36:20 CLSRSC-594: Executing installation step 2 of 19: 'ValidateEnv'.
+2025/04/01 16:36:20 CLSRSC-363: User ignored prerequisites during installation
+2025/04/01 16:36:20 CLSRSC-594: Executing installation step 3 of 19: 'CheckFirstNode'.
+2025/04/01 16:36:22 CLSRSC-594: Executing installation step 4 of 19: 'GenSiteGUIDs'.
+2025/04/01 16:36:22 CLSRSC-594: Executing installation step 5 of 19: 'SetupOSD'.
+2025/04/01 16:36:23 CLSRSC-594: Executing installation step 6 of 19: 'CheckCRSConfig'.
+2025/04/01 16:36:23 CLSRSC-594: Executing installation step 7 of 19: 'SetupLocalGPNP'.
+2025/04/01 16:36:35 CLSRSC-594: Executing installation step 8 of 19: 'CreateRootCert'.
+2025/04/01 16:36:38 CLSRSC-594: Executing installation step 9 of 19: 'ConfigOLR'.
+2025/04/01 16:36:43 CLSRSC-4002: Successfully installed Oracle Trace File Analyzer (TFA) Collector.
+2025/04/01 16:36:50 CLSRSC-594: Executing installation step 10 of 19: 'ConfigCHMOS'.
+2025/04/01 16:36:51 CLSRSC-594: Executing installation step 11 of 19: 'CreateOHASD'.
+2025/04/01 16:36:55 CLSRSC-594: Executing installation step 12 of 19: 'ConfigOHASD'.
+2025/04/01 16:36:55 CLSRSC-330: Adding Clusterware entries to file 'oracle-ohasd.service'
+2025/04/01 16:37:16 CLSRSC-594: Executing installation step 13 of 19: 'InstallAFD'.
+2025/04/01 16:37:20 CLSRSC-594: Executing installation step 14 of 19: 'InstallACFS'.
+2025/04/01 16:37:25 CLSRSC-594: Executing installation step 15 of 19: 'InstallKA'.
+2025/04/01 16:37:29 CLSRSC-594: Executing installation step 16 of 19: 'InitConfig'.
+
+ASM has been created and started successfully.
+
+[DBT-30001] Disk groups created successfully. Check /u01/app/grid/cfgtoollogs/asmca/asmca-250401PM043758.log for details.
+
+2025/04/01 16:38:55 CLSRSC-482: Running command: '/u01/app/19.0.0/grid/bin/ocrconfig -upgrade grid oinstall'
+CRS-4256: Updating the profile
+Successful addition of voting disk 5efd0c23970d4fe5bf96e0a2feaa0b31.
+Successful addition of voting disk 8b999d4dd2934fffbf7957496e5138bd.
+Successful addition of voting disk 425e1aae93974fcdbf5e2f5f3c4bc925.
+Successfully replaced voting disk group with +OCR.
+CRS-4256: Updating the profile
+CRS-4266: Voting file(s) successfully replaced
+##  STATE    File Universal Id                File Name Disk group
+--  -----    -----------------                --------- ---------
+ 1. ONLINE   5efd0c23970d4fe5bf96e0a2feaa0b31 (/dev/oracleasm/disks/OCR01) [OCR]
+ 2. ONLINE   8b999d4dd2934fffbf7957496e5138bd (/dev/oracleasm/disks/OCR02) [OCR]
+ 3. ONLINE   425e1aae93974fcdbf5e2f5f3c4bc925 (/dev/oracleasm/disks/OCR03) [OCR]
+Located 3 voting disk(s).
+2025/04/01 16:40:20 CLSRSC-594: Executing installation step 17 of 19: 'StartCluster'.
+2025/04/01 16:41:26 CLSRSC-343: Successfully started Oracle Clusterware stack
+2025/04/01 16:41:26 CLSRSC-594: Executing installation step 18 of 19: 'ConfigNode'.
+2025/04/01 16:42:33 CLSRSC-594: Executing installation step 19 of 19: 'PostConfig'.
+2025/04/01 16:42:55 CLSRSC-325: Configure Oracle Grid Infrastructure for a Cluster ... succeeded
+```
+
+
+
+#k8s-19rac02
+
+```bash
+[root@k8s-19rac02 ~]# /u01/app/oraInventory/orainstRoot.sh
+Changing permissions of /u01/app/oraInventory.
+Adding read,write permissions for group.
+Removing read,write,execute permissions for world.
+
+Changing groupname of /u01/app/oraInventory to oinstall.
+The execution of the script is complete.
+[root@k8s-19rac02 ~]# /u01/app/19.0.0/grid/root.sh
+Performing root user operation.
+
+The following environment variables are set as:
+    ORACLE_OWNER= grid
+    ORACLE_HOME=  /u01/app/19.0.0/grid
+
+Enter the full pathname of the local bin directory: [/usr/local/bin]: 
+   Copying dbhome to /usr/local/bin ...
+   Copying oraenv to /usr/local/bin ...
+   Copying coraenv to /usr/local/bin ...
+
+
+Creating /etc/oratab file...
+Entries will be added to the /etc/oratab file as needed by
+Database Configuration Assistant when a database is created
+Finished running generic part of root script.
+Now product-specific root actions will be performed.
+Relinking oracle with rac_on option
+Using configuration parameter file: /u01/app/19.0.0/grid/crs/install/crsconfig_params
+The log of current session can be found at:
+  /u01/app/grid/crsdata/k8s-19rac02/crsconfig/rootcrs_k8s-19rac02_2025-04-01_04-44-44PM.log
+2025/04/01 16:44:49 CLSRSC-594: Executing installation step 1 of 19: 'SetupTFA'.
+2025/04/01 16:44:49 CLSRSC-594: Executing installation step 2 of 19: 'ValidateEnv'.
+2025/04/01 16:44:49 CLSRSC-363: User ignored prerequisites during installation
+2025/04/01 16:44:49 CLSRSC-594: Executing installation step 3 of 19: 'CheckFirstNode'.
+2025/04/01 16:44:51 CLSRSC-594: Executing installation step 4 of 19: 'GenSiteGUIDs'.
+2025/04/01 16:44:51 CLSRSC-594: Executing installation step 5 of 19: 'SetupOSD'.
+2025/04/01 16:44:51 CLSRSC-594: Executing installation step 6 of 19: 'CheckCRSConfig'.
+2025/04/01 16:44:51 CLSRSC-594: Executing installation step 7 of 19: 'SetupLocalGPNP'.
+2025/04/01 16:44:53 CLSRSC-594: Executing installation step 8 of 19: 'CreateRootCert'.
+2025/04/01 16:44:53 CLSRSC-594: Executing installation step 9 of 19: 'ConfigOLR'.
+2025/04/01 16:45:01 CLSRSC-594: Executing installation step 10 of 19: 'ConfigCHMOS'.
+2025/04/01 16:45:01 CLSRSC-594: Executing installation step 11 of 19: 'CreateOHASD'.
+2025/04/01 16:45:03 CLSRSC-594: Executing installation step 12 of 19: 'ConfigOHASD'.
+2025/04/01 16:45:03 CLSRSC-330: Adding Clusterware entries to file 'oracle-ohasd.service'
+2025/04/01 16:45:14 CLSRSC-4002: Successfully installed Oracle Trace File Analyzer (TFA) Collector.
+2025/04/01 16:45:23 CLSRSC-594: Executing installation step 13 of 19: 'InstallAFD'.
+2025/04/01 16:45:25 CLSRSC-594: Executing installation step 14 of 19: 'InstallACFS'.
+2025/04/01 16:45:26 CLSRSC-594: Executing installation step 15 of 19: 'InstallKA'.
+2025/04/01 16:45:28 CLSRSC-594: Executing installation step 16 of 19: 'InitConfig'.
+2025/04/01 16:45:38 CLSRSC-594: Executing installation step 17 of 19: 'StartCluster'.
+2025/04/01 16:46:09 CLSRSC-343: Successfully started Oracle Clusterware stack
+2025/04/01 16:46:09 CLSRSC-594: Executing installation step 18 of 19: 'ConfigNode'.
+2025/04/01 16:46:20 CLSRSC-594: Executing installation step 19 of 19: 'PostConfig'.
+2025/04/01 16:46:25 CLSRSC-325: Configure Oracle Grid Infrastructure for a Cluster ... succeeded
+```
+
+
+
+### 3.7. 集群状态检查
+
+```bash
+[root@k8s-19rac01 ~]# /u01/app/19.0.0/grid/bin/crsctl status resource -t
+--------------------------------------------------------------------------------
+Name           Target  State        Server                   State details       
+--------------------------------------------------------------------------------
+Local Resources
+--------------------------------------------------------------------------------
+ora.LISTENER.lsnr
+               ONLINE  ONLINE       k8s-19rac01              STABLE
+               ONLINE  ONLINE       k8s-19rac02              STABLE
+ora.chad
+               ONLINE  ONLINE       k8s-19rac01              STABLE
+               ONLINE  ONLINE       k8s-19rac02              STABLE
+ora.net1.network
+               ONLINE  ONLINE       k8s-19rac01              STABLE
+               ONLINE  ONLINE       k8s-19rac02              STABLE
+ora.ons
+               ONLINE  ONLINE       k8s-19rac01              STABLE
+               ONLINE  ONLINE       k8s-19rac02              STABLE
+--------------------------------------------------------------------------------
+Cluster Resources
+--------------------------------------------------------------------------------
+ora.ASMNET1LSNR_ASM.lsnr(ora.asmgroup)
+      1        ONLINE  ONLINE       k8s-19rac01              STABLE
+      2        ONLINE  ONLINE       k8s-19rac02              STABLE
+      3        OFFLINE OFFLINE                               STABLE
+ora.LISTENER_SCAN1.lsnr
+      1        ONLINE  ONLINE       k8s-19rac01              STABLE
+ora.OCR.dg(ora.asmgroup)
+      1        ONLINE  ONLINE       k8s-19rac01              STABLE
+      2        ONLINE  ONLINE       k8s-19rac02              STABLE
+      3        OFFLINE OFFLINE                               STABLE
+ora.asm(ora.asmgroup)
+      1        ONLINE  ONLINE       k8s-19rac01              Started,STABLE
+      2        ONLINE  ONLINE       k8s-19rac02              Started,STABLE
+      3        OFFLINE OFFLINE                               STABLE
+ora.asmnet1.asmnetwork(ora.asmgroup)
+      1        ONLINE  ONLINE       k8s-19rac01              STABLE
+      2        ONLINE  ONLINE       k8s-19rac02              STABLE
+      3        OFFLINE OFFLINE                               STABLE
+ora.cvu
+      1        ONLINE  ONLINE       k8s-19rac01              STABLE
+ora.k8s-19rac01.vip
+      1        ONLINE  ONLINE       k8s-19rac01              STABLE
+ora.k8s-19rac02.vip
+      1        ONLINE  ONLINE       k8s-19rac02              STABLE
+ora.qosmserver
+      1        ONLINE  ONLINE       k8s-19rac01              STABLE
+ora.scan1.vip
+      1        ONLINE  ONLINE       k8s-19rac01              STABLE
+--------------------------------------------------------------------------------
+[root@k8s-19rac01 ~]# 
+
+
+[root@k8s-19rac02 ~]# /u01/app/19.0.0/grid/bin/crsctl status resource -t
+--------------------------------------------------------------------------------
+Name           Target  State        Server                   State details       
+--------------------------------------------------------------------------------
+Local Resources
+--------------------------------------------------------------------------------
+ora.LISTENER.lsnr
+               ONLINE  ONLINE       k8s-19rac01              STABLE
+               ONLINE  ONLINE       k8s-19rac02              STABLE
+ora.chad
+               ONLINE  ONLINE       k8s-19rac01              STABLE
+               ONLINE  ONLINE       k8s-19rac02              STABLE
+ora.net1.network
+               ONLINE  ONLINE       k8s-19rac01              STABLE
+               ONLINE  ONLINE       k8s-19rac02              STABLE
+ora.ons
+               ONLINE  ONLINE       k8s-19rac01              STABLE
+               ONLINE  ONLINE       k8s-19rac02              STABLE
+--------------------------------------------------------------------------------
+Cluster Resources
+--------------------------------------------------------------------------------
+ora.ASMNET1LSNR_ASM.lsnr(ora.asmgroup)
+      1        ONLINE  ONLINE       k8s-19rac01              STABLE
+      2        ONLINE  ONLINE       k8s-19rac02              STABLE
+      3        OFFLINE OFFLINE                               STABLE
+ora.LISTENER_SCAN1.lsnr
+      1        ONLINE  ONLINE       k8s-19rac01              STABLE
+ora.OCR.dg(ora.asmgroup)
+      1        ONLINE  ONLINE       k8s-19rac01              STABLE
+      2        ONLINE  ONLINE       k8s-19rac02              STABLE
+      3        OFFLINE OFFLINE                               STABLE
+ora.asm(ora.asmgroup)
+      1        ONLINE  ONLINE       k8s-19rac01              Started,STABLE
+      2        ONLINE  ONLINE       k8s-19rac02              Started,STABLE
+      3        OFFLINE OFFLINE                               STABLE
+ora.asmnet1.asmnetwork(ora.asmgroup)
+      1        ONLINE  ONLINE       k8s-19rac01              STABLE
+      2        ONLINE  ONLINE       k8s-19rac02              STABLE
+      3        OFFLINE OFFLINE                               STABLE
+ora.cvu
+      1        ONLINE  ONLINE       k8s-19rac01              STABLE
+ora.k8s-19rac01.vip
+      1        ONLINE  ONLINE       k8s-19rac01              STABLE
+ora.k8s-19rac02.vip
+      1        ONLINE  ONLINE       k8s-19rac02              STABLE
+ora.qosmserver
+      1        ONLINE  ONLINE       k8s-19rac01              STABLE
+ora.scan1.vip
+      1        ONLINE  ONLINE       k8s-19rac01              STABLE
+--------------------------------------------------------------------------------
+[root@k8s-19rac02 ~]# 
+
+```
+
+
 
 ## 4.创建 ASM 数据磁盘
 
@@ -4597,81 +4899,152 @@ CRS-2677: Stop of 'ora.cssd' on 'oracle01' succeeded
 #创建asm磁盘组步骤
 ```
 1. DiskGroups界面点击Create
-2. #asmlib管理的话
-DATA/External/(/dev/oracleasm/disks/DATA01、/dev/oracleasm/disks/DATA02、/dev/oracleasm/disks/DATA03)，点击OK
+2. 
+#asmlib管理的话
+#或者uuid不固定的情况
+#本次使用
+DATA/External/(/dev/oracleasm/disks/DATA01)，点击OK
 
-#本次共享磁盘
+#uuid固定的情况
 DATA/External/(/dev/sdd、/dev/sde、/dev/sdf)，点击OK
-3. 继续点击Create
-4.  #asmlib管理的话FRA/External/(/dev/oracleasm/disks/FRA01、/dev/oracleasm/disks/FRA02、/dev/oracleasm/disks/FRA03)，点击OK
 
-#本次共享磁盘
+3. 继续点击Create
+
+4.  
+#asmlib管理的话
+#或者uuid不固定的情况
+#本次使用
+FRA/External/(/dev/oracleasm/disks/FRA01)，点击OK
+
+#uuid固定的情况
 FRA/External/(/dev/sdg)，点击OK
+
 5. Exit
 ```
 ![image-20231118184625244](oracle-store\image-20231118184625244.png)
 
-### 4.2 查看状态
+### 4.2. 查看集群状态
 
 ```
-[grid@k8s-19rac01 ~]$ crsctl status resource -t
+[root@k8s-19rac01 ~]# /u01/app/19.0.0/grid/bin/crsctl status resource -t
 --------------------------------------------------------------------------------
 Name           Target  State        Server                   State details       
 --------------------------------------------------------------------------------
 Local Resources
 --------------------------------------------------------------------------------
 ora.LISTENER.lsnr
-               ONLINE  ONLINE       k8s-19rac01                STABLE
-               ONLINE  ONLINE       k8s-19rac02                STABLE
+               ONLINE  ONLINE       k8s-19rac01              STABLE
+               ONLINE  ONLINE       k8s-19rac02              STABLE
 ora.chad
-               ONLINE  ONLINE       k8s-19rac01                STABLE
-               ONLINE  ONLINE       k8s-19rac02                STABLE
+               ONLINE  ONLINE       k8s-19rac01              STABLE
+               ONLINE  ONLINE       k8s-19rac02              STABLE
 ora.net1.network
-               ONLINE  ONLINE       k8s-19rac01                STABLE
-               ONLINE  ONLINE       k8s-19rac02                STABLE
+               ONLINE  ONLINE       k8s-19rac01              STABLE
+               ONLINE  ONLINE       k8s-19rac02              STABLE
 ora.ons
-               ONLINE  ONLINE       k8s-19rac01                STABLE
-               ONLINE  ONLINE       k8s-19rac02                STABLE
+               ONLINE  ONLINE       k8s-19rac01              STABLE
+               ONLINE  ONLINE       k8s-19rac02              STABLE
 --------------------------------------------------------------------------------
 Cluster Resources
 --------------------------------------------------------------------------------
 ora.ASMNET1LSNR_ASM.lsnr(ora.asmgroup)
-      1        ONLINE  ONLINE       k8s-19rac01                STABLE
-      2        ONLINE  ONLINE       k8s-19rac02                STABLE
+      1        ONLINE  ONLINE       k8s-19rac01              STABLE
+      2        ONLINE  ONLINE       k8s-19rac02              STABLE
       3        OFFLINE OFFLINE                               STABLE
 ora.DATA.dg(ora.asmgroup)
-      1        ONLINE  ONLINE       k8s-19rac01                STABLE
-      2        ONLINE  ONLINE       k8s-19rac02                STABLE
+      1        ONLINE  ONLINE       k8s-19rac01              STABLE
+      2        ONLINE  ONLINE       k8s-19rac02              STABLE
       3        ONLINE  OFFLINE                               STABLE
 ora.FRA.dg(ora.asmgroup)
-      1        ONLINE  ONLINE       k8s-19rac01                STABLE
-      2        ONLINE  ONLINE       k8s-19rac02                STABLE
+      1        ONLINE  ONLINE       k8s-19rac01              STABLE
+      2        ONLINE  ONLINE       k8s-19rac02              STABLE
       3        ONLINE  OFFLINE                               STABLE
 ora.LISTENER_SCAN1.lsnr
-      1        ONLINE  ONLINE       k8s-19rac01                STABLE
+      1        ONLINE  ONLINE       k8s-19rac01              STABLE
 ora.OCR.dg(ora.asmgroup)
-      1        ONLINE  ONLINE       k8s-19rac01                STABLE
-      2        ONLINE  ONLINE       k8s-19rac02                STABLE
+      1        ONLINE  ONLINE       k8s-19rac01              STABLE
+      2        ONLINE  ONLINE       k8s-19rac02              STABLE
       3        OFFLINE OFFLINE                               STABLE
 ora.asm(ora.asmgroup)
-      1        ONLINE  ONLINE       k8s-19rac01                Started,STABLE
-      2        ONLINE  ONLINE       k8s-19rac02                Started,STABLE
+      1        ONLINE  ONLINE       k8s-19rac01              Started,STABLE
+      2        ONLINE  ONLINE       k8s-19rac02              Started,STABLE
       3        OFFLINE OFFLINE                               STABLE
 ora.asmnet1.asmnetwork(ora.asmgroup)
-      1        ONLINE  ONLINE       k8s-19rac01                STABLE
-      2        ONLINE  ONLINE       k8s-19rac02                STABLE
+      1        ONLINE  ONLINE       k8s-19rac01              STABLE
+      2        ONLINE  ONLINE       k8s-19rac02              STABLE
       3        OFFLINE OFFLINE                               STABLE
 ora.cvu
-      1        ONLINE  ONLINE       k8s-19rac01                STABLE
+      1        ONLINE  ONLINE       k8s-19rac01              STABLE
 ora.k8s-19rac01.vip
-      1        ONLINE  ONLINE       k8s-19rac01                STABLE
+      1        ONLINE  ONLINE       k8s-19rac01              STABLE
 ora.k8s-19rac02.vip
-      1        ONLINE  ONLINE       k8s-19rac02                STABLE
+      1        ONLINE  ONLINE       k8s-19rac02              STABLE
 ora.qosmserver
-      1        ONLINE  ONLINE       k8s-19rac01                STABLE
+      1        ONLINE  ONLINE       k8s-19rac01              STABLE
 ora.scan1.vip
-      1        ONLINE  ONLINE       k8s-19rac01                STABLE
+      1        ONLINE  ONLINE       k8s-19rac01              STABLE
 --------------------------------------------------------------------------------
+[root@k8s-19rac01 ~]#
+
+[root@k8s-19rac02 ~]# /u01/app/19.0.0/grid/bin/crsctl status resource -t
+--------------------------------------------------------------------------------
+Name           Target  State        Server                   State details       
+--------------------------------------------------------------------------------
+Local Resources
+--------------------------------------------------------------------------------
+ora.LISTENER.lsnr
+               ONLINE  ONLINE       k8s-19rac01              STABLE
+               ONLINE  ONLINE       k8s-19rac02              STABLE
+ora.chad
+               ONLINE  ONLINE       k8s-19rac01              STABLE
+               ONLINE  ONLINE       k8s-19rac02              STABLE
+ora.net1.network
+               ONLINE  ONLINE       k8s-19rac01              STABLE
+               ONLINE  ONLINE       k8s-19rac02              STABLE
+ora.ons
+               ONLINE  ONLINE       k8s-19rac01              STABLE
+               ONLINE  ONLINE       k8s-19rac02              STABLE
+--------------------------------------------------------------------------------
+Cluster Resources
+--------------------------------------------------------------------------------
+ora.ASMNET1LSNR_ASM.lsnr(ora.asmgroup)
+      1        ONLINE  ONLINE       k8s-19rac01              STABLE
+      2        ONLINE  ONLINE       k8s-19rac02              STABLE
+      3        OFFLINE OFFLINE                               STABLE
+ora.DATA.dg(ora.asmgroup)
+      1        ONLINE  ONLINE       k8s-19rac01              STABLE
+      2        ONLINE  ONLINE       k8s-19rac02              STABLE
+      3        ONLINE  OFFLINE                               STABLE
+ora.FRA.dg(ora.asmgroup)
+      1        ONLINE  ONLINE       k8s-19rac01              STABLE
+      2        ONLINE  ONLINE       k8s-19rac02              STABLE
+      3        ONLINE  OFFLINE                               STABLE
+ora.LISTENER_SCAN1.lsnr
+      1        ONLINE  ONLINE       k8s-19rac01              STABLE
+ora.OCR.dg(ora.asmgroup)
+      1        ONLINE  ONLINE       k8s-19rac01              STABLE
+      2        ONLINE  ONLINE       k8s-19rac02              STABLE
+      3        OFFLINE OFFLINE                               STABLE
+ora.asm(ora.asmgroup)
+      1        ONLINE  ONLINE       k8s-19rac01              Started,STABLE
+      2        ONLINE  ONLINE       k8s-19rac02              Started,STABLE
+      3        OFFLINE OFFLINE                               STABLE
+ora.asmnet1.asmnetwork(ora.asmgroup)
+      1        ONLINE  ONLINE       k8s-19rac01              STABLE
+      2        ONLINE  ONLINE       k8s-19rac02              STABLE
+      3        OFFLINE OFFLINE                               STABLE
+ora.cvu
+      1        ONLINE  ONLINE       k8s-19rac01              STABLE
+ora.k8s-19rac01.vip
+      1        ONLINE  ONLINE       k8s-19rac01              STABLE
+ora.k8s-19rac02.vip
+      1        ONLINE  ONLINE       k8s-19rac02              STABLE
+ora.qosmserver
+      1        ONLINE  ONLINE       k8s-19rac01              STABLE
+ora.scan1.vip
+      1        ONLINE  ONLINE       k8s-19rac01              STABLE
+--------------------------------------------------------------------------------
+[root@k8s-19rac02 ~]# 
 
 
 
@@ -4764,7 +5137,7 @@ Operating system:             Linux5.4.17-2011.6.2.el7uek.x86_64
 
 ```bash
 [grid@rac01 ~]$ cd /u01/app/19.0.0/grid/
-[grid@rac01 grid]$ ./runcluvfy.sh stage -pre dbinst -n k8s-19rac01,k8s-19rac02 -fixup -verbose|tee -a pre-db.log
+[grid@rac01 grid]$ ./runcluvfy.sh stage -pre dbinst -n k8s-19rac01,k8s-19rac02 -fixup -verbose|tee -a /home/grid/pre-db.log
 ```
 
 #关于rac-scan的解析失败，可以忽略
@@ -4788,12 +5161,14 @@ Verifying DNS/NIS name service 'rac-scan' ...FAILED
 #通过xstart图形化连接服务器，同Grid连接方式
 
 ```bash
+[oracle@rac01 ~]$ cd /u01/app/oracle/product/19.0.0/db_1
+
 [oracle@rac01 db_1]$ ./runInstaller
 ```
 ### 5.1. oracle software安装步骤
 #安装过程如下
 ```
-1. 仅设置software
+1. 仅设置software---Set Up Software Only
 2. oracle RAC
 3. SSH互信测试(SSH connectivity--->Test)
 4. Enterprise Edition
@@ -4805,44 +5180,177 @@ Verifying DNS/NIS name service 'rac-scan' ...FAILED
 10. root账户先在k8s-19rac01执行完毕后再在k8s-19rac02上执行脚本(/u01/app/oracle/product/19.0.0/db_1/root.sh)，然后点击OK
 11. Close
 ```
-#执行root.sh脚本记录
-```
-[root@rac01 ~]# /u01/app/oracle/product/19.0.0/db_1/root.sh
-Performing root user operation.
 
-The following environment variables are set as:
-    ORACLE_OWNER= oracle
-    ORACLE_HOME=  /u01/app/oracle/product/19.0.0/db_1
 
-Enter the full pathname of the local bin directory: [/usr/local/bin]:
-The contents of "dbhome" have not changed. No need to overwrite.
-The contents of "oraenv" have not changed. No need to overwrite.
-The contents of "coraenv" have not changed. No need to overwrite.
 
-Entries will be added to the /etc/oratab file as needed by
-Database Configuration Assistant when a database is created
-Finished running generic part of root script.
-Now product-specific root actions will be performed.
-
-[root@rac02 ~]# /u01/app/oracle/product/19.0.0/db_1/root.sh
-Performing root user operation.
-
-The following environment variables are set as:
-    ORACLE_OWNER= oracle
-    ORACLE_HOME=  /u01/app/oracle/product/19.0.0/db_1
-
-Enter the full pathname of the local bin directory: [/usr/local/bin]:
-The contents of "dbhome" have not changed. No need to overwrite.
-The contents of "oraenv" have not changed. No need to overwrite.
-The contents of "coraenv" have not changed. No need to overwrite.
-
-Entries will be added to the /etc/oratab file as needed by
-Database Configuration Assistant when a database is created
-Finished running generic part of root script.
-Now product-specific root actions will be performed.
-```
 
 ![image-20230928121556137](oracle19cRAC-neuq\image-20230928121556137.png)
+
+
+
+### 5.2. 执行root.sh脚本记录
+```bash
+[root@k8s-19rac01 ~]#   /u01/app/oracle/product/19.0.0/db_1/root.sh
+Performing root user operation.
+
+The following environment variables are set as:
+    ORACLE_OWNER= oracle
+    ORACLE_HOME=  /u01/app/oracle/product/19.0.0/db_1
+
+Enter the full pathname of the local bin directory: [/usr/local/bin]: 
+The contents of "dbhome" have not changed. No need to overwrite.
+The contents of "oraenv" have not changed. No need to overwrite.
+The contents of "coraenv" have not changed. No need to overwrite.
+
+Entries will be added to the /etc/oratab file as needed by
+Database Configuration Assistant when a database is created
+Finished running generic part of root script.
+Now product-specific root actions will be performed.
+
+
+[root@k8s-19rac02 ~]# /u01/app/oracle/product/19.0.0/db_1/root.sh
+Performing root user operation.
+
+The following environment variables are set as:
+    ORACLE_OWNER= oracle
+    ORACLE_HOME=  /u01/app/oracle/product/19.0.0/db_1
+
+Enter the full pathname of the local bin directory: [/usr/local/bin]: 
+The contents of "dbhome" have not changed. No need to overwrite.
+The contents of "oraenv" have not changed. No need to overwrite.
+The contents of "coraenv" have not changed. No need to overwrite.
+
+Entries will be added to the /etc/oratab file as needed by
+Database Configuration Assistant when a database is created
+Finished running generic part of root script.
+Now product-specific root actions will be performed.
+
+```
+
+### 5.3. 查看集群状态
+
+```bash
+[root@k8s-19rac01 ~]# /u01/app/19.0.0/grid/bin/crsctl status resource -t
+--------------------------------------------------------------------------------
+Name           Target  State        Server                   State details       
+--------------------------------------------------------------------------------
+Local Resources
+--------------------------------------------------------------------------------
+ora.LISTENER.lsnr
+               ONLINE  ONLINE       k8s-19rac01              STABLE
+               ONLINE  ONLINE       k8s-19rac02              STABLE
+ora.chad
+               ONLINE  ONLINE       k8s-19rac01              STABLE
+               ONLINE  ONLINE       k8s-19rac02              STABLE
+ora.net1.network
+               ONLINE  ONLINE       k8s-19rac01              STABLE
+               ONLINE  ONLINE       k8s-19rac02              STABLE
+ora.ons
+               ONLINE  ONLINE       k8s-19rac01              STABLE
+               ONLINE  ONLINE       k8s-19rac02              STABLE
+--------------------------------------------------------------------------------
+Cluster Resources
+--------------------------------------------------------------------------------
+ora.ASMNET1LSNR_ASM.lsnr(ora.asmgroup)
+      1        ONLINE  ONLINE       k8s-19rac01              STABLE
+      2        ONLINE  ONLINE       k8s-19rac02              STABLE
+      3        OFFLINE OFFLINE                               STABLE
+ora.DATA.dg(ora.asmgroup)
+      1        ONLINE  ONLINE       k8s-19rac01              STABLE
+      2        ONLINE  ONLINE       k8s-19rac02              STABLE
+      3        ONLINE  OFFLINE                               STABLE
+ora.FRA.dg(ora.asmgroup)
+      1        ONLINE  ONLINE       k8s-19rac01              STABLE
+      2        ONLINE  ONLINE       k8s-19rac02              STABLE
+      3        ONLINE  OFFLINE                               STABLE
+ora.LISTENER_SCAN1.lsnr
+      1        ONLINE  ONLINE       k8s-19rac01              STABLE
+ora.OCR.dg(ora.asmgroup)
+      1        ONLINE  ONLINE       k8s-19rac01              STABLE
+      2        ONLINE  ONLINE       k8s-19rac02              STABLE
+      3        OFFLINE OFFLINE                               STABLE
+ora.asm(ora.asmgroup)
+      1        ONLINE  ONLINE       k8s-19rac01              Started,STABLE
+      2        ONLINE  ONLINE       k8s-19rac02              Started,STABLE
+      3        OFFLINE OFFLINE                               STABLE
+ora.asmnet1.asmnetwork(ora.asmgroup)
+      1        ONLINE  ONLINE       k8s-19rac01              STABLE
+      2        ONLINE  ONLINE       k8s-19rac02              STABLE
+      3        OFFLINE OFFLINE                               STABLE
+ora.cvu
+      1        ONLINE  ONLINE       k8s-19rac01              STABLE
+ora.k8s-19rac01.vip
+      1        ONLINE  ONLINE       k8s-19rac01              STABLE
+ora.k8s-19rac02.vip
+      1        ONLINE  ONLINE       k8s-19rac02              STABLE
+ora.qosmserver
+      1        ONLINE  ONLINE       k8s-19rac01              STABLE
+ora.scan1.vip
+      1        ONLINE  ONLINE       k8s-19rac01              STABLE
+--------------------------------------------------------------------------------
+[root@k8s-19rac01 ~]# 
+
+
+[root@k8s-19rac02 ~]# /u01/app/19.0.0/grid/bin/crsctl status resource -t
+--------------------------------------------------------------------------------
+Name           Target  State        Server                   State details       
+--------------------------------------------------------------------------------
+Local Resources
+--------------------------------------------------------------------------------
+ora.LISTENER.lsnr
+               ONLINE  ONLINE       k8s-19rac01              STABLE
+               ONLINE  ONLINE       k8s-19rac02              STABLE
+ora.chad
+               ONLINE  ONLINE       k8s-19rac01              STABLE
+               ONLINE  ONLINE       k8s-19rac02              STABLE
+ora.net1.network
+               ONLINE  ONLINE       k8s-19rac01              STABLE
+               ONLINE  ONLINE       k8s-19rac02              STABLE
+ora.ons
+               ONLINE  ONLINE       k8s-19rac01              STABLE
+               ONLINE  ONLINE       k8s-19rac02              STABLE
+--------------------------------------------------------------------------------
+Cluster Resources
+--------------------------------------------------------------------------------
+ora.ASMNET1LSNR_ASM.lsnr(ora.asmgroup)
+      1        ONLINE  ONLINE       k8s-19rac01              STABLE
+      2        ONLINE  ONLINE       k8s-19rac02              STABLE
+      3        OFFLINE OFFLINE                               STABLE
+ora.DATA.dg(ora.asmgroup)
+      1        ONLINE  ONLINE       k8s-19rac01              STABLE
+      2        ONLINE  ONLINE       k8s-19rac02              STABLE
+      3        ONLINE  OFFLINE                               STABLE
+ora.FRA.dg(ora.asmgroup)
+      1        ONLINE  ONLINE       k8s-19rac01              STABLE
+      2        ONLINE  ONLINE       k8s-19rac02              STABLE
+      3        ONLINE  OFFLINE                               STABLE
+ora.LISTENER_SCAN1.lsnr
+      1        ONLINE  ONLINE       k8s-19rac01              STABLE
+ora.OCR.dg(ora.asmgroup)
+      1        ONLINE  ONLINE       k8s-19rac01              STABLE
+      2        ONLINE  ONLINE       k8s-19rac02              STABLE
+      3        OFFLINE OFFLINE                               STABLE
+ora.asm(ora.asmgroup)
+      1        ONLINE  ONLINE       k8s-19rac01              Started,STABLE
+      2        ONLINE  ONLINE       k8s-19rac02              Started,STABLE
+      3        OFFLINE OFFLINE                               STABLE
+ora.asmnet1.asmnetwork(ora.asmgroup)
+      1        ONLINE  ONLINE       k8s-19rac01              STABLE
+      2        ONLINE  ONLINE       k8s-19rac02              STABLE
+      3        OFFLINE OFFLINE                               STABLE
+ora.cvu
+      1        ONLINE  ONLINE       k8s-19rac01              STABLE
+ora.k8s-19rac01.vip
+      1        ONLINE  ONLINE       k8s-19rac01              STABLE
+ora.k8s-19rac02.vip
+      1        ONLINE  ONLINE       k8s-19rac02              STABLE
+ora.qosmserver
+      1        ONLINE  ONLINE       k8s-19rac01              STABLE
+ora.scan1.vip
+      1        ONLINE  ONLINE       k8s-19rac01              STABLE
+--------------------------------------------------------------------------------
+[root@k8s-19rac02 ~]# 
+```
 
 
 
@@ -4867,12 +5375,15 @@ Now product-specific root actions will be performed.
        #sga=30G
        #pag=10G
        #此处为总32G，所以sga=15G,pga=5G
-   Sizing: block size: 8192/processes: 
+   Sizing: block size: 8192/processes: 3000
    Character Sets: AL32UTF8
    Connection mode: Dadicated server mode--->Next
 10. 运行CVU和关闭EM
 11. 使用相同密码Oracle2023#Sys
 12. 勾选：create database
+    添加日志组：Customize Storage Locations...--->Redo Log Groups
+              --->添加两组：Group#: 5/FileSize: 204800KB/Thread: 1--->Apply
+                          Group#: 6/FileSize: 204800KB/Thread: 2--->Apply--->Close
 13. Ignore all--->Yes
 14. Finish
 15. Close
@@ -4880,79 +5391,156 @@ Now product-specific root actions will be performed.
 ```
 ### 6.2. 查看集群状态
 ```
-[grid@k8s-19rac01 ~]$ crsctl status resource -t
+[root@k8s-19rac01 ~]# /u01/app/19.0.0/grid/bin/crsctl status resource -t|wc -l
+64
+[root@k8s-19rac01 ~]# /u01/app/19.0.0/grid/bin/crsctl status resource -t
 --------------------------------------------------------------------------------
 Name           Target  State        Server                   State details       
 --------------------------------------------------------------------------------
 Local Resources
 --------------------------------------------------------------------------------
 ora.LISTENER.lsnr
-               ONLINE  ONLINE       k8s-19rac01                STABLE
-               ONLINE  ONLINE       k8s-19rac02                STABLE
+               ONLINE  ONLINE       k8s-19rac01              STABLE
+               ONLINE  ONLINE       k8s-19rac02              STABLE
 ora.chad
-               ONLINE  ONLINE       k8s-19rac01                STABLE
-               ONLINE  ONLINE       k8s-19rac02                STABLE
+               ONLINE  ONLINE       k8s-19rac01              STABLE
+               ONLINE  ONLINE       k8s-19rac02              STABLE
 ora.net1.network
-               ONLINE  ONLINE       k8s-19rac01                STABLE
-               ONLINE  ONLINE       k8s-19rac02                STABLE
+               ONLINE  ONLINE       k8s-19rac01              STABLE
+               ONLINE  ONLINE       k8s-19rac02              STABLE
 ora.ons
-               ONLINE  ONLINE       k8s-19rac01                STABLE
-               ONLINE  ONLINE       k8s-19rac02                STABLE
+               ONLINE  ONLINE       k8s-19rac01              STABLE
+               ONLINE  ONLINE       k8s-19rac02              STABLE
 --------------------------------------------------------------------------------
 Cluster Resources
 --------------------------------------------------------------------------------
 ora.ASMNET1LSNR_ASM.lsnr(ora.asmgroup)
-      1        ONLINE  ONLINE       k8s-19rac01                STABLE
-      2        ONLINE  ONLINE       k8s-19rac02                STABLE
+      1        ONLINE  ONLINE       k8s-19rac01              STABLE
+      2        ONLINE  ONLINE       k8s-19rac02              STABLE
       3        OFFLINE OFFLINE                               STABLE
 ora.DATA.dg(ora.asmgroup)
-      1        ONLINE  ONLINE       k8s-19rac01                STABLE
-      2        ONLINE  ONLINE       k8s-19rac02                STABLE
+      1        ONLINE  ONLINE       k8s-19rac01              STABLE
+      2        ONLINE  ONLINE       k8s-19rac02              STABLE
       3        ONLINE  OFFLINE                               STABLE
 ora.FRA.dg(ora.asmgroup)
-      1        ONLINE  ONLINE       k8s-19rac01                STABLE
-      2        ONLINE  ONLINE       k8s-19rac02                STABLE
+      1        ONLINE  ONLINE       k8s-19rac01              STABLE
+      2        ONLINE  ONLINE       k8s-19rac02              STABLE
       3        ONLINE  OFFLINE                               STABLE
 ora.LISTENER_SCAN1.lsnr
-      1        ONLINE  ONLINE       k8s-19rac01                STABLE
+      1        ONLINE  ONLINE       k8s-19rac01              STABLE
 ora.OCR.dg(ora.asmgroup)
-      1        ONLINE  ONLINE       k8s-19rac01                STABLE
-      2        ONLINE  ONLINE       k8s-19rac02                STABLE
+      1        ONLINE  ONLINE       k8s-19rac01              STABLE
+      2        ONLINE  ONLINE       k8s-19rac02              STABLE
       3        OFFLINE OFFLINE                               STABLE
 ora.asm(ora.asmgroup)
-      1        ONLINE  ONLINE       k8s-19rac01                Started,STABLE
-      2        ONLINE  ONLINE       k8s-19rac02                Started,STABLE
+      1        ONLINE  ONLINE       k8s-19rac01              Started,STABLE
+      2        ONLINE  ONLINE       k8s-19rac02              Started,STABLE
       3        OFFLINE OFFLINE                               STABLE
 ora.asmnet1.asmnetwork(ora.asmgroup)
-      1        ONLINE  ONLINE       k8s-19rac01                STABLE
-      2        ONLINE  ONLINE       k8s-19rac02                STABLE
+      1        ONLINE  ONLINE       k8s-19rac01              STABLE
+      2        ONLINE  ONLINE       k8s-19rac02              STABLE
       3        OFFLINE OFFLINE                               STABLE
 ora.cvu
-      1        ONLINE  ONLINE       k8s-19rac01                STABLE
+      1        ONLINE  ONLINE       k8s-19rac01              STABLE
 ora.k8s-19rac01.vip
-      1        ONLINE  ONLINE       k8s-19rac01                STABLE
+      1        ONLINE  ONLINE       k8s-19rac01              STABLE
 ora.k8s-19rac02.vip
-      1        ONLINE  ONLINE       k8s-19rac02                STABLE
+      1        ONLINE  ONLINE       k8s-19rac02              STABLE
 ora.qosmserver
-      1        ONLINE  ONLINE       k8s-19rac01                STABLE
+      1        ONLINE  ONLINE       k8s-19rac01              STABLE
 ora.scan1.vip
-      1        ONLINE  ONLINE       k8s-19rac01                STABLE
+      1        ONLINE  ONLINE       k8s-19rac01              STABLE
 ora.xydb.db
-      1        ONLINE  ONLINE       k8s-19rac01                Open,HOME=/u01/app/o
+      1        ONLINE  ONLINE       k8s-19rac01              Open,HOME=/u01/app/o
                                                              racle/product/19.0.0
                                                              /db_1,STABLE
-      2        ONLINE  ONLINE       k8s-19rac02                Open,HOME=/u01/app/o
+      2        ONLINE  ONLINE       k8s-19rac02              Open,HOME=/u01/app/o
                                                              racle/product/19.0.0
                                                              /db_1,STABLE
 --------------------------------------------------------------------------------
+[root@k8s-19rac01 ~]# 
 
-[grid@k8s-19rac01 ~]$  srvctl config database -d xydb
+
+[root@k8s-19rac02 ~]# /u01/app/19.0.0/grid/bin/crsctl status resource -t|wc -l
+64
+[root@k8s-19rac02 ~]# /u01/app/19.0.0/grid/bin/crsctl status resource -t
+--------------------------------------------------------------------------------
+Name           Target  State        Server                   State details       
+--------------------------------------------------------------------------------
+Local Resources
+--------------------------------------------------------------------------------
+ora.LISTENER.lsnr
+               ONLINE  ONLINE       k8s-19rac01              STABLE
+               ONLINE  ONLINE       k8s-19rac02              STABLE
+ora.chad
+               ONLINE  ONLINE       k8s-19rac01              STABLE
+               ONLINE  ONLINE       k8s-19rac02              STABLE
+ora.net1.network
+               ONLINE  ONLINE       k8s-19rac01              STABLE
+               ONLINE  ONLINE       k8s-19rac02              STABLE
+ora.ons
+               ONLINE  ONLINE       k8s-19rac01              STABLE
+               ONLINE  ONLINE       k8s-19rac02              STABLE
+--------------------------------------------------------------------------------
+Cluster Resources
+--------------------------------------------------------------------------------
+ora.ASMNET1LSNR_ASM.lsnr(ora.asmgroup)
+      1        ONLINE  ONLINE       k8s-19rac01              STABLE
+      2        ONLINE  ONLINE       k8s-19rac02              STABLE
+      3        OFFLINE OFFLINE                               STABLE
+ora.DATA.dg(ora.asmgroup)
+      1        ONLINE  ONLINE       k8s-19rac01              STABLE
+      2        ONLINE  ONLINE       k8s-19rac02              STABLE
+      3        ONLINE  OFFLINE                               STABLE
+ora.FRA.dg(ora.asmgroup)
+      1        ONLINE  ONLINE       k8s-19rac01              STABLE
+      2        ONLINE  ONLINE       k8s-19rac02              STABLE
+      3        ONLINE  OFFLINE                               STABLE
+ora.LISTENER_SCAN1.lsnr
+      1        ONLINE  ONLINE       k8s-19rac01              STABLE
+ora.OCR.dg(ora.asmgroup)
+      1        ONLINE  ONLINE       k8s-19rac01              STABLE
+      2        ONLINE  ONLINE       k8s-19rac02              STABLE
+      3        OFFLINE OFFLINE                               STABLE
+ora.asm(ora.asmgroup)
+      1        ONLINE  ONLINE       k8s-19rac01              Started,STABLE
+      2        ONLINE  ONLINE       k8s-19rac02              Started,STABLE
+      3        OFFLINE OFFLINE                               STABLE
+ora.asmnet1.asmnetwork(ora.asmgroup)
+      1        ONLINE  ONLINE       k8s-19rac01              STABLE
+      2        ONLINE  ONLINE       k8s-19rac02              STABLE
+      3        OFFLINE OFFLINE                               STABLE
+ora.cvu
+      1        ONLINE  ONLINE       k8s-19rac01              STABLE
+ora.k8s-19rac01.vip
+      1        ONLINE  ONLINE       k8s-19rac01              STABLE
+ora.k8s-19rac02.vip
+      1        ONLINE  ONLINE       k8s-19rac02              STABLE
+ora.qosmserver
+      1        ONLINE  ONLINE       k8s-19rac01              STABLE
+ora.scan1.vip
+      1        ONLINE  ONLINE       k8s-19rac01              STABLE
+ora.xydb.db
+      1        ONLINE  ONLINE       k8s-19rac01              Open,HOME=/u01/app/o
+                                                             racle/product/19.0.0
+                                                             /db_1,STABLE
+      2        ONLINE  ONLINE       k8s-19rac02              Open,HOME=/u01/app/o
+                                                             racle/product/19.0.0
+                                                             /db_1,STABLE
+--------------------------------------------------------------------------------
+[root@k8s-19rac02 ~]# 
+
+
+
+[root@k8s-19rac01 ~]# su - grid
+Last login: Tue Apr  1 18:28:15 CST 2025
+[grid@k8s-19rac01 ~]$ srvctl config database -d xydb
 Database unique name: xydb
 Database name: xydb
 Oracle home: /u01/app/oracle/product/19.0.0/db_1
 Oracle user: oracle
-Spfile: +DATA/XYDB/PARAMETERFILE/spfile.272.1153251931
-Password file: +DATA/XYDB/PASSWORD/pwdxydb.256.1153250601
+Spfile: +DATA/XYDB/PARAMETERFILE/spfile.274.1197310365
+Password file: +DATA/XYDB/PASSWORD/pwdxydb.256.1197309455
 Domain: 
 Start options: open
 Stop options: immediate
@@ -4975,6 +5563,7 @@ Memory target: 0
 Maximum memory: 0
 Default network number for database services: 
 Database is administrator managed
+[grid@k8s-19rac01 ~]$ 
 ```
 ### 6.3. 查看数据库版本
 ```
@@ -5052,6 +5641,7 @@ FILE_NAME                                                                       
 SQL> 
 ```
 ### 6.4. Oracle RAC数据库优化
+
 #user password life修改，一个节点(k8s-19rac01或者k8s-19rac02)修改即可(CDB/PDB)
 
 ```oracle
@@ -5062,6 +5652,8 @@ ALTER PROFILE DEFAULT limit FAILED_LOGIN_ATTEMPTS unlimited;
 
 select resource_name,limit from dba_profiles where profile='DEFAULT';
 ```
+
+
 #允许oracle低版本连接，两个节点都要修改
 
 ```
@@ -5072,28 +5664,149 @@ vi sqlnet.ora
 SQLNET.ALLOWED_LOGON_VERSION_SERVER=8
 SQLNET.ALLOWED_LOGON_VERSION_CLIENT=8
 ```
+
+
 #数据库自启动---两个节点都要修改
 
 ```
 su - root
-cd /u01/app/19.0.0/grid/bin
-./crsctl enable crs
+
+/u01/app/19.0.0/grid/bin/crsctl enable crs
 ```
-#PDB自启动
+
+
+#PDB自启动---一个节点(k8s-19rac01或者k8s-19rac02)创建即可
+
 #方法一
+
 ```oracle
 CREATE OR REPLACE TRIGGER open_pdbs
   AFTER STARTUP ON DATABASE
 BEGIN
-   EXECUTE IMMEDIATE 'ABLE DATABASE ALL OPEN';
+   EXECUTE IMMEDIATE 'ALTER PLUGGABLE DATABASE ALL OPEN';
 END open_pdbs;
 /
 ```
+
+
+#完整触发器代码
+
+```sql
+-- 创建日志表（在 CDB 中执行）
+CREATE TABLE pdb_startup_log (
+  log_id         NUMBER GENERATED ALWAYS AS IDENTITY,
+  error_time     TIMESTAMP,
+  error_message  VARCHAR2(4000)
+);
+
+
+-- 在 CDB 级别创建（需 SYSDBA 权限）
+CREATE OR REPLACE TRIGGER auto_open_pdbs
+AFTER STARTUP ON DATABASE
+DECLARE
+  v_error_msg VARCHAR2(4000);
+BEGIN
+  BEGIN
+    -- 尝试打开所有 PDB
+    EXECUTE IMMEDIATE 'ALTER PLUGGABLE DATABASE ALL OPEN';
+  EXCEPTION
+    WHEN OTHERS THEN
+      -- 记录错误到日志表（需提前创建）
+      v_error_msg := 'Error opening PDBs: ' || SQLERRM;
+      INSERT INTO pdb_startup_log (error_time, error_message)
+      VALUES (SYSTIMESTAMP, v_error_msg);
+      COMMIT; -- 需使用自治事务（见下方注释）
+  END;
+END auto_open_pdbs;
+/
+
+```
+
+
+
+#如果pdb确认时
+
+```sql
+CREATE TABLE open_err (
+  log_time     TIMESTAMP     DEFAULT SYSTIMESTAMP,
+  pdb_name     VARCHAR2(128),
+  error_message VARCHAR2(512)
+);
+
+-- 确认表创建成功
+DESC open_err;
+
+
+CREATE OR REPLACE TRIGGER open_all_pdbs
+AFTER STARTUP ON DATABASE
+DECLARE
+  pdb_list   SYS.ODCIVARCHAR2LIST := SYS.ODCIVARCHAR2LIST('pdb1','pdb2','pdb3');
+  v_sql      VARCHAR2(200);
+BEGIN
+  FOR i IN 1..pdb_list.COUNT LOOP
+    BEGIN
+      v_sql := 'ALTER PLUGGABLE DATABASE ' || pdb_list(i) || ' OPEN';
+      EXECUTE IMMEDIATE v_sql;
+    EXCEPTION
+      WHEN OTHERS THEN
+        INSERT INTO open_err (pdb_name, error_message)
+        VALUES (pdb_list(i), SUBSTR(SQLERRM,1,512));
+        COMMIT; -- 及时提交
+    END;
+  END LOOP;
+END;
+/
+
+
+set linesize 200
+col owner format a10
+col trigger_name format a25
+col status format a10
+
+SELECT owner, trigger_name, status 
+FROM DBA_TRIGGERS WHERE trigger_name = 'OPEN_ALL_PDBS';
+```
+
+
+
+
+
 #方法二
+
 ```oracle
 alter pluggable database all open instances=all;
 alter pluggable database all save state instances=all;
 ```
+
+
+
+#重启数据库验证
+
+```bash
+# RAC 环境
+srvctl stop database -db xydb
+srvctl start database -db xydb
+
+```
+
+#查看状态
+
+```sql
+-- 检查触发器状态
+SELECT trigger_name, status 
+FROM dba_triggers 
+WHERE trigger_name = 'AUTO_OPEN_PDBS';
+
+-- 查看 PDB 状态
+SELECT name, open_mode FROM v$pdbs;
+
+-- 查询错误日志
+SELECT * FROM pdb_startup_log ORDER BY error_time DESC;
+
+```
+
+
+
 
 
 #DB_FILES修改，默认1024
@@ -5107,6 +5820,8 @@ srvctl start database -d xydb
 sqlplus / as sysdba
 show parameter db_files
 ```
+
+
 
 #开启hugepages
 
@@ -5325,17 +6040,31 @@ alter system  set event='10949 trace name context forever,level 1','28401 trace 
 
 ##创建service
 
-```oracle
+```bash
 su - oracle
 
+#11g + pdb
 srvctl add service -d xydb -s s_stuwork -r xydb1,xydb2 -P basic -e select -m basic -z 180 -w 5 -pdb stuwork
+
+#19c
+#srvctl add service -d xydb -s s_stuwork_new -pdb stuwork -preferred xydb1,xydb2,xydb3 -policy AUTOMATIC -tafpolicy BASIC -failovertype SELECT -failovermethod BASIC -failoverretry 180  -failoverdelay 5
 
 srvctl start service -d xydb -s s_stuwork
 
 lsnrctl status 
+
+
+for service in $(srvctl config service -d xydb | awk 'BEGIN {SERVICE=""; PREF=""; OFS=";"} { if($0 ~ /Service name:/) SERVICE=$NF; if($0 ~ /Preferred instances:/) {PREF=$NF;print SERVICE,PREF}}');do 
+  SERVICE=$(echo ${service}|cut -d ";" -f1) 
+  INSTANCES=$(echo ${service}|cut -d ";" -f2) 
+  RUNNINGINSTANCES=$(srvctl status service -d xydb -s ${SERVICE}|awk '{print $NF}') 
+  echo "${SERVICE}: Preferred=${INSTANCES}, Running=${RUNNINGINSTANCES}"
+done
+
 ```
 
 ##连接方式
+
 ```oracle
 SQL> show pdbs;
 
@@ -5431,6 +6160,8 @@ SQL> show pdbs;
 ```bash
 su - oracle
 mkdir /home/oracle/rmanbak
+touch /home/oracle/rmanbak/rmanbak.sh
+chmod a+x /home/oracle/rmanbak/rmanbak.sh
 ```
 #/home/oracle/rmanbak/rmanbak.sh
 
@@ -5637,6 +6368,24 @@ srvctl start service -d xydb -s s_dataassets
 srvctl status service -d xydb -s s_dataassets
 
 sqlplus pdbadmin/DSApdb2023#ADb@172.18.13.176:1521/s_dataassets
+
+---------------------------------
+
+#oracle 19c rac add service
+
+srvctl add service -d xydb -s s_portal -pdb portal -preferred xydb1,xydb2,xydb3 -policy BASIC -failovertype SELECT -failovermethod BASIC -failoverretry 180  -failoverdelay 5
+
+
+srvctl add service -d xydb -s s_portal \
+  -pdb portal \                       # 指定PDB名称
+  -preferred xydb1,xydb2,xydb3 \      # 首选实例
+  -policy BASIC \                     # 故障转移策略
+  -failovertype SELECT \              # 故障转移类型
+  -failovermethod BASIC \             # 故障转移方法
+  -failoverretry 180 \                # 故障转移重试时间
+  -failoverdelay 5                    # 故障转移等待时间
+
+
 ```
 
 
@@ -6087,12 +6836,48 @@ SELECT name, total_mb, free_mb FROM v$asm_diskgroup;
 -- 查看重平衡进度
 SELECT * FROM v$asm_operation;
 
+-- 实时I/O压力
+SELECT * FROM V$ASM_DISK_IOSTAT;
+
+#操作状态判断矩阵
+#状态组合	含义	建议操作
+STAT=RUN + ERROR_CODE空	正常进行中	定期监控即可
+STAT=WAIT	等待资源	检查系统I/O或CPU瓶颈
+ERROR_CODE非空	发生错误	立即查看V$ASM_OPERATION.ERROR_CODE
+EST_MINUTES持续增长	存在处理瓶颈	降低并行度或排查存储性能
+
 -- 最终磁盘分布验证
 SELECT disk_number, name, total_mb, free_mb 
 FROM v$asm_disk 
 WHERE group_number = (SELECT group_number 
                        FROM v$asm_diskgroup 
                        WHERE name='ORADATA');
+
+
+```
+
+#参考命令
+
+```sql
+#首先添加的磁盘总量需要比原来的大一些或者一样大，不能偏小，不然在操作时会报错 ORA-15032、ORA-15250，还有每个磁盘可以比原来的大，即实现小盘换大盘
+#其次，删除磁盘时使用的是 ARCH_0000 等这样的磁盘名，并不是磁盘路径
+#最后，在添加磁盘的同时进行删除操作，平衡时间会缩短很多，当遇到数据量几十 T 时均衡时间大概要好几天的时间
+
+--- 以下为本次迁移过程中盘符相对应命令，迁移中主要以数据库中
+--- 查到的磁盘号为准。即上节中所查的 GROUP_NUMBER 为 0 的磁盘。
+-- ARCH 盘
+ alter diskgroup ARCH  add disk '/dev/rhdisk103','/dev/rhdisk104','/dev/rhdisk105','/dev/rhdisk106' 
+ drop disk 'ARCH_0000','ARCH_0001','ARCH_0002','ARCH_0003','ARCH_0004','ARCH_0005','ARCH_0006','ARCH_0007','ARCH_0008','ARCH_0009','ARCH_0010';
+ ALTER DISKGROUP ARCH REBALANCE POWER 10; 
+ 
+ -- DATA盘
+ alter diskgroup DATA  add disk '/dev/rhdisk107','/dev/rhdisk108','/dev/rhdisk109','/dev/rhdisk110','/dev/rhdisk111','/dev/rhdisk112','/dev/rhdisk113',
+ '/dev/rhdisk114','/dev/rhdisk115','/dev/rhdisk116','/dev/rhdisk117','/dev/rhdisk118','/dev/rhdisk119','/dev/rhdisk120','/dev/rhdisk121','/dev/rhdisk122','/dev/rhdisk123' 
+ drop disk 'DATA_0000','DATA_0001','DATA_0011','DATA_0013','DATA_0014','DATA_0015','DATA_0016','DATA_0017','DATA_0018','DATA_0019';
+ ALTER DISKGROUP DATA REBALANCE POWER 10; 
+ 
+ --OCR 盘
+ alter diskgroup OCR  add disk '/dev/rhdisk100','/dev/rhdisk101','/dev/rhdisk102' drop disk 'OCR_0000','OCR_0001','OCR_0002';
 
 ```
 
@@ -8557,3 +9342,1173 @@ sysctl -p
 cat /proc/meminfo|grep -i huge
 ```
 
+
+## 9.集群故障排查
+### 9.1.日志位置
+```
+#GI
+/u01/app/grid/diag/crs/k8s-19rac01/crs/trace
+
+#GI asm
+/u01/app/grid/diag/asm/+asm/+ASM2
+
+#oracle
+/u01/app/oracle/diag/rdbms/xydb/xydb2/trace
+
+```
+
+
+
+#内存
+
+```bash
+# 检查共享内存设置
+ipcs -a
+```
+
+
+
+
+
+
+
+## 10.部署第三个节点
+
+### 10.1. 根据前面内容做好节点三的优化、grid/oracle配置、ssh互信等
+#如果已经升级openssh
+
+#节点三root下修改scp
+
+```
+# Rename the original scp
+mv /usr/bin/scp /usr/bin/scp.orig
+
+# Create a new file scp
+echo "/usr/bin/scp.orig -T \$*" > /usr/bin/scp
+
+# Make the file executable
+chmod a+rx /usr/bin/scp
+
+# 查看scp的内容
+cat /usr/bin/scp
+/usr/bin/scp.orig -T $*
+```
+
+#配置共享磁盘
+
+#为了保持节点间，对同一磁盘有一样的名称，需要使用一样的规则文件。需要在一个节点生成后，传输到其他节点。
+#节点1:
+
+```bash
+scp /etc/udev/rules.d/99-oracle-asmdevices.rules k8s-19rac03:/etc/udev/rules.d/99-oracle-asmdevices.rules
+```
+
+#启动udev
+
+```bash
+/usr/sbin/partprobe
+
+systemctl restart systemd-udev-trigger.service
+systemctl enable systemd-udev-trigger.service
+systemctl status systemd-udev-trigger.service
+```
+#检查asm磁盘
+```bash
+ll /dev|grep asm*
+
+#uuid变动的方式
+ll /dev/oracleasm/disks/
+```
+
+#配置互信
+#k8s-19rac03:
+
+```bash
+su - grid
+
+cd /home/grid
+mkdir ~/.ssh
+chmod 700 ~/.ssh
+
+ssh-keygen -t rsa
+
+ssh-keygen -t dsa
+
+su - oracle
+
+cd /home/grid
+mkdir ~/.ssh
+chmod 700 ~/.ssh
+
+ssh-keygen -t rsa
+
+ssh-keygen -t dsa
+```
+#k8s-19rac01:
+#grid/oracle
+
+```bash
+ssh k8s-19rac03 cat ~/.ssh/id_rsa.pub >>~/.ssh/authorized_keys
+
+ssh k8s-19rac03 cat ~/.ssh/id_dsa.pub >>~/.ssh/authorized_keys
+
+scp ~/.ssh/authorized_keys k8s-19rac02:~/.ssh/authorized_keys
+
+scp ~/.ssh/authorized_keys k8s-19rac03:~/.ssh/authorized_keys
+```
+#k8s-19rac01/k8s-19rac02/k8s-19rac03:
+#grid/oracle
+
+```bash
+ssh k8s-19rac01 date;ssh k8s-19rac02 date;ssh k8s-19rac03 date;ssh k8s-19rac01-prv date;ssh k8s-19rac02-prv date;ssh k8s-19rac03-prv date
+```
+
+
+
+#安装cvuqdisk包
+
+#k8s-19rac01
+
+```bash
+su - grid
+
+cd /u01/app/19.0.0/grid/cv/rpm
+scp cvuqdisk-1.0.10-1.rpm k8s-19rac03:/u01
+```
+
+#k8s-19rac03
+
+```bash
+su - root
+
+cd /u01
+rpm -ivh cvuqdisk-1.0.10-1.rpm
+```
+
+
+
+### 10.2. 安装前检查
+
+```bash
+#k8s-19rac01
+su - grid
+cd $ORACLE_HOME/
+./runcluvfy.sh comp peer -refnode k8s-19rac01 -n k8s-19rac03 -verbose | tee -a ~/addnode3ref.log
+```
+#看到结果
+```
+Verifying Peer Compatibility ...PASSED
+
+Verification of peer compatibility was successful. 
+```
+
+
+```bash
+#k8s-19rac01
+su - grid
+cd $ORACLE_HOME/
+ ./runcluvfy.sh  stage -pre nodeadd -n k8s-19rac03 -fixup -verbose | tee -a ~/addnode3.log
+```
+
+#看到以下有关共享磁盘的报错，可以忽略，继续安装
+```
+Verifying Device Checks for ASM ...
+  Verifying Package: cvuqdisk-1.0.10-1 ...PASSED
+  Verifying ASM device sharedness check ...
+    Verifying Shared Storage Accessibility:/dev/sda,/dev/sdb,/dev/sdc,/dev/sde,/dev/sdh,/dev/sdd,/dev/sdf,/dev/sdg ...FAILED (PRVG-0806)
+
+  Device                                Device Type             
+  ------------------------------------  ------------------------
+  /dev/sdh                              Disk                    
+  /dev/sdg                              Disk                    
+  /dev/sdf                              Disk                    
+  /dev/sdc                              Disk                    
+PRVG-10487 : Storage "/dev/sda" is not shared on all nodes.
+PRVG-10487 : Storage "/dev/sde" is not shared on all nodes.
+PRVG-10487 : Storage "/dev/sdd" is not shared on all nodes.
+PRVG-10487 : Storage "/dev/sdb" is not shared on all nodes.
+  Verifying ASM device sharedness check ...FAILED (PRVG-0806)
+
+
+Failures were encountered during execution of CVU verification request "stage -pre nodeadd".
+
+Verifying Device Checks for ASM ...FAILED
+  Verifying ASM device sharedness check ...FAILED
+    Verifying Shared Storage
+    Accessibility:/dev/sda,/dev/sdb,/dev/sdc,/dev/sde,/dev/sdh,/dev/sdd,/dev/sdf
+    ,/dev/sdg ...FAILED
+    PRVG-0806 : Signature for storage path "/dev/sda" is inconsistent across
+    the nodes.
+    Signature was found as "36ff204468043c909acc0afa4094745b6|" on nodes:
+    "k8s-19rac03".
+    Signature was found as "366960e55904821091c9025e2c7255c7f|" on nodes:
+    "k8s-19rac01".
+    PRVG-0806 : Signature for storage path "/dev/sdb" is inconsistent across
+    the nodes.
+    Signature was found as "36ff204468043c909acc0afa4094745b6|" on nodes:
+    "k8s-19rac01".
+    Signature was found as "366960e55904821091c9025e2c7255c7f|" on nodes:
+    "k8s-19rac03".
+    PRVG-0806 : Signature for storage path "/dev/sde" is inconsistent across
+    the nodes.
+    Signature was found as "3643a008cc04b8e0b8e109a319a118822|" on nodes:
+    "k8s-19rac03".
+    Signature was found as "368350b4ed049f10a9b108e152738bc3d|" on nodes:
+    "k8s-19rac01".
+    PRVG-0806 : Signature for storage path "/dev/sdd" is inconsistent across
+    the nodes.
+    Signature was found as "3643a008cc04b8e0b8e109a319a118822|" on nodes:
+    "k8s-19rac01".
+    Signature was found as "368350b4ed049f10a9b108e152738bc3d|" on nodes:
+    "k8s-19rac03".
+```
+
+
+
+#关于oracleasm报错也可以忽略
+
+```bash
+Pre-check for node addition was unsuccessful. 
+Checks did not pass for the following nodes:
+	k8s-19rac03,k8s-19rac01
+
+
+Failures were encountered during execution of CVU verification request "stage -pre nodeadd".
+
+Verifying Device Checks for ASM ...FAILED
+k8s-19rac01: PRVG-2043 : Command "/usr/sbin/oracleasm listdisks" failed on node
+             "k8s-19rac01" and produced the following output:
+             sh: /usr/sbin/oracleasm: No such file or directory
+
+k8s-19rac01: PRVG-10524 : failed to determine whether disk "DATA01" is managed
+             by ASMLib
+k8s-19rac01: PRVG-10524 : failed to determine whether disk "FRA01" is managed
+             by ASMLib
+k8s-19rac01: PRVG-10524 : failed to determine whether disk "OCR01" is managed
+             by ASMLib
+k8s-19rac01: PRVG-10524 : failed to determine whether disk "OCR02" is managed
+             by ASMLib
+k8s-19rac01: PRVG-10524 : failed to determine whether disk "OCR03" is managed
+             by ASMLib
+```
+
+
+
+
+
+### 10.3. 在节点一上开始添加节点三的GI
+
+#节点一k8s-19rac01上执行，xterm连接grid用户
+
+```bash
+cd $ORACLE_HOME
+./gridSetup.sh
+```
+#安装过程
+```
+Add more nodes to the cluster--->Add：k8s-19rac03/k8s-19rac03-vip--->SSH connectivity、Test--->Ignore all(Device Checks for ASM)--->submit--->k8s-19rac03root执行脚本：/u01/app/oraInventory/orainstRoot.sh /u01/app/19.0.0/grid/root.sh-->OK-->Close
+```
+
+#脚本结果
+```bash
+[root@k8s-19rac03 u01]# cd /u01/app/oraInventory/
+[root@k8s-19rac03 oraInventory]# ls
+backup  ContentsXML  logs  oraInst.loc  orainstRoot.sh
+[root@k8s-19rac03 oraInventory]# ./orainstRoot.sh 
+Changing permissions of /u01/app/oraInventory.
+Adding read,write permissions for group.
+Removing read,write,execute permissions for world.
+
+Changing groupname of /u01/app/oraInventory to oinstall.
+The execution of the script is complete.
+
+[root@k8s-19rac03 oraInventory]# cd /u01/app/19.0.0/grid/
+[root@k8s-19rac03 grid]# ./root.sh
+Performing root user operation.
+
+The following environment variables are set as:
+    ORACLE_OWNER= grid
+    ORACLE_HOME=  /u01/app/19.0.0/grid
+
+Enter the full pathname of the local bin directory: [/usr/local/bin]: 
+   Copying dbhome to /usr/local/bin ...
+   Copying oraenv to /usr/local/bin ...
+   Copying coraenv to /usr/local/bin ...
+
+
+Creating /etc/oratab file...
+Entries will be added to the /etc/oratab file as needed by
+Database Configuration Assistant when a database is created
+Finished running generic part of root script.
+Now product-specific root actions will be performed.
+Relinking oracle with rac_on option
+Using configuration parameter file: /u01/app/19.0.0/grid/crs/install/crsconfig_params
+The log of current session can be found at:
+  /u01/app/grid/crsdata/k8s-19rac03/crsconfig/rootcrs_k8s-19rac03_2022-12-06_06-34-48PM.log
+2022/12/06 18:34:52 CLSRSC-594: Executing installation step 1 of 19: 'SetupTFA'.
+2022/12/06 18:34:52 CLSRSC-594: Executing installation step 2 of 19: 'ValidateEnv'.
+2022/12/06 18:34:53 CLSRSC-363: User ignored prerequisites during installation
+2022/12/06 18:34:53 CLSRSC-594: Executing installation step 3 of 19: 'CheckFirstNode'.
+2022/12/06 18:34:53 CLSRSC-594: Executing installation step 4 of 19: 'GenSiteGUIDs'.
+2022/12/06 18:34:59 CLSRSC-594: Executing installation step 5 of 19: 'SetupOSD'.
+2022/12/06 18:34:59 CLSRSC-594: Executing installation step 6 of 19: 'CheckCRSConfig'.
+2022/12/06 18:35:00 CLSRSC-594: Executing installation step 7 of 19: 'SetupLocalGPNP'.
+2022/12/06 18:35:01 CLSRSC-594: Executing installation step 8 of 19: 'CreateRootCert'.
+2022/12/06 18:35:02 CLSRSC-594: Executing installation step 9 of 19: 'ConfigOLR'.
+2022/12/06 18:35:10 CLSRSC-594: Executing installation step 10 of 19: 'ConfigCHMOS'.
+2022/12/06 18:35:10 CLSRSC-594: Executing installation step 11 of 19: 'CreateOHASD'.
+2022/12/06 18:35:12 CLSRSC-594: Executing installation step 12 of 19: 'ConfigOHASD'.
+2022/12/06 18:35:12 CLSRSC-330: Adding Clusterware entries to file 'oracle-ohasd.service'
+2022/12/06 18:35:16 CLSRSC-4002: Successfully installed Oracle Trace File Analyzer (TFA) Collector.
+2022/12/06 18:35:31 CLSRSC-594: Executing installation step 13 of 19: 'InstallAFD'.
+2022/12/06 18:35:32 CLSRSC-594: Executing installation step 14 of 19: 'InstallACFS'.
+2022/12/06 18:35:34 CLSRSC-594: Executing installation step 15 of 19: 'InstallKA'.
+2022/12/06 18:35:35 CLSRSC-594: Executing installation step 16 of 19: 'InitConfig'.
+2022/12/06 18:35:42 CLSRSC-594: Executing installation step 17 of 19: 'StartCluster'.
+2022/12/06 18:37:48 CLSRSC-343: Successfully started Oracle Clusterware stack
+2022/12/06 18:37:48 CLSRSC-594: Executing installation step 18 of 19: 'ConfigNode'.
+clscfg: EXISTING configuration version 19 detected.
+Successfully accumulated necessary OCR keys.
+Creating OCR keys for user 'root', privgrp 'root'..
+Operation successful.
+2022/12/06 18:38:08 CLSRSC-594: Executing installation step 19 of 19: 'PostConfig'.
+2022/12/06 18:38:12 CLSRSC-325: Configure Oracle Grid Infrastructure for a Cluster ... succeeded
+```
+
+### 10.4. 在节点一上开始添加节点三的数据库
+#节点一k8s-19rac01上执行，xterm连接oracle用户
+```bash
+cd $ORACLE_HOME/addnode
+./addnode.sh "CLUSTER_NEW_NODES={k8s-19rac03}"
+```
+#安装过程
+```
+k8s-19rac03前打勾--->SH connectivity---Test--->submit
+--->k8s-19rac03root执行脚本：/u01/app/oracle/product/19.0.0/db_1/root.sh-->OK-->Close
+```
+
+#脚本结果
+
+```
+[root@k8s-19rac03 ~]# cd /u01/app/oracle/product/19.0.0/db_1/
+[root@k8s-19rac03 db_1]# ./root.sh
+Performing root user operation.
+
+The following environment variables are set as:
+    ORACLE_OWNER= oracle
+    ORACLE_HOME=  /u01/app/oracle/product/19.0.0/db_1
+
+Enter the full pathname of the local bin directory: [/usr/local/bin]: 
+The contents of "dbhome" have not changed. No need to overwrite.
+The contents of "oraenv" have not changed. No need to overwrite.
+The contents of "coraenv" have not changed. No need to overwrite.
+
+Entries will be added to the /etc/oratab file as needed by
+Database Configuration Assistant when a database is created
+Finished running generic part of root script.
+Now product-specific root actions will be performed.
+[root@k8s-19rac03 db_1]#
+```
+
+#此时检查集群状态
+
+```bash
+#3个scan IP时
+[grid@k8s-19rac01 ~]$ crsctl status resource -t
+--------------------------------------------------------------------------------
+Name           Target  State        Server                   State details       
+--------------------------------------------------------------------------------
+Local Resources
+--------------------------------------------------------------------------------
+ora.LISTENER.lsnr
+               ONLINE  ONLINE       k8s-19rac01                 STABLE
+               ONLINE  ONLINE       k8s-19rac02                 STABLE
+               ONLINE  ONLINE       k8s-19rac03                 STABLE
+ora.chad
+               ONLINE  ONLINE       k8s-19rac01                 STABLE
+               ONLINE  ONLINE       k8s-19rac02                 STABLE
+               ONLINE  ONLINE       k8s-19rac03                 STABLE
+ora.net1.network
+               ONLINE  ONLINE       k8s-19rac01                 STABLE
+               ONLINE  ONLINE       k8s-19rac02                 STABLE
+               ONLINE  ONLINE       k8s-19rac03                 STABLE
+ora.ons
+               ONLINE  ONLINE       k8s-19rac01                 STABLE
+               ONLINE  ONLINE       k8s-19rac02                 STABLE
+               ONLINE  ONLINE       k8s-19rac03                 STABLE
+--------------------------------------------------------------------------------
+Cluster Resources
+--------------------------------------------------------------------------------
+ora.ASMNET1LSNR_ASM.lsnr(ora.asmgroup)
+      1        ONLINE  ONLINE       k8s-19rac01                 STABLE
+      2        ONLINE  ONLINE       k8s-19rac02                 STABLE
+      3        ONLINE  ONLINE       k8s-19rac03                 STABLE
+ora.DATA.dg(ora.asmgroup)
+      1        ONLINE  ONLINE       k8s-19rac01                 STABLE
+      2        ONLINE  ONLINE       k8s-19rac02                 STABLE
+      3        ONLINE  ONLINE       k8s-19rac03                 STABLE
+ora.FRA.dg(ora.asmgroup)
+      1        ONLINE  ONLINE       k8s-19rac01                 STABLE
+      2        ONLINE  ONLINE       k8s-19rac02                 STABLE
+      3        ONLINE  ONLINE       k8s-19rac03                 STABLE
+ora.LISTENER_SCAN1.lsnr
+      1        ONLINE  ONLINE       k8s-19rac02                 STABLE
+ora.LISTENER_SCAN2.lsnr
+      1        ONLINE  ONLINE       k8s-19rac03                 STABLE
+ora.LISTENER_SCAN3.lsnr
+      1        ONLINE  ONLINE       k8s-19rac01                 STABLE
+ora.OCR.dg(ora.asmgroup)
+      1        ONLINE  ONLINE       k8s-19rac01                 STABLE
+      2        ONLINE  ONLINE       k8s-19rac02                 STABLE
+      3        ONLINE  ONLINE       k8s-19rac03                 STABLE
+ora.asm(ora.asmgroup)
+      1        ONLINE  ONLINE       k8s-19rac01                 Started,STABLE
+      2        ONLINE  ONLINE       k8s-19rac02                 Started,STABLE
+      3        ONLINE  ONLINE       k8s-19rac03                 Started,STABLE
+ora.asmnet1.asmnetwork(ora.asmgroup)
+      1        ONLINE  ONLINE       k8s-19rac01                 STABLE
+      2        ONLINE  ONLINE       k8s-19rac02                 STABLE
+      3        ONLINE  ONLINE       k8s-19rac03                 STABLE
+ora.cvu
+      1        ONLINE  ONLINE       k8s-19rac01                 STABLE
+ora.k8s-19rac01.vip
+      1        ONLINE  ONLINE       k8s-19rac01                 STABLE
+ora.k8s-19rac02.vip
+      1        ONLINE  ONLINE       k8s-19rac02                 STABLE
+ora.k8s-19rac03.vip
+      1        ONLINE  ONLINE       k8s-19rac03                 STABLE
+ora.qosmserver
+      1        ONLINE  ONLINE       k8s-19rac01                 STABLE
+ora.scan1.vip
+      1        ONLINE  ONLINE       k8s-19rac02                 STABLE
+ora.scan2.vip
+      1        ONLINE  ONLINE       k8s-19rac03                 STABLE
+ora.scan3.vip
+      1        ONLINE  ONLINE       k8s-19rac01                 STABLE
+ora.xydb.db
+      1        ONLINE  ONLINE       k8s-19rac01                 Open,HOME=/u01/app/o
+                                                             racle/product/19.0.0
+                                                             /db_1,STABLE
+      2        ONLINE  ONLINE       k8s-19rac02                 Open,HOME=/u01/app/o
+                                                             racle/product/19.0.0
+                                                             /db_1,STABLE
+ora.xydb.s_portal.svc
+      1        ONLINE  ONLINE       k8s-19rac01                 STABLE
+      2        ONLINE  ONLINE       k8s-19rac02                 STABLE
+--------------------------------------------------------------------------------
+
+
+#2025
+#单个scan IP时
+[grid@k8s-19rac01 ~]$ crsctl status resource -t
+--------------------------------------------------------------------------------
+Name           Target  State        Server                   State details       
+--------------------------------------------------------------------------------
+Local Resources
+--------------------------------------------------------------------------------
+ora.LISTENER.lsnr
+               ONLINE  ONLINE       k8s-19rac01              STABLE
+               ONLINE  ONLINE       k8s-19rac02              STABLE
+               ONLINE  ONLINE       k8s-19rac03              STABLE
+ora.chad
+               ONLINE  ONLINE       k8s-19rac01              STABLE
+               ONLINE  ONLINE       k8s-19rac02              STABLE
+               ONLINE  ONLINE       k8s-19rac03              STABLE
+ora.net1.network
+               ONLINE  ONLINE       k8s-19rac01              STABLE
+               ONLINE  ONLINE       k8s-19rac02              STABLE
+               ONLINE  ONLINE       k8s-19rac03              STABLE
+ora.ons
+               ONLINE  ONLINE       k8s-19rac01              STABLE
+               ONLINE  ONLINE       k8s-19rac02              STABLE
+               ONLINE  ONLINE       k8s-19rac03              STABLE
+--------------------------------------------------------------------------------
+Cluster Resources
+--------------------------------------------------------------------------------
+ora.ASMNET1LSNR_ASM.lsnr(ora.asmgroup)
+      1        ONLINE  ONLINE       k8s-19rac01              STABLE
+      2        ONLINE  ONLINE       k8s-19rac02              STABLE
+      3        ONLINE  ONLINE       k8s-19rac03              STABLE
+ora.DATA.dg(ora.asmgroup)
+      1        ONLINE  ONLINE       k8s-19rac01              STABLE
+      2        ONLINE  ONLINE       k8s-19rac02              STABLE
+      3        ONLINE  ONLINE       k8s-19rac03              STABLE
+ora.FRA.dg(ora.asmgroup)
+      1        ONLINE  ONLINE       k8s-19rac01              STABLE
+      2        ONLINE  ONLINE       k8s-19rac02              STABLE
+      3        ONLINE  ONLINE       k8s-19rac03              STABLE
+ora.LISTENER_SCAN1.lsnr
+      1        ONLINE  ONLINE       k8s-19rac01              STABLE
+ora.OCR.dg(ora.asmgroup)
+      1        ONLINE  ONLINE       k8s-19rac01              STABLE
+      2        ONLINE  ONLINE       k8s-19rac02              STABLE
+      3        ONLINE  ONLINE       k8s-19rac03              STABLE
+ora.asm(ora.asmgroup)
+      1        ONLINE  ONLINE       k8s-19rac01              Started,STABLE
+      2        ONLINE  ONLINE       k8s-19rac02              Started,STABLE
+      3        ONLINE  ONLINE       k8s-19rac03              Started,STABLE
+ora.asmnet1.asmnetwork(ora.asmgroup)
+      1        ONLINE  ONLINE       k8s-19rac01              STABLE
+      2        ONLINE  ONLINE       k8s-19rac02              STABLE
+      3        ONLINE  ONLINE       k8s-19rac03              STABLE
+ora.cvu
+      1        ONLINE  ONLINE       k8s-19rac01              STABLE
+ora.k8s-19rac01.vip
+      1        ONLINE  ONLINE       k8s-19rac01              STABLE
+ora.k8s-19rac02.vip
+      1        ONLINE  ONLINE       k8s-19rac02              STABLE
+ora.k8s-19rac03.vip
+      1        ONLINE  ONLINE       k8s-19rac03              STABLE
+ora.qosmserver
+      1        ONLINE  ONLINE       k8s-19rac01              STABLE
+ora.scan1.vip
+      1        ONLINE  ONLINE       k8s-19rac01              STABLE
+ora.xydb.db
+      1        ONLINE  ONLINE       k8s-19rac01              Open,HOME=/u01/app/o
+                                                             racle/product/19.0.0
+                                                             /db_1,STABLE
+      2        ONLINE  ONLINE       k8s-19rac02              Open,HOME=/u01/app/o
+                                                             racle/product/19.0.0
+                                                             /db_1,STABLE
+ora.xydb.s_stuwork.svc
+      1        ONLINE  ONLINE       k8s-19rac01              STABLE
+      2        ONLINE  ONLINE       k8s-19rac02              STABLE
+--------------------------------------------------------------------------------
+
+[grid@k8s-19rac01 ~]$ 
+```
+
+
+
+###  10.5. 在节点一上开始安装节点三的instance
+
+#xterm连接k8s-19rac01的oracle账户
+```bash
+dbca
+```
+#安装过程
+```
+Oracle RAC databas instnce management--->Add an instance--->勾选xydb/xydb1/ADMIN_MANAGED，下面填写sys/Oracle2023#Sys--->Instance name：xydb3；Node name：k8s-19rac03；下面是xydb1/xydb2/active--->Finish--->开始安装--->Close
+```
+#此时集群检查
+```bash
+#3个scan IP时
+[grid@k8s-19rac01 ~]$ crsctl status resource -t
+--------------------------------------------------------------------------------
+Name           Target  State        Server                   State details       
+--------------------------------------------------------------------------------
+Local Resources
+--------------------------------------------------------------------------------
+ora.LISTENER.lsnr
+               ONLINE  ONLINE       k8s-19rac01                 STABLE
+               ONLINE  ONLINE       k8s-19rac02                 STABLE
+               ONLINE  ONLINE       k8s-19rac03                 STABLE
+ora.chad
+               ONLINE  ONLINE       k8s-19rac01                 STABLE
+               ONLINE  ONLINE       k8s-19rac02                 STABLE
+               ONLINE  ONLINE       k8s-19rac03                 STABLE
+ora.net1.network
+               ONLINE  ONLINE       k8s-19rac01                 STABLE
+               ONLINE  ONLINE       k8s-19rac02                 STABLE
+               ONLINE  ONLINE       k8s-19rac03                 STABLE
+ora.ons
+               ONLINE  ONLINE       k8s-19rac01                 STABLE
+               ONLINE  ONLINE       k8s-19rac02                 STABLE
+               ONLINE  ONLINE       k8s-19rac03                 STABLE
+--------------------------------------------------------------------------------
+Cluster Resources
+--------------------------------------------------------------------------------
+ora.ASMNET1LSNR_ASM.lsnr(ora.asmgroup)
+      1        ONLINE  ONLINE       k8s-19rac01                 STABLE
+      2        ONLINE  ONLINE       k8s-19rac02                 STABLE
+      3        ONLINE  ONLINE       k8s-19rac03                 STABLE
+ora.DATA.dg(ora.asmgroup)
+      1        ONLINE  ONLINE       k8s-19rac01                 STABLE
+      2        ONLINE  ONLINE       k8s-19rac02                 STABLE
+      3        ONLINE  ONLINE       k8s-19rac03                 STABLE
+ora.FRA.dg(ora.asmgroup)
+      1        ONLINE  ONLINE       k8s-19rac01                 STABLE
+      2        ONLINE  ONLINE       k8s-19rac02                 STABLE
+      3        ONLINE  ONLINE       k8s-19rac03                 STABLE
+ora.LISTENER_SCAN1.lsnr
+      1        ONLINE  ONLINE       k8s-19rac02                 STABLE
+ora.LISTENER_SCAN2.lsnr
+      1        ONLINE  ONLINE       k8s-19rac03                 STABLE
+ora.LISTENER_SCAN3.lsnr
+      1        ONLINE  ONLINE       k8s-19rac01                 STABLE
+ora.OCR.dg(ora.asmgroup)
+      1        ONLINE  ONLINE       k8s-19rac01                 STABLE
+      2        ONLINE  ONLINE       k8s-19rac02                 STABLE
+      3        ONLINE  ONLINE       k8s-19rac03                 STABLE
+ora.asm(ora.asmgroup)
+      1        ONLINE  ONLINE       k8s-19rac01                 Started,STABLE
+      2        ONLINE  ONLINE       k8s-19rac02                 Started,STABLE
+      3        ONLINE  ONLINE       k8s-19rac03                 Started,STABLE
+ora.asmnet1.asmnetwork(ora.asmgroup)
+      1        ONLINE  ONLINE       k8s-19rac01                 STABLE
+      2        ONLINE  ONLINE       k8s-19rac02                 STABLE
+      3        ONLINE  ONLINE       k8s-19rac03                 STABLE
+ora.cvu
+      1        ONLINE  ONLINE       k8s-19rac01                 STABLE
+ora.k8s-19rac01.vip
+      1        ONLINE  ONLINE       k8s-19rac01                 STABLE
+ora.k8s-19rac02.vip
+      1        ONLINE  ONLINE       k8s-19rac02                 STABLE
+ora.k8s-19rac03.vip
+      1        ONLINE  ONLINE       k8s-19rac03                 STABLE
+ora.qosmserver
+      1        ONLINE  ONLINE       k8s-19rac01                 STABLE
+ora.scan1.vip
+      1        ONLINE  ONLINE       k8s-19rac02                 STABLE
+ora.scan2.vip
+      1        ONLINE  ONLINE       k8s-19rac03                 STABLE
+ora.scan3.vip
+      1        ONLINE  ONLINE       k8s-19rac01                 STABLE
+ora.xydb.db
+      1        ONLINE  ONLINE       k8s-19rac01                 Open,HOME=/u01/app/o
+                                                             racle/product/19.0.0
+                                                             /db_1,STABLE
+      2        ONLINE  ONLINE       k8s-19rac02                 Open,HOME=/u01/app/o
+                                                             racle/product/19.0.0
+                                                             /db_1,STABLE
+      3        ONLINE  ONLINE       k8s-19rac03                 Open,HOME=/u01/app/o
+                                                             racle/product/19.0.0
+                                                             /db_1,STABLE
+ora.xydb.s_portal.svc
+      1        ONLINE  ONLINE       k8s-19rac01                 STABLE
+      2        ONLINE  ONLINE       k8s-19rac02                 STABLE
+--------------------------------------------------------------------------------
+
+
+
+#2025
+#单个scan IP时
+[grid@k8s-19rac01 ~]$ crsctl status resource -t
+--------------------------------------------------------------------------------
+Name           Target  State        Server                   State details       
+--------------------------------------------------------------------------------
+Local Resources
+--------------------------------------------------------------------------------
+ora.LISTENER.lsnr
+               ONLINE  ONLINE       k8s-19rac01              STABLE
+               ONLINE  ONLINE       k8s-19rac02              STABLE
+               ONLINE  ONLINE       k8s-19rac03              STABLE
+ora.chad
+               ONLINE  ONLINE       k8s-19rac01              STABLE
+               ONLINE  ONLINE       k8s-19rac02              STABLE
+               ONLINE  ONLINE       k8s-19rac03              STABLE
+ora.net1.network
+               ONLINE  ONLINE       k8s-19rac01              STABLE
+               ONLINE  ONLINE       k8s-19rac02              STABLE
+               ONLINE  ONLINE       k8s-19rac03              STABLE
+ora.ons
+               ONLINE  ONLINE       k8s-19rac01              STABLE
+               ONLINE  ONLINE       k8s-19rac02              STABLE
+               ONLINE  ONLINE       k8s-19rac03              STABLE
+--------------------------------------------------------------------------------
+Cluster Resources
+--------------------------------------------------------------------------------
+ora.ASMNET1LSNR_ASM.lsnr(ora.asmgroup)
+      1        ONLINE  ONLINE       k8s-19rac01              STABLE
+      2        ONLINE  ONLINE       k8s-19rac02              STABLE
+      3        ONLINE  ONLINE       k8s-19rac03              STABLE
+ora.DATA.dg(ora.asmgroup)
+      1        ONLINE  ONLINE       k8s-19rac01              STABLE
+      2        ONLINE  ONLINE       k8s-19rac02              STABLE
+      3        ONLINE  ONLINE       k8s-19rac03              STABLE
+ora.FRA.dg(ora.asmgroup)
+      1        ONLINE  ONLINE       k8s-19rac01              STABLE
+      2        ONLINE  ONLINE       k8s-19rac02              STABLE
+      3        ONLINE  ONLINE       k8s-19rac03              STABLE
+ora.LISTENER_SCAN1.lsnr
+      1        ONLINE  ONLINE       k8s-19rac01              STABLE
+ora.OCR.dg(ora.asmgroup)
+      1        ONLINE  ONLINE       k8s-19rac01              STABLE
+      2        ONLINE  ONLINE       k8s-19rac02              STABLE
+      3        ONLINE  ONLINE       k8s-19rac03              STABLE
+ora.asm(ora.asmgroup)
+      1        ONLINE  ONLINE       k8s-19rac01              Started,STABLE
+      2        ONLINE  ONLINE       k8s-19rac02              Started,STABLE
+      3        ONLINE  ONLINE       k8s-19rac03              Started,STABLE
+ora.asmnet1.asmnetwork(ora.asmgroup)
+      1        ONLINE  ONLINE       k8s-19rac01              STABLE
+      2        ONLINE  ONLINE       k8s-19rac02              STABLE
+      3        ONLINE  ONLINE       k8s-19rac03              STABLE
+ora.cvu
+      1        ONLINE  ONLINE       k8s-19rac01              STABLE
+ora.k8s-19rac01.vip
+      1        ONLINE  ONLINE       k8s-19rac01              STABLE
+ora.k8s-19rac02.vip
+      1        ONLINE  ONLINE       k8s-19rac02              STABLE
+ora.k8s-19rac03.vip
+      1        ONLINE  ONLINE       k8s-19rac03              STABLE
+ora.qosmserver
+      1        ONLINE  ONLINE       k8s-19rac01              STABLE
+ora.scan1.vip
+      1        ONLINE  ONLINE       k8s-19rac01              STABLE
+ora.xydb.db
+      1        ONLINE  ONLINE       k8s-19rac01              Open,HOME=/u01/app/o
+                                                             racle/product/19.0.0
+                                                             /db_1,STABLE
+      2        ONLINE  ONLINE       k8s-19rac02              Open,HOME=/u01/app/o
+                                                             racle/product/19.0.0
+                                                             /db_1,STABLE
+      3        ONLINE  ONLINE       k8s-19rac03              Open,HOME=/u01/app/o
+                                                             racle/product/19.0.0
+                                                             /db_1,STABLE
+ora.xydb.s_stuwork.svc
+      1        ONLINE  ONLINE       k8s-19rac01              STABLE
+      2        ONLINE  ONLINE       k8s-19rac02              STABLE
+--------------------------------------------------------------------------------
+[grid@k8s-19rac01 ~]$ 
+
+```
+
+### 10.6修改原来的service
+
+#查看当前服务
+
+```bash
+[oracle@k8s-19rac01 ~]$ srvctl status instance -d xydb -node k8s-19rac01,k8s-19rac02,k8s-19rac03
+Instance xydb1 is running on node k8s-19rac01
+Instance xydb2 is running on node k8s-19rac02
+Instance xydb3 is running on node k8s-19rac03
+[oracle@k8s-19rac01 ~]$ srvctl status service -d xydb
+Service s_stuwork is running on instance(s) xydb1,xydb2
+[oracle@k8s-19rac01 ~]$ srvctl modify service -d xydb -s s_stuwork -oldinst xydb1,xydb2 -newinst xydb3
+PRKO-2101 : Failed to find database instances xydb1,xydb2
+[oracle@k8s-19rac01 ~]$ srvctl config service -d xydb -s s_stuwork
+Service name: s_stuwork
+Server pool: 
+Cardinality: 2
+Service role: PRIMARY
+Management policy: AUTOMATIC
+DTP transaction: false
+AQ HA notifications: false
+Global: false
+Commit Outcome: false
+Failover type: SELECT
+Failover method: BASIC
+Failover retries: 180
+Failover delay: 5
+Failover restore: NONE
+Connection Load Balancing Goal: LONG
+Runtime Load Balancing Goal: NONE
+TAF policy specification: BASIC
+Edition: 
+Pluggable database name: stuwork
+Hub service: 
+Maximum lag time: ANY
+SQL Translation Profile: 
+Retention: 86400 seconds
+Replay Initiation Time: 300 seconds
+Drain timeout: 
+Stop option: 
+Session State Consistency: DYNAMIC
+GSM Flags: 0
+Service is enabled
+Preferred instances: xydb1,xydb2
+Available instances: 
+CSS critical: no
+Service uses Java: false
+[oracle@k8s-19rac01 ~]$ 
+```
+
+
+
+#使用modifyconfig参数
+
+```bash
+#使用-modifyconfig参数来一次性更新首选和可用实例列表
+srvctl modify service -d xydb -s s_stuwork -modifyconfig -preferred "xydb1,xydb2,xydb3"
+
+#将xydb3设置为可用实例而不是首选实例
+srvctl modify service -d xydb -s s_stuwork -modifyconfig -preferred "xydb1,xydb2" -available "xydb3"
+
+#验证服务
+srvctl config service -d xydb -s s_stuwork
+srvctl status service -d xydb -s s_stuwork
+
+#srvctl start service -d xydb -s s_stuwork
+```
+
+#logs
+
+```bash
+[oracle@k8s-19rac01 ~]$ srvctl modify service -d xydb -s s_stuwork -modifyconfig -preferred "xydb1,xydb2" -available "xydb3"
+[oracle@k8s-19rac01 ~]$ srvctl config service -d xydb -s s_stuwork
+Service name: s_stuwork
+Server pool: 
+Cardinality: 2
+Service role: PRIMARY
+Management policy: AUTOMATIC
+DTP transaction: false
+AQ HA notifications: false
+Global: false
+Commit Outcome: false
+Failover type: SELECT
+Failover method: BASIC
+Failover retries: 180
+Failover delay: 5
+Failover restore: NONE
+Connection Load Balancing Goal: LONG
+Runtime Load Balancing Goal: NONE
+TAF policy specification: BASIC
+Edition: 
+Pluggable database name: stuwork
+Hub service: 
+Maximum lag time: ANY
+SQL Translation Profile: 
+Retention: 86400 seconds
+Replay Initiation Time: 300 seconds
+Drain timeout: 
+Stop option: 
+Session State Consistency: DYNAMIC
+GSM Flags: 0
+Service is enabled
+Preferred instances: xydb1,xydb2
+Available instances: xydb3
+CSS critical: no
+Service uses Java: false
+
+
+[oracle@k8s-19rac01 ~]$ srvctl modify service -d xydb -s s_stuwork -modifyconfig -preferred "xydb1,xydb2,xydb3";
+[oracle@k8s-19rac01 ~]$ srvctl config service -d xydb -s s_stuwork
+Service name: s_stuwork
+Server pool: 
+Cardinality: 3
+Service role: PRIMARY
+Management policy: AUTOMATIC
+DTP transaction: false
+AQ HA notifications: false
+Global: false
+Commit Outcome: false
+Failover type: SELECT
+Failover method: BASIC
+Failover retries: 180
+Failover delay: 5
+Failover restore: NONE
+Connection Load Balancing Goal: LONG
+Runtime Load Balancing Goal: NONE
+TAF policy specification: BASIC
+Edition: 
+Pluggable database name: stuwork
+Hub service: 
+Maximum lag time: ANY
+SQL Translation Profile: 
+Retention: 86400 seconds
+Replay Initiation Time: 300 seconds
+Drain timeout: 
+Stop option: 
+Session State Consistency: DYNAMIC
+GSM Flags: 0
+Service is enabled
+Preferred instances: xydb1,xydb2,xydb3
+Available instances: 
+CSS critical: no
+Service uses Java: false
+
+```
+
+
+
+#删除后、重建，影响当前业务
+
+```bash
+#因为该命令的 -oldinst/-newinst 参数主要用于迁移单个实例（如将 xydb1 迁移到 xydb3），而无法批量替换多个旧实例
+[oracle@k8s-19rac01 ~]$ srvctl modify service -d xydb -s s_stuwork -oldinst xydb1,xydb2 -newinst xydb3
+PRKO-2101 : Failed to find database instances xydb1,xydb2
+
+[oracle@k8s-19rac01 ~]$ srvctl modify service -d xydb -s s_stuwork -oldinst xydb1 -newinst xydb3
+[oracle@k8s-19rac01 ~]$ srvctl config service -d xydb -s s_stuwork
+Service name: s_stuwork
+Server pool: 
+Cardinality: 2
+Service role: PRIMARY
+Management policy: AUTOMATIC
+DTP transaction: false
+AQ HA notifications: false
+Global: false
+Commit Outcome: false
+Failover type: SELECT
+Failover method: BASIC
+Failover retries: 180
+Failover delay: 5
+Failover restore: NONE
+Connection Load Balancing Goal: LONG
+Runtime Load Balancing Goal: NONE
+TAF policy specification: BASIC
+Edition: 
+Pluggable database name: stuwork
+Hub service: 
+Maximum lag time: ANY
+SQL Translation Profile: 
+Retention: 86400 seconds
+Replay Initiation Time: 300 seconds
+Drain timeout: 
+Stop option: 
+Session State Consistency: DYNAMIC
+GSM Flags: 0
+Service is enabled
+Preferred instances: xydb3,xydb2
+Available instances: 
+CSS critical: no
+Service uses Java: false
+[oracle@k8s-19rac01 ~]$ 
+
+
+#将新实例添加为可用实例
+srvctl modify service -d xydb -s s_stuwork -available "xydb3"
+
+#先添加为可用实例，然后将其转换为首选实例
+srvctl modify service -d xydb -s s_stuwork -available "xydb3" -toprefer
+
+[oracle@k8s-19rac01 ~]$ srvctl modify service -d xydb -s s_stuwork -available "xydb3"
+PRKO-3144 : Missing option '-modifyconfig' or '-preferred' was required by supplying '-available'.
+[oracle@k8s-19rac01 ~]$ srvctl modify service -d xydb -s s_stuwork -available "xydb1" -toprefer
+PRKO-3144 : Missing option '-modifyconfig' or '-preferred' was required by supplying '-available'.
+
+
+
+[oracle@k8s-19rac01 ~]$ lsnrctl status
+
+LSNRCTL for Linux: Version 19.0.0.0.0 - Production on 06-DEC-2022 21:37:08
+
+Copyright (c) 1991, 2019, Oracle.  All rights reserved.
+
+Connecting to (ADDRESS=(PROTOCOL=tcp)(HOST=)(PORT=1521))
+STATUS of the LISTENER
+------------------------
+Alias                     LISTENER
+Version                   TNSLSNR for Linux: Version 19.0.0.0.0 - Production
+Start Date                05-DEC-2022 20:58:22
+Uptime                    1 days 0 hr. 38 min. 46 sec
+Trace Level               off
+Security                  ON: Local OS Authentication
+SNMP                      OFF
+Listener Parameter File   /u01/app/19.0.0/grid/network/admin/listener.ora
+Listener Log File         /u01/app/grid/diag/tnslsnr/k8s-19rac01/listener/alert/log.xml
+Listening Endpoints Summary...
+  (DESCRIPTION=(ADDRESS=(PROTOCOL=ipc)(KEY=LISTENER)))
+  (DESCRIPTION=(ADDRESS=(PROTOCOL=tcp)(HOST=172.16.134.1)(PORT=1521)))
+  (DESCRIPTION=(ADDRESS=(PROTOCOL=tcp)(HOST=172.16.134.2)(PORT=1521)))
+Services Summary...
+Service "+ASM" has 1 instance(s).
+  Instance "+ASM1", status READY, has 1 handler(s) for this service...
+Service "+ASM_DATA" has 1 instance(s).
+  Instance "+ASM1", status READY, has 1 handler(s) for this service...
+Service "+ASM_FRA" has 1 instance(s).
+  Instance "+ASM1", status READY, has 1 handler(s) for this service...
+Service "+ASM_OCR" has 1 instance(s).
+  Instance "+ASM1", status READY, has 1 handler(s) for this service...
+Service "86b637b62fdf7a65e053f706e80a27ca" has 1 instance(s).
+  Instance "xydb1", status READY, has 1 handler(s) for this service...
+Service "ef14db5ce59d2d91e053018610ac1806" has 1 instance(s).
+  Instance "xydb1", status READY, has 1 handler(s) for this service...
+Service "portal" has 1 instance(s).
+  Instance "xydb1", status READY, has 1 handler(s) for this service...
+Service "s_portal" has 1 instance(s).
+  Instance "xydb1", status READY, has 1 handler(s) for this service...
+Service "xydb" has 1 instance(s).
+  Instance "xydb1", status READY, has 1 handler(s) for this service...
+Service "xydbXDB" has 1 instance(s).
+  Instance "xydb1", status READY, has 1 handler(s) for this service...
+The command completed successfully
+[oracle@k8s-19rac01 ~]$ srvctl remove service -d xydb -s s_portal
+PRCR-1025 : Resource ora.xydb.s_portal.svc is still running
+[oracle@k8s-19rac01 ~]$ srvctl stop service -d xydb -s s_portal
+[oracle@k8s-19rac01 ~]$ srvctl remove service -d xydb -s s_portal
+[oracle@k8s-19rac01 ~]$ lsnrctl status
+
+LSNRCTL for Linux: Version 19.0.0.0.0 - Production on 06-DEC-2022 21:37:51
+
+Copyright (c) 1991, 2019, Oracle.  All rights reserved.
+
+Connecting to (ADDRESS=(PROTOCOL=tcp)(HOST=)(PORT=1521))
+STATUS of the LISTENER
+------------------------
+Alias                     LISTENER
+Version                   TNSLSNR for Linux: Version 19.0.0.0.0 - Production
+Start Date                05-DEC-2022 20:58:22
+Uptime                    1 days 0 hr. 39 min. 28 sec
+Trace Level               off
+Security                  ON: Local OS Authentication
+SNMP                      OFF
+Listener Parameter File   /u01/app/19.0.0/grid/network/admin/listener.ora
+Listener Log File         /u01/app/grid/diag/tnslsnr/k8s-19rac01/listener/alert/log.xml
+Listening Endpoints Summary...
+  (DESCRIPTION=(ADDRESS=(PROTOCOL=ipc)(KEY=LISTENER)))
+  (DESCRIPTION=(ADDRESS=(PROTOCOL=tcp)(HOST=172.16.134.1)(PORT=1521)))
+  (DESCRIPTION=(ADDRESS=(PROTOCOL=tcp)(HOST=172.16.134.2)(PORT=1521)))
+Services Summary...
+Service "+ASM" has 1 instance(s).
+  Instance "+ASM1", status READY, has 1 handler(s) for this service...
+Service "+ASM_DATA" has 1 instance(s).
+  Instance "+ASM1", status READY, has 1 handler(s) for this service...
+Service "+ASM_FRA" has 1 instance(s).
+  Instance "+ASM1", status READY, has 1 handler(s) for this service...
+Service "+ASM_OCR" has 1 instance(s).
+  Instance "+ASM1", status READY, has 1 handler(s) for this service...
+Service "86b637b62fdf7a65e053f706e80a27ca" has 1 instance(s).
+  Instance "xydb1", status READY, has 1 handler(s) for this service...
+Service "ef14db5ce59d2d91e053018610ac1806" has 1 instance(s).
+  Instance "xydb1", status READY, has 1 handler(s) for this service...
+Service "portal" has 1 instance(s).
+  Instance "xydb1", status READY, has 1 handler(s) for this service...
+Service "xydb" has 1 instance(s).
+  Instance "xydb1", status READY, has 1 handler(s) for this service...
+Service "xydbXDB" has 1 instance(s).
+  Instance "xydb1", status READY, has 1 handler(s) for this service...
+The command completed successfully
+[oracle@k8s-19rac01 ~]$ srvctl add service -help
+
+Adds a service configuration to the Oracle Clusterware.
+
+Usage: srvctl add service -db <db_unique_name> -service "<service_name_list>" 
+       {-preferred "<preferred_list>" [-available "<available_list>"] [-tafpolicy {BASIC | NONE | PRECONNECT}] | -serverpool <pool_name> [-cardinality {UNIFORM | SINGLETON}] } 
+       [-netnum <network_number>] [-role "[PRIMARY][,PHYSICAL_STANDBY][,LOGICAL_STANDBY][,SNAPSHOT_STANDBY]"] [-policy {AUTOMATIC | MANUAL}] 
+       [-notification {TRUE | FALSE}] [-dtp {TRUE | FALSE}] [-clbgoal {SHORT | LONG}] [-rlbgoal {NONE | SERVICE_TIME | THROUGHPUT}] 
+       [-failovertype {NONE | SESSION | SELECT | TRANSACTION | AUTO}] [-failovermethod {NONE | BASIC}] [-failoverretry <failover_retries>] [-failoverdelay <failover_delay>] [-failover_restore {NONE | LEVEL1}] [-failback {YES | NO}] 
+       [-edition <edition>] [-pdb <pluggable_database>] [-global {TRUE | FALSE}] [-maxlag <max_lag_time>] [-sql_translation_profile <sql_translation_profile>] 
+       [-commit_outcome {TRUE | FALSE}] [-retention <retention>] [-replay_init_time <replay_initiation_time>] [-session_state {STATIC | DYNAMIC}] 
+       [-pqservice <pq_service>] [-pqpool "<pq_pool_list>"] [-gsmflags <gsm_flags>] [-tablefamilyid <table_family_id>] [-drain_timeout <drain_timeout>] [-stopoption <stop_option>] [-css_critical {YES | NO}] [-rfpool <pool_name> -hubsvc <hub_service>]
+       [-force] [-eval] [-verbose]
+    -db <db_unique_name>           Unique name for the database
+    -service "<serv,...>"          Comma separated service names
+    -preferred "<preferred_list>"  Comma separated list of preferred instances
+    -available "<available_list>"  Comma separated list of available instances
+    -serverpool <pool_name>        Server pool name
+    -cardinality                   (UNIFORM | SINGLETON) Service runs on every active server in the server pool hosting this service (UNIFORM) or just one server (SINGLETON)
+    -netnum  <network_number>      Network number (default number is 1)
+    -tafpolicy                     (NONE | BASIC | PRECONNECT)        TAF policy specification
+    -role <role>                   Role of the service (primary, physical_standby, logical_standby, snapshot_standby)
+    -policy <policy>               Management policy for the service (AUTOMATIC or MANUAL)
+    -failovertype                  (NONE | SESSION | SELECT | TRANSACTION | AUTO)      Failover type
+    -failovermethod                (NONE | BASIC)     Failover method
+    -failoverdelay <failover_delay> Failover delay (in seconds)
+    -failoverretry <failover_retries> Number of attempts to retry connection
+    -failover_restore <failover_restore>  Option to restore initial environment for Application Continuity and TAF (NONE or LEVEL1)
+    -failback                      (YES|NO) Failback to a preferred instance for a administrator-managed database 
+    -edition <edition>             Edition (or "" for empty edition value)
+    -pdb <pluggable_database>      Pluggable database name
+    -maxlag <max_lag_time>         Maximum replication lag time in seconds (Non-negative integer, default value is 'ANY')
+    -clbgoal                       (SHORT | LONG)                   Connection Load Balancing Goal. Default is LONG.
+    -rlbgoal                       (SERVICE_TIME | THROUGHPUT | NONE)     Runtime Load Balancing Goal
+    -dtp                           (TRUE | FALSE)  Distributed Transaction Processing
+    -notification                  (TRUE | FALSE)  Enable Fast Application Notification (FAN) for OCI connections
+    -global <global>               Global attribute (TRUE or FALSE)
+    -sql_translation_profile <sql_translation_profile> Specify a database object for SQL translation profile
+    -commit_outcome                (TRUE | FALSE)          Commit outcome
+    -retention <retention>         Specifies the number of seconds the commit outcome is retained
+    -replay_init_time <replay_initiation_time> Seconds after which replay will not be initiated
+    -session_state <session_state> Session state consistency (STATIC or DYNAMIC)
+    -pqservice <pq_service>        Parallel query service name
+    -pqpool "<pq_pool_list>"       Comma separated list of parallel query server pool names
+    -gsmflags <gsm_flags>          Set locality and region failover values
+    -tablefamilyid <table_family_id> Set table family ID for a given service
+    -drain_timeout <drain_timeout> Service drain timeout specified in seconds
+    -stopoption <stop_options>     Options to stop service (e.g. TRANSACTIONAL or IMMEDIATE)
+    -css_critical {YES | NO}          Define whether the database or service is CSS critical
+    -rfpool <pool_name>            Reader farm server pool name
+    -hubsvc <hub_service>            Hub service used by Reader Farm service
+    -eval                          Evaluates the effects of event without making any changes to the system
+Usage: srvctl add service -db <db_unique_name> -service "<service_name_list>" -update {-preferred "<new_pref_inst>" | -available "<new_avail_inst>"} [-force] [-verbose]
+    -db <db_unique_name>           Unique name for the database
+    -service "<serv,...>"          Comma separated service names
+    -update                        Add a new instance to service configuration
+    -preferred <new_pref_inst>     Name of new preferred instance
+    -available <new_avail_inst>    Name of new available instance
+    -force                         Force the add operation even though a listener is not configured for a network
+    -verbose                       Verbose output
+    -help                          Print usage
+    
+#oracle11gRAC
+
+[root@stuora1 ~]# su - oracle
+Last login: Sun Oct  9 14:41:38 CST 2022 on pts/0
+[oracle@stuora1 ~]$ srvctl add service -help
+
+Adds a service configuration to the Oracle Clusterware.
+
+Usage: srvctl add service -d <db_unique_name> -s <service_name> {-r "<preferred_list>" [-a "<available_list>"] [-P {BASIC | NONE | PRECONNECT}] | -g <pool_name> [-c {UNIFORM | SINGLETON}] } [-k   <net_num>] [-l [PRIMARY][,PHYSICAL_STANDBY][,LOGICAL_STANDBY][,SNAPSHOT_STANDBY]] [-y {AUTOMATIC | MANUAL}] [-q {TRUE|FALSE}] [-x {TRUE|FALSE}] [-j {SHORT|LONG}] [-B {NONE|SERVICE_TIME|THROUGHPUT}] [-e {NONE|SESSION|SELECT}] [-m {NONE|BASIC}] [-z <failover_retries>] [-w <failover_delay>] [-t <edition>] [-f]
+    -d <db_unique_name>      Unique name for the database
+    -s <service>             Service name
+    -r "<preferred_list>"    Comma separated list of preferred instances
+    -a "<available_list>"    Comma separated list of available instances
+    -g <pool_name>           Server pool name
+    -c {UNIFORM | SINGLETON} Service runs on every active server in the server pool hosting this service (UNIFORM) or just one server (SINGLETON)
+    -k <net_num>             network number (default number is 1)
+    -P {NONE | BASIC | PRECONNECT}        TAF policy specification
+    -l <role>                Role of the service (primary, physical_standby, logical_standby, snapshot_standby)
+    -y <policy>              Management policy for the service (AUTOMATIC or MANUAL)
+    -e <Failover type>       Failover type (NONE, SESSION, or SELECT)
+    -m <Failover method>     Failover method (NONE or BASIC)
+    -w <integer>             Failover delay
+    -z <integer>             Failover retries
+    -t <edition>             Edition (or "" for empty edition value)
+    -j <clb_goal>  Connection Load Balancing Goal (SHORT or LONG). Default is LONG.
+    -B <Runtime Load Balancing Goal>     Runtime Load Balancing Goal (SERVICE_TIME, THROUGHPUT, or NONE)
+    -x <Distributed Transaction Processing>  Distributed Transaction Processing (TRUE or FALSE)
+    -q <AQ HA notifications> AQ HA notifications (TRUE or FALSE)
+Usage: srvctl add service -d <db_unique_name> -s <service_name> -u {-r "<new_pref_inst>" | -a "<new_avail_inst>"} [-f]
+    -d <db_unique_name>      Unique name for the database
+    -s <service>             Service name
+    -u                       Add a new instance to service configuration
+    -r <new_pref_inst>       Name of new preferred instance
+    -a <new_avail_inst>      Name of new available instance
+    -f                       Force the add operation even though a listener is not configured for a network
+    -h                       Print usage
+[oracle@stuora1 ~]$
+
+[oracle@k8s-19rac01 ~]$ srvctl add service -d xydb -s s_portal -r xydb1,xydb2,xydb3 -P basic -e select -m basic -z 180 -w 5 -pdb portal
+[oracle@k8s-19rac01 ~]$ srvctl start service -d xydb -s s_portal
+[oracle@k8s-19rac01 ~]$ lsnrctl status
+
+LSNRCTL for Linux: Version 19.0.0.0.0 - Production on 06-DEC-2022 21:49:02
+
+Copyright (c) 1991, 2019, Oracle.  All rights reserved.
+
+Connecting to (ADDRESS=(PROTOCOL=tcp)(HOST=)(PORT=1521))
+STATUS of the LISTENER
+------------------------
+Alias                     LISTENER
+Version                   TNSLSNR for Linux: Version 19.0.0.0.0 - Production
+Start Date                05-DEC-2022 20:58:22
+Uptime                    1 days 0 hr. 50 min. 40 sec
+Trace Level               off
+Security                  ON: Local OS Authentication
+SNMP                      OFF
+Listener Parameter File   /u01/app/19.0.0/grid/network/admin/listener.ora
+Listener Log File         /u01/app/grid/diag/tnslsnr/k8s-19rac01/listener/alert/log.xml
+Listening Endpoints Summary...
+  (DESCRIPTION=(ADDRESS=(PROTOCOL=ipc)(KEY=LISTENER)))
+  (DESCRIPTION=(ADDRESS=(PROTOCOL=tcp)(HOST=172.16.134.1)(PORT=1521)))
+  (DESCRIPTION=(ADDRESS=(PROTOCOL=tcp)(HOST=172.16.134.2)(PORT=1521)))
+Services Summary...
+Service "+ASM" has 1 instance(s).
+  Instance "+ASM1", status READY, has 1 handler(s) for this service...
+Service "+ASM_DATA" has 1 instance(s).
+  Instance "+ASM1", status READY, has 1 handler(s) for this service...
+Service "+ASM_FRA" has 1 instance(s).
+  Instance "+ASM1", status READY, has 1 handler(s) for this service...
+Service "+ASM_OCR" has 1 instance(s).
+  Instance "+ASM1", status READY, has 1 handler(s) for this service...
+Service "86b637b62fdf7a65e053f706e80a27ca" has 1 instance(s).
+  Instance "xydb1", status READY, has 1 handler(s) for this service...
+Service "ef14db5ce59d2d91e053018610ac1806" has 1 instance(s).
+  Instance "xydb1", status READY, has 1 handler(s) for this service...
+Service "portal" has 1 instance(s).
+  Instance "xydb1", status READY, has 1 handler(s) for this service...
+Service "s_portal" has 1 instance(s).
+  Instance "xydb1", status READY, has 1 handler(s) for this service...
+Service "xydb" has 1 instance(s).
+  Instance "xydb1", status READY, has 1 handler(s) for this service...
+Service "xydbXDB" has 1 instance(s).
+  Instance "xydb1", status READY, has 1 handler(s) for this service...
+The command completed successfully
+[oracle@k8s-19rac01 ~]$ 
+
+sqlplus pdbadmin/J3my3xl4c12ed@172.16.134.9:1521/s_dataassets
+
+sqlplus pdbadmin/J3my3xl4c12ed@172.16.134.8:1521/s_portal
+```

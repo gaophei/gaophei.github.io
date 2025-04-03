@@ -2595,7 +2595,12 @@ scp ~/.ssh/authorized_keys db-rac03:~/.ssh/authorized_keys
 ssh db-rac01 date;ssh db-rac02 date;ssh db-rac03 date;ssh db-rac01-prv date;ssh db-rac02-prv date;ssh db-rac03-prv date
 ```
 
+
+
+
+
 ### 7.2. 安装前检查
+
 ```bash
 su - grid
 cd $ORACLE_HOME/

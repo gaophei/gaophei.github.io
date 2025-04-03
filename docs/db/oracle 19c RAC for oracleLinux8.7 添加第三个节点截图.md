@@ -1,4 +1,4 @@
-​                                                                   **19cRAC添加第三个节点**
+                                                                   **19cRAC添加第三个节点**
 ### 安装GI
 
 #xterm连接grid用户，$ORACLE_HOME/gridSetup.sh
