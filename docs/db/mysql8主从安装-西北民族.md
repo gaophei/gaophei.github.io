@@ -1544,6 +1544,11 @@ ALTER USER 'root'@'localhost' IDENTIFIED WITH 'caching_sha2_password' AS '$A$005
 #跳过部分
 
 ```
+STOP REPLICA;
+SET GLOBAL sql_slave_skip_counter = 1;
+START REPLICA;
+
+
 stop replica;
  
  set @@session.gtid_next='b526a489-7796-11ee-b698-fefcfec91d86:109'; 

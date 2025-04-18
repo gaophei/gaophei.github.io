@@ -1018,8 +1018,17 @@ tcp        0      0 0.0.0.0:3260            0.0.0.0:*               LISTEN      
 tcp        0      0 3.3.3.179:3260      172.18.13.173:64708      ESTABLISHED 25468/tgtd
 tcp        0      0 3.3.3.179:3260      172.18.13.172:33274      ESTABLISHED 25468/tgtd
 tcp        0      0 :::3260                 :::*                    LISTEN      25468/tgtd
-        
+      
 ```
+
+```bash
+#内存不足时
+sync
+echo 1 > /proc/sys/vm/drop_caches
+```
+
+
+
 
 
 ### 1.7. 配置 iscsi 客户端（所有rac节点）
@@ -5642,6 +5651,8 @@ SQL>
 ```
 ### 6.4. Oracle RAC数据库优化
 
+#### 6.4.1.PASSWORD_LIFE_TIME
+
 #user password life修改，一个节点(k8s-19rac01或者k8s-19rac02)修改即可(CDB/PDB)
 
 ```oracle
@@ -5653,7 +5664,7 @@ ALTER PROFILE DEFAULT limit FAILED_LOGIN_ATTEMPTS unlimited;
 select resource_name,limit from dba_profiles where profile='DEFAULT';
 ```
 
-
+#### 6.4.2.允许oracle低版本连接
 #允许oracle低版本连接，两个节点都要修改
 
 ```
@@ -5665,6 +5676,7 @@ SQLNET.ALLOWED_LOGON_VERSION_SERVER=8
 SQLNET.ALLOWED_LOGON_VERSION_CLIENT=8
 ```
 
+#### 6.4.3.数据库自启动(cdb/pdb)
 
 #数据库自启动---两个节点都要修改
 
@@ -5807,7 +5819,7 @@ SELECT * FROM pdb_startup_log ORDER BY error_time DESC;
 
 
 
-
+#### 6.4.4.DB_FILES
 
 #DB_FILES修改，默认1024
 
@@ -5821,7 +5833,7 @@ sqlplus / as sysdba
 show parameter db_files
 ```
 
-
+#### 6.4.5.开启hugepages
 
 #开启hugepages
 
@@ -5913,21 +5925,32 @@ esac
 # End
 ```
 
-
+ #root用户执行
 
 ```bash
-vi /etc/sysctl.conf
-#添加
-vm.nr_hugepages = 15362
+chmod a+x hugepages_settings.sh
+./hugepages_settings.sh
+```
+
+#根据上面脚本运行的结果，修改/etc/sysctl.conf
+
+```bash
+cat >> /etc/sysctl.conf <<EOF
+vm.nr_hugepages = 7682
+EOF
 
 sysctl -p
+
 reboot
 
 grep "HugePages" /proc/meminfo
+
+cat /proc/meminfo|grep -i huge
 ```
 
 
 
+#### 6.4.6.VKTM报错处理
 #VKTM报错处理
 
 ```oracle
@@ -5976,7 +5999,7 @@ END;
 
 ```
 
-
+#### 6.4.7.resize operation completed for file# old size new size报错处理
 
 #resize operation completed for file# old size new size报错处理
 
@@ -6036,7 +6059,7 @@ alter system  set event='10949 trace name context forever,level 1','28401 trace 
 
 
 
-
+#### 6.4.8.创建pdb service
 
 ##创建service
 
@@ -6048,6 +6071,8 @@ srvctl add service -d xydb -s s_stuwork -r xydb1,xydb2 -P basic -e select -m bas
 
 #19c
 #srvctl add service -d xydb -s s_stuwork_new -pdb stuwork -preferred xydb1,xydb2,xydb3 -policy AUTOMATIC -tafpolicy BASIC -failovertype SELECT -failovermethod BASIC -failoverretry 180  -failoverdelay 5
+
+#srvctl add service -d xydb -s s_stuwork_swingbench -pdb stuwork -preferred xydb1,xydb2,xydb3 -policy AUTOMATIC -commit_outcome TRUE -tafpolicy BASIC -failovertype TRANSACTION  -failovermethod BASIC -failoverretry 180  -failoverdelay 5 -rlbgoal SERVICE_TIME -clbgoal SHORT
 
 srvctl start service -d xydb -s s_stuwork
 
@@ -6152,9 +6177,10 @@ SQL> show pdbs;
 	 3 PORTAL			  READ WRITE NO
 ```
 
+### 6.5. 集群备份
 
-
-#rman备份
+#### 6.5.1.数据库备份 
+#### 6.5.1.1.rman备份
 #创建脚本目录
 
 ```bash
@@ -6182,6 +6208,7 @@ echo `date` > $rman_dir/rmanrun.log
 rman target / log=$rman_dir/rmanfullbak_$time.log append <<EOF
 run{
    CONFIGURE CONTROLFILE AUTOBACKUP ON;
+   CONFIGURE SNAPSHOT CONTROLFILE NAME TO '+DATA/XYDB/CONTROLFILE/snapcf_xydb.f';
    CONFIGURE BACKUP OPTIMIZATION ON;
    allocate channel c1 type disk;
    allocate channel c2 type disk;
@@ -6211,6 +6238,8 @@ echo `date ` >> $rman_dir/rmanrun.log
 ```bash
 30 0 * * * /home/oracle/rmanbak/rmanbak.sh
 ```
+
+#### 6.5.1.2. expdp/impdp
 #数据泵导出、导入
 ```bash
 #创建目录，两个节点都必须创建该目录
@@ -6300,7 +6329,12 @@ find /home/oracle/expdir -name "*.log" -mtime +5 -exec rm {} \;
 echo finish bak job
 
 ```
-### 6.5. Oracle RAC其他操作
+
+#### 6.5.2.ocr备份
+
+
+
+### 6.6. Oracle RAC其他操作
 #创建pdb
 
 ```oracle
@@ -6495,391 +6529,6 @@ SQL>
 
 ```
 
-### 6.7. Oracle RAC共享磁盘组添加新的共享磁盘
-
-#当前共享数据盘满
-
-
-```
-[grid@oracle2:/home/grid]$asmcmd
-ASMCMD> lsdg
-State    Type    Rebal  Sector  Block       AU  Total_MB  Free_MB  Req_mir_free_MB  Usable_file_MB  Offline_disks  Voting_files  Name
-MOUNTED  EXTERN  N         512   4096  4194304     20480    20040                0           20040              0             Y  CRS/
-MOUNTED  EXTERN  N         512   4096  1048576    563200   535532                0          535532              0             N  ORAARCH/
-MOUNTED  EXTERN  N         512   4096  1048576    563200      426                0             426              0             N  ORADATA/
-```
-
-
-
-#查看当前共享磁盘情况及udev规则
-
-```bash
-[root@oracle2 ~]# lsblk
-NAME        MAJ:MIN RM   SIZE RO TYPE MOUNTPOINT
-sda           8:0    0   550G  0 disk 
-sdb           8:16   0   550G  0 disk 
-sdc           8:32   0    10G  0 disk 
-sdd           8:48   0    10G  0 disk 
-sde           8:64   0     1T  0 disk 
-└─sde1        8:65   0  1024G  0 part 
-sr0          11:0    1  1024M  0 rom  
-vda         250:0    0   500G  0 disk 
-├─vda1      250:1    0   512M  0 part /boot
-├─vda2      250:2    0    64G  0 part [SWAP]
-└─vda3      250:3    0 435.5G  0 part 
-  ├─ol-root 251:0    0  85.5G  0 lvm  /
-  └─ol-u01  251:1    0   350G  0 lvm  /u01
-
-[root@oracle2 ~]# ls /etc/udev/rules.d/
-70-persistent-ipoib.rules   99-oracle-asmdevices.rules  
-[root@oracle2 ~]# cat /etc/udev/rules.d/99-oracle-asmdevices.rules 
-KERNEL=="sd*[!0-9]", ENV{DEVTYPE}=="disk", SUBSYSTEM=="block", PROGRAM=="/usr/lib/udev/scsi_id -g -u -d $devnode", RESULT=="36236036c004b93093a407a1364bdef42", RUN+="/bin/sh -c 'mknod /dev/asm-crs1 b $major $minor; chown grid:asmadmin /dev/asm-crs1; chmod 0660 /dev/asm-crs1'"
-KERNEL=="sd*[!0-9]", ENV{DEVTYPE}=="disk", SUBSYSTEM=="block", PROGRAM=="/usr/lib/udev/scsi_id -g -u -d $devnode", RESULT=="3645500ce5041750b1070d96b206c76f3", RUN+="/bin/sh -c 'mknod /dev/asm-crs2 b $major $minor; chown grid:asmadmin /dev/asm-crs2; chmod 0660 /dev/asm-crs2'"
-KERNEL=="sd*[!0-9]", ENV{DEVTYPE}=="disk", SUBSYSTEM=="block", PROGRAM=="/usr/lib/udev/scsi_id -g -u -d $devnode", RESULT=="3665a0630e04dd30a66804f0bb22ad181", RUN+="/bin/sh -c 'mknod /dev/asm-arch b $major $minor; chown grid:asmadmin /dev/asm-arch; chmod 0660 /dev/asm-arch'"
-KERNEL=="sd*[!0-9]", ENV{DEVTYPE}=="disk", SUBSYSTEM=="block", PROGRAM=="/usr/lib/udev/scsi_id -g -u -d $devnode", RESULT=="361ad039e404b9c097270648e2b6a3459", RUN+="/bin/sh -c 'mknod /dev/asm-data b $major $minor; chown grid:asmadmin /dev/asm-data; chmod 0660 /dev/asm-data'"
-```
-
-
-
-#在虚拟化平台添加新的共享磁盘后
-
-#sdf---2T
-
-```bash
-[root@oracle2 ~]# lsblk
-NAME        MAJ:MIN RM   SIZE RO TYPE MOUNTPOINT
-sda           8:0    0   550G  0 disk 
-sdb           8:16   0   550G  0 disk 
-sdc           8:32   0    10G  0 disk 
-sdd           8:48   0    10G  0 disk 
-sde           8:64   0     1T  0 disk 
-└─sde1        8:65   0  1024G  0 part 
-sdf           8:80   0     2T  0 disk 
-sr0          11:0    1  1024M  0 rom  
-vda         250:0    0   500G  0 disk 
-├─vda1      250:1    0   512M  0 part /boot
-├─vda2      250:2    0    64G  0 part [SWAP]
-└─vda3      250:3    0 435.5G  0 part 
-  ├─ol-root 251:0    0  85.5G  0 lvm  /
-  └─ol-u01  251:1    0   350G  0 lvm  /u01
-  
-[root@oracle2 ~]# /usr/lib/udev/scsi_id -g -u -d /dev/sdf
-3622c06a4f042460bf830cdeafb581fed
-[root@oracle2 ~]# 
-
-
-[root@oracle1 ~]# lsblk
-NAME        MAJ:MIN RM   SIZE RO TYPE MOUNTPOINT
-sda           8:0    0   550G  0 disk 
-sdb           8:16   0   550G  0 disk 
-sdc           8:32   0    10G  0 disk 
-sdd           8:48   0    10G  0 disk 
-sde           8:64   0     1T  0 disk 
-└─sde1        8:65   0  1024G  0 part /orabackup
-sdf           8:80   0     2T  0 disk 
-sr0          11:0    1  1024M  0 rom  
-vda         250:0    0   500G  0 disk 
-├─vda1      250:1    0   512M  0 part /boot
-├─vda2      250:2    0    64G  0 part [SWAP]
-└─vda3      250:3    0 435.5G  0 part 
-  ├─ol-root 251:0    0  85.5G  0 lvm  /
-  └─ol-u01  251:1    0   350G  0 lvm  /u01
-  
-[root@oracle1 ~]# /usr/lib/udev/scsi_id -g -u -d /dev/sdf
-3622c06a4f042460bf830cdeafb581fed
-[root@oracle1 ~]# 
-
-```
-
-
-
-#udev规则备份及修改----rac01/rac02都要修改
-
-```bash
-
-[root@oracle1 ~]# cd /etc/udev/rules.d/
-
-[root@oracle1 rules.d]# cp 99-oracle-asmdevices.rules 99-oracle-asmdevices.rules.bak
-
-[root@oracle1 rules.d]# vi 99-oracle-asmdevices.rules
-#添加一行
-KERNEL=="sd*[!0-9]", ENV{DEVTYPE}=="disk", SUBSYSTEM=="block", PROGRAM=="/usr/lib/udev/scsi_id -g -u -d $devnode", RESULT=="3622c06a4f042460bf830cdeafb581fed", RUN+="/bin/sh -c 'mknod /dev/asm-data1 b $major $minor; chown grid:asmadmin /dev/asm-data1; chmod 0660 /dev/asm-data1'"
-
-
-[root@oracle1 rules.d]# cat 99-oracle-asmdevices.rules
-KERNEL=="sd*[!0-9]", ENV{DEVTYPE}=="disk", SUBSYSTEM=="block", PROGRAM=="/usr/lib/udev/scsi_id -g -u -d $devnode", RESULT=="36236036c004b93093a407a1364bdef42", RUN+="/bin/sh -c 'mknod /dev/asm-crs1 b $major $minor; chown grid:asmadmin /dev/asm-crs1; chmod 0660 /dev/asm-crs1'"
-KERNEL=="sd*[!0-9]", ENV{DEVTYPE}=="disk", SUBSYSTEM=="block", PROGRAM=="/usr/lib/udev/scsi_id -g -u -d $devnode", RESULT=="3645500ce5041750b1070d96b206c76f3", RUN+="/bin/sh -c 'mknod /dev/asm-crs2 b $major $minor; chown grid:asmadmin /dev/asm-crs2; chmod 0660 /dev/asm-crs2'"
-KERNEL=="sd*[!0-9]", ENV{DEVTYPE}=="disk", SUBSYSTEM=="block", PROGRAM=="/usr/lib/udev/scsi_id -g -u -d $devnode", RESULT=="3665a0630e04dd30a66804f0bb22ad181", RUN+="/bin/sh -c 'mknod /dev/asm-arch b $major $minor; chown grid:asmadmin /dev/asm-arch; chmod 0660 /dev/asm-arch'"
-KERNEL=="sd*[!0-9]", ENV{DEVTYPE}=="disk", SUBSYSTEM=="block", PROGRAM=="/usr/lib/udev/scsi_id -g -u -d $devnode", RESULT=="361ad039e404b9c097270648e2b6a3459", RUN+="/bin/sh -c 'mknod /dev/asm-data b $major $minor; chown grid:asmadmin /dev/asm-data; chmod 0660 /dev/asm-data'"
-KERNEL=="sd*[!0-9]", ENV{DEVTYPE}=="disk", SUBSYSTEM=="block", PROGRAM=="/usr/lib/udev/scsi_id -g -u -d $devnode", RESULT=="3622c06a4f042460bf830cdeafb581fed", RUN+="/bin/sh -c 'mknod /dev/asm-data1 b $major $minor; chown grid:asmadmin /dev/asm-data1; chmod 0660 /dev/asm-data1'"
-[root@oracle1 rules.d]# 
-
-```
-
-
-
-#触发udev规则生效----rac01/rac02都要执行
-
-```bash
-[root@oracle1 ~]# udevadm control --reload-rules
-
-[root@oracle1 ~]# udevadm trigger --type=devices --action=change
-
-[root@oracle1 ~]# ls -l /dev/|grep asm
-
-
-[root@oracle2 ~]# udevadm control --reload-rules
-
-[root@oracle2 ~]# udevadm trigger --type=devices --action=change
-
-[root@oracle2 ~]# ls -l /dev/|grep asm
-```
-
-
-
-#此时asmcmd里还未识别新的磁盘，但是sysasm中已经有了
-
-```bash
-[grid@oracle2:/home/grid]$asmcmd
-ASMCMD> lsdg
-State    Type    Rebal  Sector  Block       AU  Total_MB  Free_MB  Req_mir_free_MB  Usable_file_MB  Offline_disks  Voting_files  Name
-MOUNTED  EXTERN  N         512   4096  4194304     20480    20040                0           20040              0             Y  CRS/
-MOUNTED  EXTERN  N         512   4096  1048576    563200   535532                0          535532              0             N  ORAARCH/
-MOUNTED  EXTERN  N         512   4096  1048576    563200      426                0             426              0             N  ORADATA/
-
-ASMCMD> lsdsk
-Path
-/dev/asm-arch
-/dev/asm-crs1
-/dev/asm-crs2
-/dev/asm-data
-ASMCMD> 
-
-[grid@oracle2:/home/grid]$ sqlplus / as sysasm
-
-SQL>  select group_number,path,state,total_mb,free_mb from v$asm_disk;
-
-GROUP_NUMBER PATH						STATE	   TOTAL_MB    FREE_MB
------------- -------------------------------------------------- -------- ---------- ----------
-	   0 /dev/asm-data1					NORMAL		  0	     0
-	   1 /dev/asm-crs1					NORMAL	      10240	  9996
-	   2 /dev/asm-arch					NORMAL	     563200	518583
-	   3 /dev/asm-data					NORMAL	     563200	    43
-	   1 /dev/asm-crs2					NORMAL	      10240	 10044
-
-SQL> 
-```
-
-
-
-#添加新的磁盘
-
-```sql
-[grid@oracle2:/home/grid]$ sqlplus / as sysasm
-
-SQL> alter diskgroup ORADATA add disk '/dev/asm-data1' rebalance power 8;
-
-Diskgroup altered.
-
-SQL> 
-
-
-SQL> select group_number,path,state,total_mb,free_mb from v$asm_disk;
-
-GROUP_NUMBER PATH						STATE	   TOTAL_MB    FREE_MB
------------- -------------------------------------------------- -------- ---------- ----------
-	   1 /dev/asm-crs1					NORMAL	      10240	  9996
-	   2 /dev/asm-arch					NORMAL	     563200	518583
-	   3 /dev/asm-data					NORMAL	     563200	   994
-	   1 /dev/asm-crs2					NORMAL	      10240	 10044
-	   3 /dev/asm-data1					NORMAL	    2097152    2094991
-
-SQL> 
-
-```
-
-
-
-#此时asmcmd中已经可以识别，在rebalance
-
-```bash
-ASMCMD> lsdg
-State    Type    Rebal  Sector  Block       AU  Total_MB  Free_MB  Req_mir_free_MB  Usable_file_MB  Offline_disks  Voting_files  Name
-MOUNTED  EXTERN  N         512   4096  4194304     20480    20040                0           20040              0             Y  CRS/
-MOUNTED  EXTERN  N         512   4096  1048576    563200   518583                0          518583              0             N  ORAARCH/
-MOUNTED  EXTERN  Y         512   4096  1048576   2660352  2093936                0         2093936              0             N  ORADATA/
-ASMCMD> lsdsk
-Path
-/dev/asm-arch
-/dev/asm-crs1
-/dev/asm-crs2
-/dev/asm-data
-/dev/asm-data1
-ASMCMD> 
-
-
-[grid@oracle2:/home/grid]$ sqlplus / as sysasm
-SQL> select * from v$asm_operation;
-
-GROUP_NUMBER OPERA STAT      POWER     ACTUAL	   SOFAR   EST_WORK   EST_RATE EST_MINUTES ERROR_CODE
------------- ----- ---- ---------- ---------- ---------- ---------- ---------- ----------- --------------------------------------------
-	   3 REBAL RUN		 8	    8	    8526     443191	  5069          85
-
-
-SQL>
-```
-
-
-
-#rebalance结束后
-
-```bash
-[grid@oracle1:/home/grid]$asmcmd
-ASMCMD> lsdg
-State    Type    Rebal  Sector  Block       AU  Total_MB  Free_MB  Req_mir_free_MB  Usable_file_MB  Offline_disks  Voting_files  Name
-MOUNTED  EXTERN  N         512   4096  4194304     20480    20040                0           20040              0             Y  CRS/
-MOUNTED  EXTERN  N         512   4096  1048576    563200   515920                0          515920              0             N  ORAARCH/
-MOUNTED  EXTERN  N         512   4096  1048576   2660352  2088613                0         2088613              0             N  ORADATA/
-ASMCMD> lsdsk
-Path
-/dev/asm-arch
-/dev/asm-crs1
-/dev/asm-crs2
-/dev/asm-data
-/dev/asm-data1
-ASMCMD> exit
-[grid@oracle1:/home/grid]$sqlplus / as sysasm
-
-SQL*Plus: Release 11.2.0.4.0 Production on Mon Mar 31 15:20:17 2025
-
-Copyright (c) 1982, 2013, Oracle.  All rights reserved.
-
-
-Connected to:
-Oracle Database 11g Enterprise Edition Release 11.2.0.4.0 - 64bit Production
-With the Real Application Clusters and Automatic Storage Management options
-
-SQL> select * from v$asm_operation;
-
-no rows selected
-
-SQL> 
-
-```
-
-
-
-#rebalance时间估算
-
-```bash
-SQL> select * from v$asm_operation;
-
-GROUP_NUMBER OPERA STAT      POWER     ACTUAL	   SOFAR   EST_WORK   EST_RATE EST_MINUTES ERROR_CODE
------------- ----- ---- ---------- ---------- ---------- ---------- ---------- ----------- --------------------------------------------
-	   3 REBAL RUN		 8	    8	    8526     443191	  5069          85
-
-#关键指标解析
-#字段名称	当前值	技术含义
-GROUP_NUMBER	3	正在操作的ASM磁盘组编号（对应V$ASM_DISKGROUP.GROUP_NUMBER）
-OPERA	REBAL	操作类型：磁盘组重平衡
-STAT	RUN	操作状态：正在运行中
-POWER	8	设置的并行进程数（即同时工作的ARB进程数量）
-ACTUAL	8	实际生效的并行度（通常与POWER值一致）
-SOFAR	8526	已完成的I/O操作单元数（每个单元对应一个分配单元的迁移）
-EST_WORK	443191	预估总I/O操作单元数
-EST_RATE	5069	当前处理速率（单位：操作单元/分钟）
-EST_MINUTES	85	预计剩余完成时间（分钟）
-
-#完成百分比：
-进度百分比=8526/443191×100≈1.92%
-
-#剩余时间估算：
-当前速率：5069 操作单元/分钟
-剩余单元：443191 - 8526 = 434665
-理论剩余时间：434665 ÷ 5069 ≈ 85.7 分钟（与显示值吻合）
-```
-
-
-
-#POWER参数深度解析
-
-```bash
-参数值	资源消耗	预计完成时间（示例）	适用场景
-1	最低CPU/I/O占用	10小时（1TB数据）	业务高峰时段维护
-4	中等负载	2.5小时	常规维护窗口
-8	高并发，占用约30%系统资源	1小时15分钟	紧急扩容且需快速完成
-11+	可能引发资源争用	边际效益递减	测试环境/特殊优化场景
-```
-
-#动态调整
-
-```sql
--- 运行中修改并行度
-ALTER DISKGROUP ORADATA REBALANCE POWER 5;
-```
-
-
-
-#执行前后关键检查点
-
-```sql
-#预检清单
--- 检查磁盘状态
-SELECT name, path, header_status FROM v$asm_disk 
-WHERE path='/dev/asm-oredata';
-
--- 验证磁盘组容量
-SELECT name, total_mb, free_mb FROM v$asm_diskgroup;
-
-
-#执行后监控
--- 查看重平衡进度
-SELECT * FROM v$asm_operation;
-
--- 实时I/O压力
-SELECT * FROM V$ASM_DISK_IOSTAT;
-
-#操作状态判断矩阵
-#状态组合	含义	建议操作
-STAT=RUN + ERROR_CODE空	正常进行中	定期监控即可
-STAT=WAIT	等待资源	检查系统I/O或CPU瓶颈
-ERROR_CODE非空	发生错误	立即查看V$ASM_OPERATION.ERROR_CODE
-EST_MINUTES持续增长	存在处理瓶颈	降低并行度或排查存储性能
-
--- 最终磁盘分布验证
-SELECT disk_number, name, total_mb, free_mb 
-FROM v$asm_disk 
-WHERE group_number = (SELECT group_number 
-                       FROM v$asm_diskgroup 
-                       WHERE name='ORADATA');
-
-
-```
-
-#参考命令
-
-```sql
-#首先添加的磁盘总量需要比原来的大一些或者一样大，不能偏小，不然在操作时会报错 ORA-15032、ORA-15250，还有每个磁盘可以比原来的大，即实现小盘换大盘
-#其次，删除磁盘时使用的是 ARCH_0000 等这样的磁盘名，并不是磁盘路径
-#最后，在添加磁盘的同时进行删除操作，平衡时间会缩短很多，当遇到数据量几十 T 时均衡时间大概要好几天的时间
-
---- 以下为本次迁移过程中盘符相对应命令，迁移中主要以数据库中
---- 查到的磁盘号为准。即上节中所查的 GROUP_NUMBER 为 0 的磁盘。
--- ARCH 盘
- alter diskgroup ARCH  add disk '/dev/rhdisk103','/dev/rhdisk104','/dev/rhdisk105','/dev/rhdisk106' 
- drop disk 'ARCH_0000','ARCH_0001','ARCH_0002','ARCH_0003','ARCH_0004','ARCH_0005','ARCH_0006','ARCH_0007','ARCH_0008','ARCH_0009','ARCH_0010';
- ALTER DISKGROUP ARCH REBALANCE POWER 10; 
- 
- -- DATA盘
- alter diskgroup DATA  add disk '/dev/rhdisk107','/dev/rhdisk108','/dev/rhdisk109','/dev/rhdisk110','/dev/rhdisk111','/dev/rhdisk112','/dev/rhdisk113',
- '/dev/rhdisk114','/dev/rhdisk115','/dev/rhdisk116','/dev/rhdisk117','/dev/rhdisk118','/dev/rhdisk119','/dev/rhdisk120','/dev/rhdisk121','/dev/rhdisk122','/dev/rhdisk123' 
- drop disk 'DATA_0000','DATA_0001','DATA_0011','DATA_0013','DATA_0014','DATA_0015','DATA_0016','DATA_0017','DATA_0018','DATA_0019';
- ALTER DISKGROUP DATA REBALANCE POWER 10; 
- 
- --OCR 盘
- alter diskgroup OCR  add disk '/dev/rhdisk100','/dev/rhdisk101','/dev/rhdisk102' drop disk 'OCR_0000','OCR_0001','OCR_0002';
-
-```
 
 
 
@@ -6939,7 +6588,7 @@ total 4.7G
 #### 7.1.1.检查集群状态
 
 ```bash
-crsctl status resource -t
+# crsctl status resource -t
 ```
 
 #集群正常
@@ -7109,7 +6758,7 @@ chmod -R 755 /opt/19.20patch/35319490
 
 
 
-#### 7.1.5.兼容性检查
+#### 7.1.5.兼容性检查 两个节点 grid/oracle用户
 
 ```bash
 #OPatch兼容性检查 两个节点 grid用户
@@ -7945,6 +7594,24 @@ PATCH_UID   PATCH_ID ACTION          STATUS                    ACTION_TIME      
   
 --------------------------------------------------
 #根据升级文档，datapatch操作可以在全部pdb开启后执行，不再按以下步骤执行
+#升级后操作 (only node1)
+sqlplus / as sysdba
+STARTUP
+alter system set cluster_database=false scope=spfile;
+srvctl stop db -d <dbname>
+STARTUP UPGRADE;
+SHUTDOWN;
+STARTUP;
+alter system set cluster_database=true scope=spfile sid='*';
+SHUTDOWN;
+srvctl start database -d <dbname>
+alter pluggable database all open;
+
+-- 确认 PDB 全部打开
+-- 执行 datapatch
+$ORACLE_HOME/OPatch/datapatch -verbose  # 约35min
+
+-----------------------------------------------
 
 opatch lspatches
 
@@ -9230,117 +8897,392 @@ select ACTION_TIME,VERSION,COMMENTS from dba_registry_history;
 
 
 
-## 8.其他优化
-### 8.1.hugepages_settings.sh
+## 8.Oracle RAC共享磁盘组添加新的共享磁盘
+
+#当前共享数据盘满
+
+
+```
+[grid@oracle2:/home/grid]$asmcmd
+ASMCMD> lsdg
+State    Type    Rebal  Sector  Block       AU  Total_MB  Free_MB  Req_mir_free_MB  Usable_file_MB  Offline_disks  Voting_files  Name
+MOUNTED  EXTERN  N         512   4096  4194304     20480    20040                0           20040              0             Y  CRS/
+MOUNTED  EXTERN  N         512   4096  1048576    563200   535532                0          535532              0             N  ORAARCH/
+MOUNTED  EXTERN  N         512   4096  1048576    563200      426                0             426              0             N  ORADATA/
+```
+
+
+
+#查看当前共享磁盘情况及udev规则
+
 ```bash
-#!/bin/bash
-#
-# hugepages_settings.sh
+[root@oracle2 ~]# lsblk
+NAME        MAJ:MIN RM   SIZE RO TYPE MOUNTPOINT
+sda           8:0    0   550G  0 disk 
+sdb           8:16   0   550G  0 disk 
+sdc           8:32   0    10G  0 disk 
+sdd           8:48   0    10G  0 disk 
+sde           8:64   0     1T  0 disk 
+└─sde1        8:65   0  1024G  0 part 
+sr0          11:0    1  1024M  0 rom  
+vda         250:0    0   500G  0 disk 
+├─vda1      250:1    0   512M  0 part /boot
+├─vda2      250:2    0    64G  0 part [SWAP]
+└─vda3      250:3    0 435.5G  0 part 
+  ├─ol-root 251:0    0  85.5G  0 lvm  /
+  └─ol-u01  251:1    0   350G  0 lvm  /u01
 
-# Welcome text
-echo "
-This script is provided by Doc ID 401749.1 from My Oracle Support
-(http://support.oracle.com) where it is intended to compute values for
-the recommended HugePages/HugeTLB configuration for the current shared
-memory segments on Oracle Linux. Before proceeding with the execution please note following:
- * For ASM instance, it needs to configure ASMM instead of AMM.
- * The 'pga_aggregate_target' is outside the SGA and
-   you should accommodate this while calculating the overall size.
- * In case you changes the DB SGA size,
-   as the new SGA will not fit in the previous HugePages configuration,
-   it had better disable the whole HugePages,
-   start the DB with new SGA size and run the script again.
-And make sure that:
- * Oracle Database instance(s) are up and running
- * Oracle Database 11g Automatic Memory Management (AMM) is not setup
-   (See Doc ID 749851.1)
- * The shared memory segments can be listed by command:
-     # ipcs -m
+[root@oracle2 ~]# ls /etc/udev/rules.d/
+70-persistent-ipoib.rules   99-oracle-asmdevices.rules  
+[root@oracle2 ~]# cat /etc/udev/rules.d/99-oracle-asmdevices.rules 
+KERNEL=="sd*[!0-9]", ENV{DEVTYPE}=="disk", SUBSYSTEM=="block", PROGRAM=="/usr/lib/udev/scsi_id -g -u -d $devnode", RESULT=="36236036c004b93093a407a1364bdef42", RUN+="/bin/sh -c 'mknod /dev/asm-crs1 b $major $minor; chown grid:asmadmin /dev/asm-crs1; chmod 0660 /dev/asm-crs1'"
+KERNEL=="sd*[!0-9]", ENV{DEVTYPE}=="disk", SUBSYSTEM=="block", PROGRAM=="/usr/lib/udev/scsi_id -g -u -d $devnode", RESULT=="3645500ce5041750b1070d96b206c76f3", RUN+="/bin/sh -c 'mknod /dev/asm-crs2 b $major $minor; chown grid:asmadmin /dev/asm-crs2; chmod 0660 /dev/asm-crs2'"
+KERNEL=="sd*[!0-9]", ENV{DEVTYPE}=="disk", SUBSYSTEM=="block", PROGRAM=="/usr/lib/udev/scsi_id -g -u -d $devnode", RESULT=="3665a0630e04dd30a66804f0bb22ad181", RUN+="/bin/sh -c 'mknod /dev/asm-arch b $major $minor; chown grid:asmadmin /dev/asm-arch; chmod 0660 /dev/asm-arch'"
+KERNEL=="sd*[!0-9]", ENV{DEVTYPE}=="disk", SUBSYSTEM=="block", PROGRAM=="/usr/lib/udev/scsi_id -g -u -d $devnode", RESULT=="361ad039e404b9c097270648e2b6a3459", RUN+="/bin/sh -c 'mknod /dev/asm-data b $major $minor; chown grid:asmadmin /dev/asm-data; chmod 0660 /dev/asm-data'"
+```
 
-Press Enter to proceed..."
 
-read
 
-# Check for the kernel version
-KERN=`uname -r | awk -F. '{ printf("%d.%d\n",$1,$2); }'`
+#在虚拟化平台添加新的共享磁盘后
 
-# Find out the HugePage size
-HPG_SZ=`grep Hugepagesize /proc/meminfo | awk '{print $2}'`
-if [ -z "$HPG_SZ" ];then
-    echo "The hugepages may not be supported in the system where the script is being executed."
-    exit 1
-fi
+#sdf---2T
 
-# Initialize the counter
-NUM_PG=0
+```bash
+[root@oracle2 ~]# lsblk
+NAME        MAJ:MIN RM   SIZE RO TYPE MOUNTPOINT
+sda           8:0    0   550G  0 disk 
+sdb           8:16   0   550G  0 disk 
+sdc           8:32   0    10G  0 disk 
+sdd           8:48   0    10G  0 disk 
+sde           8:64   0     1T  0 disk 
+└─sde1        8:65   0  1024G  0 part 
+sdf           8:80   0     2T  0 disk 
+sr0          11:0    1  1024M  0 rom  
+vda         250:0    0   500G  0 disk 
+├─vda1      250:1    0   512M  0 part /boot
+├─vda2      250:2    0    64G  0 part [SWAP]
+└─vda3      250:3    0 435.5G  0 part 
+  ├─ol-root 251:0    0  85.5G  0 lvm  /
+  └─ol-u01  251:1    0   350G  0 lvm  /u01
+  
+[root@oracle2 ~]# /usr/lib/udev/scsi_id -g -u -d /dev/sdf
+3622c06a4f042460bf830cdeafb581fed
+[root@oracle2 ~]# 
 
-# Cumulative number of pages required to handle the running shared memory segments
-for SEG_BYTES in `ipcs -m | cut -c44-300 | awk '{print $1}' | grep "[0-9][0-9]*"`
-do
-    MIN_PG=`echo "$SEG_BYTES/($HPG_SZ*1024)" | bc -q`
-    if [ $MIN_PG -gt 0 ]; then
-        NUM_PG=`echo "$NUM_PG+$MIN_PG+1" | bc -q`
-    fi
-done
 
-RES_BYTES=`echo "$NUM_PG * $HPG_SZ * 1024" | bc -q`
-
-# An SGA less than 100MB does not make sense
-# Bail out if that is the case
-if [ $RES_BYTES -lt 100000000 ]; then
-    echo "***********"
-    echo "** ERROR **"
-    echo "***********"
-    echo "Sorry! There are not enough total of shared memory segments allocated for
-HugePages configuration. HugePages can only be used for shared memory segments
-that you can list by command:
-
-    # ipcs -m
-
-of a size that can match an Oracle Database SGA. Please make sure that:
- * Oracle Database instance is up and running
- * Oracle Database 11g Automatic Memory Management (AMM) is not configured"
-    exit 1
-fi
-
-# Finish with results
-case $KERN in
-    '2.4') HUGETLB_POOL=`echo "$NUM_PG*$HPG_SZ/1024" | bc -q`;
-           echo "Recommended setting: vm.hugetlb_pool = $HUGETLB_POOL" ;;
-    '2.6') echo "Recommended setting: vm.nr_hugepages = $NUM_PG" ;;
-    '3.8') echo "Recommended setting: vm.nr_hugepages = $NUM_PG" ;;
-    '3.10') echo "Recommended setting: vm.nr_hugepages = $NUM_PG" ;;
-    '4.1') echo "Recommended setting: vm.nr_hugepages = $NUM_PG" ;;
-    '4.14') echo "Recommended setting: vm.nr_hugepages = $NUM_PG" ;;
-    '4.18') echo "Recommended setting: vm.nr_hugepages = $NUM_PG" ;;
-    '5.4') echo "Recommended setting: vm.nr_hugepages = $NUM_PG" ;;
-    *) echo "Kernel version $KERN is not supported by this script (yet). Exiting." ;;
-esac
-
-# End
+[root@oracle1 ~]# lsblk
+NAME        MAJ:MIN RM   SIZE RO TYPE MOUNTPOINT
+sda           8:0    0   550G  0 disk 
+sdb           8:16   0   550G  0 disk 
+sdc           8:32   0    10G  0 disk 
+sdd           8:48   0    10G  0 disk 
+sde           8:64   0     1T  0 disk 
+└─sde1        8:65   0  1024G  0 part /orabackup
+sdf           8:80   0     2T  0 disk 
+sr0          11:0    1  1024M  0 rom  
+vda         250:0    0   500G  0 disk 
+├─vda1      250:1    0   512M  0 part /boot
+├─vda2      250:2    0    64G  0 part [SWAP]
+└─vda3      250:3    0 435.5G  0 part 
+  ├─ol-root 251:0    0  85.5G  0 lvm  /
+  └─ol-u01  251:1    0   350G  0 lvm  /u01
+  
+[root@oracle1 ~]# /usr/lib/udev/scsi_id -g -u -d /dev/sdf
+3622c06a4f042460bf830cdeafb581fed
+[root@oracle1 ~]# 
 
 ```
 
 
 
- #root用户执行
+#udev规则备份及修改----rac01/rac02都要修改
 
 ```bash
-chmod a+x hugepages_settings.sh
-./hugepages_settings.sh
+
+[root@oracle1 ~]# cd /etc/udev/rules.d/
+
+[root@oracle1 rules.d]# cp 99-oracle-asmdevices.rules 99-oracle-asmdevices.rules.bak
+
+[root@oracle1 rules.d]# vi 99-oracle-asmdevices.rules
+#添加一行
+KERNEL=="sd*[!0-9]", ENV{DEVTYPE}=="disk", SUBSYSTEM=="block", PROGRAM=="/usr/lib/udev/scsi_id -g -u -d $devnode", RESULT=="3622c06a4f042460bf830cdeafb581fed", RUN+="/bin/sh -c 'mknod /dev/asm-data1 b $major $minor; chown grid:asmadmin /dev/asm-data1; chmod 0660 /dev/asm-data1'"
+
+
+[root@oracle1 rules.d]# cat 99-oracle-asmdevices.rules
+KERNEL=="sd*[!0-9]", ENV{DEVTYPE}=="disk", SUBSYSTEM=="block", PROGRAM=="/usr/lib/udev/scsi_id -g -u -d $devnode", RESULT=="36236036c004b93093a407a1364bdef42", RUN+="/bin/sh -c 'mknod /dev/asm-crs1 b $major $minor; chown grid:asmadmin /dev/asm-crs1; chmod 0660 /dev/asm-crs1'"
+KERNEL=="sd*[!0-9]", ENV{DEVTYPE}=="disk", SUBSYSTEM=="block", PROGRAM=="/usr/lib/udev/scsi_id -g -u -d $devnode", RESULT=="3645500ce5041750b1070d96b206c76f3", RUN+="/bin/sh -c 'mknod /dev/asm-crs2 b $major $minor; chown grid:asmadmin /dev/asm-crs2; chmod 0660 /dev/asm-crs2'"
+KERNEL=="sd*[!0-9]", ENV{DEVTYPE}=="disk", SUBSYSTEM=="block", PROGRAM=="/usr/lib/udev/scsi_id -g -u -d $devnode", RESULT=="3665a0630e04dd30a66804f0bb22ad181", RUN+="/bin/sh -c 'mknod /dev/asm-arch b $major $minor; chown grid:asmadmin /dev/asm-arch; chmod 0660 /dev/asm-arch'"
+KERNEL=="sd*[!0-9]", ENV{DEVTYPE}=="disk", SUBSYSTEM=="block", PROGRAM=="/usr/lib/udev/scsi_id -g -u -d $devnode", RESULT=="361ad039e404b9c097270648e2b6a3459", RUN+="/bin/sh -c 'mknod /dev/asm-data b $major $minor; chown grid:asmadmin /dev/asm-data; chmod 0660 /dev/asm-data'"
+KERNEL=="sd*[!0-9]", ENV{DEVTYPE}=="disk", SUBSYSTEM=="block", PROGRAM=="/usr/lib/udev/scsi_id -g -u -d $devnode", RESULT=="3622c06a4f042460bf830cdeafb581fed", RUN+="/bin/sh -c 'mknod /dev/asm-data1 b $major $minor; chown grid:asmadmin /dev/asm-data1; chmod 0660 /dev/asm-data1'"
+[root@oracle1 rules.d]# 
+
 ```
 
-#根据上面脚本运行的结果，修改/etc/sysctl.conf
+
+
+#触发udev规则生效----rac01/rac02都要执行
 
 ```bash
-cat >> /etc/sysctl.conf <<EOF
-vm.nr_hugepages = 7682
-EOF
+[root@oracle1 ~]# udevadm control --reload-rules
 
-sysctl -p
+[root@oracle1 ~]# udevadm trigger --type=devices --action=change
 
-cat /proc/meminfo|grep -i huge
+[root@oracle1 ~]# ls -l /dev/|grep asm
+
+
+[root@oracle2 ~]# udevadm control --reload-rules
+
+[root@oracle2 ~]# udevadm trigger --type=devices --action=change
+
+[root@oracle2 ~]# ls -l /dev/|grep asm
 ```
+
+
+
+#此时asmcmd里还未识别新的磁盘，但是sysasm中已经有了
+
+```bash
+[grid@oracle2:/home/grid]$asmcmd
+ASMCMD> lsdg
+State    Type    Rebal  Sector  Block       AU  Total_MB  Free_MB  Req_mir_free_MB  Usable_file_MB  Offline_disks  Voting_files  Name
+MOUNTED  EXTERN  N         512   4096  4194304     20480    20040                0           20040              0             Y  CRS/
+MOUNTED  EXTERN  N         512   4096  1048576    563200   535532                0          535532              0             N  ORAARCH/
+MOUNTED  EXTERN  N         512   4096  1048576    563200      426                0             426              0             N  ORADATA/
+
+ASMCMD> lsdsk
+Path
+/dev/asm-arch
+/dev/asm-crs1
+/dev/asm-crs2
+/dev/asm-data
+ASMCMD> 
+
+[grid@oracle2:/home/grid]$ sqlplus / as sysasm
+
+SQL>  select group_number,path,state,total_mb,free_mb from v$asm_disk;
+
+GROUP_NUMBER PATH						STATE	   TOTAL_MB    FREE_MB
+------------ -------------------------------------------------- -------- ---------- ----------
+	   0 /dev/asm-data1					NORMAL		  0	     0
+	   1 /dev/asm-crs1					NORMAL	      10240	  9996
+	   2 /dev/asm-arch					NORMAL	     563200	518583
+	   3 /dev/asm-data					NORMAL	     563200	    43
+	   1 /dev/asm-crs2					NORMAL	      10240	 10044
+
+SQL> 
+```
+
+
+
+#添加新的磁盘
+
+```sql
+[grid@oracle2:/home/grid]$ sqlplus / as sysasm
+
+SQL> alter diskgroup ORADATA add disk '/dev/asm-data1' rebalance power 8;
+
+Diskgroup altered.
+
+SQL> 
+
+
+SQL> select group_number,path,state,total_mb,free_mb from v$asm_disk;
+
+GROUP_NUMBER PATH						STATE	   TOTAL_MB    FREE_MB
+------------ -------------------------------------------------- -------- ---------- ----------
+	   1 /dev/asm-crs1					NORMAL	      10240	  9996
+	   2 /dev/asm-arch					NORMAL	     563200	518583
+	   3 /dev/asm-data					NORMAL	     563200	   994
+	   1 /dev/asm-crs2					NORMAL	      10240	 10044
+	   3 /dev/asm-data1					NORMAL	    2097152    2094991
+
+SQL> 
+
+```
+
+
+
+#此时asmcmd中已经可以识别，在rebalance
+
+```bash
+ASMCMD> lsdg
+State    Type    Rebal  Sector  Block       AU  Total_MB  Free_MB  Req_mir_free_MB  Usable_file_MB  Offline_disks  Voting_files  Name
+MOUNTED  EXTERN  N         512   4096  4194304     20480    20040                0           20040              0             Y  CRS/
+MOUNTED  EXTERN  N         512   4096  1048576    563200   518583                0          518583              0             N  ORAARCH/
+MOUNTED  EXTERN  Y         512   4096  1048576   2660352  2093936                0         2093936              0             N  ORADATA/
+ASMCMD> lsdsk
+Path
+/dev/asm-arch
+/dev/asm-crs1
+/dev/asm-crs2
+/dev/asm-data
+/dev/asm-data1
+ASMCMD> 
+
+
+[grid@oracle2:/home/grid]$ sqlplus / as sysasm
+SQL> select * from v$asm_operation;
+
+GROUP_NUMBER OPERA STAT      POWER     ACTUAL	   SOFAR   EST_WORK   EST_RATE EST_MINUTES ERROR_CODE
+------------ ----- ---- ---------- ---------- ---------- ---------- ---------- ----------- --------------------------------------------
+	   3 REBAL RUN		 8	    8	    8526     443191	  5069          85
+
+
+SQL>
+```
+
+
+
+#rebalance结束后
+
+```bash
+[grid@oracle1:/home/grid]$asmcmd
+ASMCMD> lsdg
+State    Type    Rebal  Sector  Block       AU  Total_MB  Free_MB  Req_mir_free_MB  Usable_file_MB  Offline_disks  Voting_files  Name
+MOUNTED  EXTERN  N         512   4096  4194304     20480    20040                0           20040              0             Y  CRS/
+MOUNTED  EXTERN  N         512   4096  1048576    563200   515920                0          515920              0             N  ORAARCH/
+MOUNTED  EXTERN  N         512   4096  1048576   2660352  2088613                0         2088613              0             N  ORADATA/
+ASMCMD> lsdsk
+Path
+/dev/asm-arch
+/dev/asm-crs1
+/dev/asm-crs2
+/dev/asm-data
+/dev/asm-data1
+ASMCMD> exit
+[grid@oracle1:/home/grid]$sqlplus / as sysasm
+
+SQL*Plus: Release 11.2.0.4.0 Production on Mon Mar 31 15:20:17 2025
+
+Copyright (c) 1982, 2013, Oracle.  All rights reserved.
+
+
+Connected to:
+Oracle Database 11g Enterprise Edition Release 11.2.0.4.0 - 64bit Production
+With the Real Application Clusters and Automatic Storage Management options
+
+SQL> select * from v$asm_operation;
+
+no rows selected
+
+SQL> 
+
+```
+
+
+
+#rebalance时间估算
+
+```bash
+SQL> select * from v$asm_operation;
+
+GROUP_NUMBER OPERA STAT      POWER     ACTUAL	   SOFAR   EST_WORK   EST_RATE EST_MINUTES ERROR_CODE
+------------ ----- ---- ---------- ---------- ---------- ---------- ---------- ----------- --------------------------------------------
+	   3 REBAL RUN		 8	    8	    8526     443191	  5069          85
+
+#关键指标解析
+#字段名称	当前值	技术含义
+GROUP_NUMBER	3	正在操作的ASM磁盘组编号（对应V$ASM_DISKGROUP.GROUP_NUMBER）
+OPERA	REBAL	操作类型：磁盘组重平衡
+STAT	RUN	操作状态：正在运行中
+POWER	8	设置的并行进程数（即同时工作的ARB进程数量）
+ACTUAL	8	实际生效的并行度（通常与POWER值一致）
+SOFAR	8526	已完成的I/O操作单元数（每个单元对应一个分配单元的迁移）
+EST_WORK	443191	预估总I/O操作单元数
+EST_RATE	5069	当前处理速率（单位：操作单元/分钟）
+EST_MINUTES	85	预计剩余完成时间（分钟）
+
+#完成百分比：
+进度百分比=8526/443191×100≈1.92%
+
+#剩余时间估算：
+当前速率：5069 操作单元/分钟
+剩余单元：443191 - 8526 = 434665
+理论剩余时间：434665 ÷ 5069 ≈ 85.7 分钟（与显示值吻合）
+```
+
+
+
+#POWER参数深度解析
+
+```bash
+参数值	资源消耗	预计完成时间（示例）	适用场景
+1	最低CPU/I/O占用	10小时（1TB数据）	业务高峰时段维护
+4	中等负载	2.5小时	常规维护窗口
+8	高并发，占用约30%系统资源	1小时15分钟	紧急扩容且需快速完成
+11+	可能引发资源争用	边际效益递减	测试环境/特殊优化场景
+```
+
+#动态调整
+
+```sql
+-- 运行中修改并行度
+ALTER DISKGROUP ORADATA REBALANCE POWER 5;
+```
+
+
+
+#执行前后关键检查点
+
+```sql
+#预检清单
+-- 检查磁盘状态
+SELECT name, path, header_status FROM v$asm_disk 
+WHERE path='/dev/asm-oredata';
+
+-- 验证磁盘组容量
+SELECT name, total_mb, free_mb FROM v$asm_diskgroup;
+
+
+#执行后监控
+-- 查看重平衡进度
+SELECT * FROM v$asm_operation;
+
+-- 实时I/O压力
+SELECT * FROM V$ASM_DISK_IOSTAT;
+
+#操作状态判断矩阵
+#状态组合	含义	建议操作
+STAT=RUN + ERROR_CODE空	正常进行中	定期监控即可
+STAT=WAIT	等待资源	检查系统I/O或CPU瓶颈
+ERROR_CODE非空	发生错误	立即查看V$ASM_OPERATION.ERROR_CODE
+EST_MINUTES持续增长	存在处理瓶颈	降低并行度或排查存储性能
+
+-- 最终磁盘分布验证
+SELECT disk_number, name, total_mb, free_mb 
+FROM v$asm_disk 
+WHERE group_number = (SELECT group_number 
+                       FROM v$asm_diskgroup 
+                       WHERE name='ORADATA');
+
+
+```
+
+#参考命令
+
+```sql
+#首先添加的磁盘总量需要比原来的大一些或者一样大，不能偏小，不然在操作时会报错 ORA-15032、ORA-15250，还有每个磁盘可以比原来的大，即实现小盘换大盘
+#其次，删除磁盘时使用的是 ARCH_0000 等这样的磁盘名，并不是磁盘路径
+#最后，在添加磁盘的同时进行删除操作，平衡时间会缩短很多，当遇到数据量几十 T 时均衡时间大概要好几天的时间
+
+--- 以下为本次迁移过程中盘符相对应命令，迁移中主要以数据库中
+--- 查到的磁盘号为准。即上节中所查的 GROUP_NUMBER 为 0 的磁盘。
+-- ARCH 盘
+ alter diskgroup ARCH  add disk '/dev/rhdisk103','/dev/rhdisk104','/dev/rhdisk105','/dev/rhdisk106' 
+ drop disk 'ARCH_0000','ARCH_0001','ARCH_0002','ARCH_0003','ARCH_0004','ARCH_0005','ARCH_0006','ARCH_0007','ARCH_0008','ARCH_0009','ARCH_0010';
+ ALTER DISKGROUP ARCH REBALANCE POWER 10; 
+ 
+ -- DATA盘
+ alter diskgroup DATA  add disk '/dev/rhdisk107','/dev/rhdisk108','/dev/rhdisk109','/dev/rhdisk110','/dev/rhdisk111','/dev/rhdisk112','/dev/rhdisk113',
+ '/dev/rhdisk114','/dev/rhdisk115','/dev/rhdisk116','/dev/rhdisk117','/dev/rhdisk118','/dev/rhdisk119','/dev/rhdisk120','/dev/rhdisk121','/dev/rhdisk122','/dev/rhdisk123' 
+ drop disk 'DATA_0000','DATA_0001','DATA_0011','DATA_0013','DATA_0014','DATA_0015','DATA_0016','DATA_0017','DATA_0018','DATA_0019';
+ ALTER DISKGROUP DATA REBALANCE POWER 10; 
+ 
+ --OCR 盘
+ alter diskgroup OCR  add disk '/dev/rhdisk100','/dev/rhdisk101','/dev/rhdisk102' drop disk 'OCR_0000','OCR_0001','OCR_0002';
+
+```
+
 
 
 ## 9.集群故障排查
@@ -10512,3 +10454,1542 @@ sqlplus pdbadmin/J3my3xl4c12ed@172.16.134.9:1521/s_dataassets
 
 sqlplus pdbadmin/J3my3xl4c12ed@172.16.134.8:1521/s_portal
 ```
+
+
+
+## 11.压测
+
+### 11.1.Swingbench压测方案
+
+#Swingbench is a free load generator (and benchmarks) designed to stress test an Oracle database (12c, 18c, 19c, 21c, 23c).
+
+![img](oracle19cRacole7threenodes\cdeb554b6aa29d838456c8d5d3370681.png)
+
+#### 11.1.1.准备测试环境
+
+```bash
+#压测机前置条件
+#swingbenchlatest需要jdk1.17及以上
+#需要有oracle客户端
+
+
+#此处安装jdk1.21
+#压测机root账户
+cd /opt
+wget https://download.oracle.com/java/21/archive/jdk-21.0.5_linux-x64_bin.tar.gz
+tar -zxvf jdk-21.0.5_linux-x64_bin.tar.gz
+cd /opt/jdk-21.0.5
+
+cat >> /etc/profile <<'EOF'
+
+export JAVA_HOME=/opt/jdk-21.0.5
+#export JRE_HOME=$JAVA_HOME/jre
+export CLASSPATH=$JAVA_HOME/lib:$CLASSPATH
+export PATH=$JAVA_HOME/bin:$PATH
+EOF
+
+source /etc/profile
+
+echo $JAVA_HOME
+
+java -version
+
+
+#压测机oracle账户
+#连接oracle rac scanIP
+sqlplus system/Oracle2023#Sys@172.18.13.176:1521/s_stuwork
+
+
+#官网
+#https://www.dominicgiles.com/downloads/
+#https://github.com/domgiles/swingbench-public
+#Swingbench 2.7
+
+#压测机oracle账户
+mkdir -p /home/oracle/swingbench
+cd /home/oracle/swingbench
+
+#wget https://www.dominicgiles.com/site_downloads/swingbenchlatest.zip
+wget https://github.com/domgiles/swingbench-public/releases/download/production/swingbench25092024.zip
+
+unzip swingbench25092024.zip
+
+```
+
+
+
+#logs
+
+```bash
+[root@k8s-rac01 jdk-21.0.5]# echo $JAVA_HOME
+/opt/jdk-21.0.5
+[root@k8s-rac01 jdk-21.0.5]# java -version
+java version "21.0.5" 2024-10-15 LTS
+Java(TM) SE Runtime Environment (build 21.0.5+9-LTS-239)
+Java HotSpot(TM) 64-Bit Server VM (build 21.0.5+9-LTS-239, mixed mode, sharing)
+
+
+[root@k8s-rac01 ~]# su - oracle
+Last login: Fri Apr  4 22:27:39 CST 2025
+
+[oracle@k8s-rac01 ~]$ sqlplus system/Oracle2023#Sys@172.18.13.176:1521/s_stuwork
+
+SQL*Plus: Release 19.0.0.0.0 - Production on Fri Apr 4 22:42:28 2025
+Version 19.21.0.0.0
+
+Copyright (c) 1982, 2022, Oracle.  All rights reserved.
+
+Last Successful login time: Wed Apr 02 2025 14:28:32 +08:00
+
+Connected to:
+Oracle Database 19c Enterprise Edition Release 19.0.0.0.0 - Production
+Version 19.3.0.0.0
+
+SYSTEM@172.18.13.176:1521/s_stuwork> 
+
+
+
+[oracle@k8s-rac01 ~]$ mkdir -p /home/oracle/swingbench
+[oracle@k8s-rac01 ~]$ cd /home/oracle/swingbench
+
+[oracle@k8s-rac01 swingbench]$ wget https://github.com/domgiles/swingbench-public/releases/download/production/swingbench25092024.zip
+
+[oracle@k8s-rac01 swingbench]$ ll -rth
+total 49M
+-rw-r--r--  1 oracle oinstall  49M Apr  4 23:10 swingbench25092024.zip
+
+[oracle@k8s-rac01 swingbench]$ unzip swingbench25092024.zip 
+```
+
+
+
+#### 11.1.2.准备测试数据
+
+#创建测试用户和表空间---在rac集群中的某个节点上执行
+
+```sql
+#登录到RAC数据库，创建专用的测试用户和表空间
+#
+su - oracle
+sqlplus / as sysdba
+show pdbs;
+alter session set container=stuwork;
+
+
+-- 创建表空间
+#normal tbs
+CREATE TABLESPACE swingbench_data 
+DATAFILE '+DATA' SIZE 10G 
+AUTOEXTEND ON NEXT 1G MAXSIZE 31G;
+
+ALTER TABLESPACE swingbench_data 
+ADD DATAFILE '+DATA' SIZE 10G 
+AUTOEXTEND ON NEXT 1G MAXSIZE 31G;
+
+#推荐使用
+#bigfile tbs
+CREATE BIGFILE TABLESPACE swingbench_data
+DATAFILE '+DATA' SIZE 5G 
+AUTOEXTEND ON NEXT 1G MAXSIZE 50G;
+
+CREATE TABLESPACE swingbench_index 
+DATAFILE '+DATA' SIZE 5G 
+AUTOEXTEND ON NEXT 1G MAXSIZE 31G;
+
+-- 创建测试用户
+CREATE USER soe IDENTIFIED BY soe
+DEFAULT TABLESPACE swingbench_data 
+TEMPORARY TABLESPACE temp;
+
+-- 授予必要权限
+GRANT CONNECT, RESOURCE, CREATE VIEW, CREATE JOB, CREATE EXTERNAL JOB TO soe;
+GRANT UNLIMITED TABLESPACE TO soe;
+GRANT EXECUTE ON DBMS_LOCK TO soe;
+GRANT EXECUTE ON DBMS_RANDOM TO soe;
+GRANT ANALYZE ANY DICTIONARY TO soe;
+GRANT ANALYZE ANY TO soe;
+GRANT ADMINISTER DATABASE TRIGGER TO soe;
+
+
+#不能使用system，GRANT EXECUTE ON DBMS_LOCK TO soe;会权限不足
+#sqlplus system/Oracle2023#Sys@172.18.13.176:1521/s_stuwork
+SYSTEM@172.18.13.176:1521/s_stuwork> GRANT EXECUTE ON DBMS_LOCK TO soe;
+GRANT EXECUTE ON DBMS_LOCK TO soe
+                 *
+ERROR at line 1:
+ORA-01031: insufficient privileges
+
+
+```
+
+
+
+#创建测试数据模型---在测试机上执行
+
+```bash
+#Swingbench提供了多种测试模型，这里使用Order Entry (SOE)模型
+
+#oewizard : Installs a simple order entry schema that is used to create a heavy write workload
+#shwizard : Installs a simple star schema that is used to create an analytics workload
+#jsonwizard : Installs a simple JSON schema that is used to create a JSON CRUD workload
+#tpcdswizard : Installs a TPC-DS like schema that is used to create a complex analytics workload
+#tpchwizard : Installs a TPC-H like schema that is used to create a medium-complexity analytics workload
+#moviewizard : Installs a Movie Stream schema that features primarily OLTP like transactions but also uses AQ Sharded Queues to simulate events used in microservices
+
+#普通账户soe连接测试
+sqlplus system/Oracle2023#Sys@172.18.13.176:1521/s_stuwork
+
+
+cd /home/oracle/swingbench/swingbench
+# 设置环境变量
+export ORACLE_HOME=/u01/app/oracle/product/19.0.0/db_1
+export PATH=$ORACLE_HOME/bin:$PATH
+export TNS_ADMIN=$ORACLE_HOME/network/admin
+
+
+# 创建SOE架构和数据
+#linux GUI创建./bin/oewizard
+#windows cd .\winbin\  ---> oewizard.bat
+  
+#./oewizard -cl -create -scale 10 -cs "//rac-scan-ip:1521/your_service_name" -dbap "sys_password" -u swingbench -p swingbench -ts swingbench_tbs -tc 16
+参数说明：
+-cl：命令行模式
+-create：创建数据
+-scale：数据规模（10表示约10GB数据，根据需求调整）
+-cs：连接字符串，使用RAC的SCAN IP和服务名
+-dbap：系统用户密码
+-u、-p：测试用户及密码
+-ts：表空间名
+-tc： 线程线程数（根据CPU核数调整）
+
+
+./bin/oewizard -cl \
+  -cs //172.18.13.176:1521/s_stuwork \
+  #-dba "sys as sysdba" \
+  -dbap "abc123" \
+  -u soe \
+  -p soe \
+  -ts swingbench_data \
+  -its swingbench_index \
+  -scale 1 \
+  -create \
+  -v \
+  #-c /home/oracle/swingbench/configs/SOE_Server_Side_V2.xml \
+  -df +DATA \
+  -nopart
+
+./bin/oewizard -cl \
+  -cs //172.18.13.176:1521/s_stuwork \
+  -dba "sys as sysdba" \
+  -dbap "abc123" \
+  -u soe \
+  -p soe \
+  -ts swingbench_data \
+  -its swingbench_index \
+  -scale 1 \
+  -create \
+  -v \
+  -df +DATA \
+  -nopart
+
+```
+
+
+
+#### 11.1.3.配置并执行压测
+
+##### 11.1.3.1.基本压测配置---非必须，后面命令行指定的参数将覆盖配置文件中的参数设置
+
+```bash
+#创建一个自定义配置文件
+cp configs/SOE_Server_Side_V2.xml configs/19RAC_Test.xml
+
+#编辑配置文件，调整以下参数
+vi configs/19RAC_Test.xml
+
+#修改以下关键参数：
+
+<Connection>: 确保使用RAC的SCAN地址
+<UserCount>: 设置并发用户数
+<MinThinkTime>: 最小思考时间（毫秒）
+<MaxThinkTime>: 最大思考时间（毫秒）
+<LogonGroupCount>: 登录组数量
+
+#正确值
+<ConnectString>//172.18.13.176:1521/s_stuwork</ConnectString>
+<UserCount>: 设置并发用户数
+<MinThinkTime>: 最小思考时间（毫秒）
+<MaxThinkTime>: 最大思考时间（毫秒）
+<LogonGroupCount>: 登录组数量
+```
+
+
+
+##### 11.1.3.2.执行基本压测
+
+#图形压测swingbench
+
+```bash
+# 执行30分钟的压测，100个并发用户
+
+#linux
+cd /home/oracle/swingbench/swingbench
+./bin/swingbench -c ../configs/SOE_Server_Side_V2.xml
+
+#windows
+ cd winbin
+ swingbench.bat -c ..\configs\SOE_Server_Side_V2.xml
+```
+
+![image-20250408161129134](oracle19cRacole7threenodes\image-20250408161129134.png)
+
+#命令行压测charbench
+
+```bash
+cd /home/oracle/swingbench/swingbench
+
+# 执行30分钟的压测，100个并发用户
+./bin/charbench \
+  -c ./configs/19RAC_Test.xml \
+  -cs //172.18.13.176:1521/s_stuwork \
+  -u soe \
+  -p soe \
+  -v users,tpm,tps \
+  -intermin 0 \
+  -intermax 0 \
+  -min 0 \
+  -max 0 \
+  -uc 100 \
+  -rt 00:30 \
+  -r 100results.xml \
+  -a
+
+#参数说明：
+
+-c: 配置文件路径
+-cs: 连接字符串
+-u: 用户名
+-p: 密码
+-v: 要显示的统计信息
+-intermin/-intermax: 交互最小/最大思考时间
+-min/-max: 最小/最大思考时间
+-uc: 用户数量
+-rt: 运行时间（HH:MM格式）
+-r: 指定结果文件
+-a: 自动启动
+```
+
+
+
+##### 11.1.3.3.逐步增加负载
+
+```bash
+# 执行200个并发用户的测试
+./bin/charbench \
+  -c ./configs/19RAC_Test.xml \
+  -cs //172.18.13.176:1521/s_stuwork \
+  -u soe \
+  -p soe \
+  -v users,tpm,tps,errs,resp,vresp,dbtime \
+  -intermin 0 \
+  -intermax 0 \
+  -min 0 \
+  -max 0 \
+  -uc 200 \
+  -rt 00:30 \
+  -r 200results.xml \
+  -a
+
+# 执行500个并发用户的测试
+./bin/charbench \
+  -c ./configs/19RAC_Test.xml \
+  -cs //172.18.13.176:1521/s_stuwork \
+  -u soe \
+  -p soe \
+  -v users,tpm,tps \
+  -intermin 0 \
+  -intermax 0 \
+  -min 0 \
+  -max 0 \
+  -uc 500 \
+  -rt 00:30 \
+  -r 500results.xml \
+  -a
+
+# 执行1000个并发用户的测试
+./bin/charbench \
+  -c ./configs/19RAC_Test.xml \
+  -cs //172.18.13.176:1521/s_stuwork \
+  -u soe \
+  -p soe \
+  -v users,tpm,tps \
+  -intermin 0 \
+  -intermax 0 \
+  -min 0 \
+  -max 0 \
+  -uc 1000 \
+  -rt 00:30 \
+  -r 1000results.xml \
+  -a
+```
+
+
+
+#### 11.1.4.高级测试场景
+
+##### 11.1.4.1.节点故障转移测试
+
+#在执行压测的同时，模拟节点故障
+
+#driver Type 要切换到Oracle oci Driver
+
+#在swingbench中配置使用AppContinuityDriver的驱动。如果不使用这个驱动，测试不会成功，这个就是应用连续性的驱动
+
+#需开启参数
+
+```conf
+<Properties>
+            <Property Key="FetchSize">20</Property>
+            <Property Key="AppContinuityDriver">true</Property>
+            <Property Key="StatementCaching">120</Property>
+            <Property Key="FastFailover">true</Property>
+</Properties>
+```
+
+
+
+
+
+```bash
+# 在一个终端启动压测
+./bin/charbench \
+  -c ./configs/19RAC_Test.xml \
+  -cs //172.18.13.176:1521/s_stuwork \
+  -u soe \
+  -p soe \
+  -v users,tpm,tps \
+  -intermin 0 \
+  -intermax 0 \
+  -min 0 \
+  -max 0 \
+  -uc 500 \
+  -rt 01:00 \
+  -a
+
+# 在另一个终端，以root用户身份关闭一个RAC节点（例如node2）
+ssh root@rac-node2 "/u01/app/19.0.0/grid/bin/crsctl stop crs -f"
+```
+
+#观察Swingbench输出，记录故障发生时的性能下降和恢复情况
+
+
+
+##### 11.1.4.2.RAC负载均衡测试
+
+#使用以下命令查看RAC各节点的负载分布
+
+```bash
+# 在压测过程中，登录到数据库并执行以下SQL
+sqlplus / as sysdba
+
+-- 查看各节点的会话分布
+SELECT inst_id, COUNT(*) 
+FROM gv$session 
+WHERE username = 'SOE01' 
+GROUP BY inst_id;
+
+select i.host_name, s.username from gv$session s join gv$instance i on (i.inst_id=s.inst_id) where username is not null;
+
+-- 查看各节点的负载情况
+SELECT inst_id, value 
+FROM gv$sysmetric 
+WHERE metric_name = 'CPU Usage Per Sec' 
+AND group_id = 2;
+
+```
+
+
+
+##### 11.1.4.3.长时间稳定性测试
+
+#执行一个长时间（如24小时）的压测，验证系统的稳定性
+
+```bash
+./bin/charbench \
+  -c ./configs/19RAC_Test.xml \
+  -cs //172.18.13.176:1521/s_stuwork \
+  -u soe01 \
+  -p soe01 \
+  -v users,tpm,tps,trans,errs \
+  -intermin 100 \
+  -intermax 50 \
+  -min 0 \
+  -max 30 \
+  -uc 300 \
+  -rt 24:00 \
+  -a \
+  -r /home/oracle/swingbench/24hour_test.xml
+```
+
+![image-20250409181846141](oracle19cRacole7threenodes\image-20250409181846141.png)
+
+
+
+#调整参数后压测
+
+```sql
+#cdb下
+ALTER SYSTEM SET log_buffer=256M scope=spfile sid='*';
+
+ALTER SYSTEM SET gcs_server_processes=16 SCOPE=SPFILE sid='*'; 
+```
+
+
+
+
+
+![image-20250411141746863](oracle19cRacole7threenodes\image-20250411141746863.png)
+
+
+
+#logs
+
+```bash
+Swingbench 
+Author  :  	 Dominic Giles 
+Version :  	 2.7.0.1511  
+
+Results will be written to results.xml 
+
+Time      Users       TPM      TPS     
+11:40:05  [0/300]     0        0       
+The following error has occcured. Further occurences will be supressed but the error count will be incremented and recorded in the results file 
+java.sql.SQLException: null 
+11:40:06  [42/300]    40       40      
+11:40:07  [93/300]    418      378     
+11:40:08  [143/300]   1086     668     
+11:40:09  [193/300]   2032     946     
+11:40:10  [237/300]   3152     1120    
+11:40:11  [288/300]   4454     1302    
+11:40:12  [300/300]   6002     1548    
+11:40:13  [300/300]   7569     1567    
+11:40:14  [300/300]   9265     1696    
+11:40:15  [300/300]   10817    1552    
+
+```
+
+
+
+
+
+#### 11.1.5.监控与分析
+
+##### 11.1.5.1.实时监控
+
+#在压测过程中，使用以下命令监控数据库性能
+
+```sql
+-- 查看等待事件
+SELECT event, COUNT(*) 
+FROM gv$session 
+WHERE username = 'SOE' AND wait_class != 'Idle' 
+GROUP BY event 
+ORDER BY COUNT(*) DESC;
+
+-- cdb 查看资源使用情况
+SELECT inst_id, resource_name, current_utilization, max_utilization 
+FROM gv$resource_limit 
+WHERE resource_name IN ('processes', 'sessions', 'transactions') 
+ORDER BY inst_id, resource_name;
+
+--- cdb sga/pga使用率
+
+select name,total,round(total-free,2) used, round(free,2) free,round((total-free)/total*100,2) pctused from
+(select 'SGA' name,(select sum(value/1024/1024) from v$sga) total,
+(select sum(bytes/1024/1024) from v$sgastat where name='free memory')free from dual)
+union
+select name,total,round(used,2)used,round(total-used,2)free,round(used/total*100,2)pctused from (
+select 'PGA' name,(select value/1024/1024 total from v$pgastat where name='aggregate PGA target parameter')total,
+(select value/1024/1024 used from v$pgastat where name='total PGA allocated')used from dual);
+
+
+
+--- cdb sga/pga详细内存组件使用率
+
+select name,total,round(total-free,2) used, round(free,2) free,round((total-free)/total*100,2) pctused from
+(select 'SGA' name,(select sum(value/1024/1024) from v$sga) total,
+(select sum(bytes/1024/1024) from v$sgastat where name='free memory')free from dual)
+union
+select name,total,round(used,2)used,round(total-used,2)free,round(used/total*100,2)pctused from (
+select 'PGA' name,(select value/1024/1024 total from v$pgastat where name='aggregate PGA target parameter')total,
+(select value/1024/1024 used from v$pgastat where name='total PGA allocated')used from dual)
+union
+select name,round(total,2) total,round((total-free),2) used,round(free,2) free,round((total-free)/total*100,2) pctused from (
+select 'Shared pool' name,(select sum(bytes/1024/1024) from v$sgastat where pool='shared pool')total,
+(select bytes/1024/1024 from v$sgastat where name='free memory' and pool='shared pool') free from dual)
+union
+select name,round(total,2)total,round(total-free,2) used,round(free,2) free,round((total-free)/total,2) pctused from (
+select 'Default pool' name,( select a.cnum_repl*(select value from v$parameter where name='db_block_size')/1024/1024 total from x$kcbwds a, v$buffer_pool p
+where a.set_id=p.LO_SETID and p.name='DEFAULT' and p.block_size=(select value from v$parameter where name='db_block_size')) total,
+(select a.anum_repl*(select value from v$parameter where name='db_block_size')/1024/1024 free from x$kcbwds a, v$buffer_pool p
+where a.set_id=p.LO_SETID and p.name='DEFAULT' and p.block_size=(select value from v$parameter where name='db_block_size')) free from dual)
+union
+select name,nvl(round(total,2),0)total,nvl(round(total-free,2),0) used,nvl(round(free,2),0) free,nvl(round((total-free)/total,2),0) pctused from (
+select 'KEEP pool' name,(select a.cnum_repl*(select value from v$parameter where name='db_block_size')/1024/1024 total from x$kcbwds a, v$buffer_pool p
+where a.set_id=p.LO_SETID and p.name='KEEP' and p.block_size=(select value from v$parameter where name='db_block_size')) total,
+(select a.anum_repl*(select value from v$parameter where name='db_block_size')/1024/1024 free from x$kcbwds a, v$buffer_pool p
+where a.set_id=p.LO_SETID and p.name='KEEP' and p.block_size=(select value from v$parameter where name='db_block_size')) free from dual)
+union
+select name,nvl(round(total,2),0)total,nvl(round(total-free,2),0) used,nvl(round(free,2),0) free,nvl(round((total-free)/total,2),0) pctused from (
+select 'RECYCLE pool' name,( select a.cnum_repl*(select value from v$parameter where name='db_block_size')/1024/1024 total from x$kcbwds a, v$buffer_pool p
+where a.set_id=p.LO_SETID and p.name='RECYCLE' and p.block_size=(select value from v$parameter where name='db_block_size')) total,
+(select a.anum_repl*(select value from v$parameter where name='db_block_size')/1024/1024 free from x$kcbwds a, v$buffer_pool p
+where a.set_id=p.LO_SETID and p.name='RECYCLE' and p.block_size=(select value from v$parameter where name='db_block_size')) free from dual)
+union
+select name,nvl(round(total,2),0)total,nvl(round(total-free,2),0) used,nvl(round(free,2),0) free,nvl(round((total-free)/total,2),0) pctused from(
+select 'DEFAULT 16K buffer cache' name,(select a.cnum_repl*16/1024 total from x$kcbwds a, v$buffer_pool p
+where a.set_id=p.LO_SETID and p.name='DEFAULT' and p.block_size=16384) total,
+(select a.anum_repl*16/1024 free from x$kcbwds a, v$buffer_pool p
+where a.set_id=p.LO_SETID and p.name='DEFAULT' and p.block_size=16384) free from dual)
+union
+select name,nvl(round(total,2),0)total,nvl(round(total-free,2),0) used,nvl(round(free,2),0) free,nvl(round((total-free)/total,2),0) pctused from(
+select 'DEFAULT 32K buffer cache' name,(select a.cnum_repl*32/1024 total from x$kcbwds a, v$buffer_pool p
+where a.set_id=p.LO_SETID and p.name='DEFAULT' and p.block_size=32768) total,
+(select a.anum_repl*32/1024 free from x$kcbwds a, v$buffer_pool p
+where a.set_id=p.LO_SETID and p.name='DEFAULT' and p.block_size=32768) free from dual)
+union
+select name,total,total-free used,free, (total-free)/total*100 pctused from (
+select 'Java Pool' name,(select sum(bytes/1024/1024) total from v$sgastat where pool='java pool' group by pool)total,
+( select bytes/1024/1024 free from v$sgastat where pool='java pool' and name='free memory')free from dual)
+union
+select name,Round(total,2),round(total-free,2) used,round(free,2) free, round((total-free)/total*100,2) pctused from (
+select 'Large Pool' name,(select sum(bytes/1024/1024) total from v$sgastat where pool='large pool' group by pool)total,
+( select bytes/1024/1024 free from v$sgastat where pool='large pool' and name='free memory')free from dual)
+order by pctused desc;
+
+```
+
+
+
+##### 11.1.5.2.生成AWR报告
+
+###### 11.1.5.2.1.cdb级别
+
+#在测试前后生成AWR报告，分析性能数据
+
+```sql
+-- 创建基准AWR快照
+EXEC DBMS_WORKLOAD_REPOSITORY.CREATE_SNAPSHOT();
+
+-- 记下快照ID
+SELECT snap_id, instance_number, begin_interval_time 
+FROM dba_hist_snapshot 
+ORDER BY begin_interval_time DESC;
+
+-- 测试结束后，再创建一个快照
+EXEC DBMS_WORKLOAD_REPOSITORY.CREATE_SNAPSHOT();
+
+-- 生成AWR报告（替换快照ID）
+@?/rdbms/admin/awrgrpt.sql
+
+Specify the location of AWR Data
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+AWR_ROOT - Use AWR data from root (default)
+AWR_PDB - Use AWR data from PDB
+Enter value for awr_location:
+```
+
+###### 11.1.5.2.2.pdb级别
+
+```sql
+#在测试前后手动创建PDB级别的AWR快照
+sqlplus / as sysdba
+alter session set container=stuwork;
+exec dbms_workload_repository.create_snapshot();
+
+
+SQL> alter session set container=CDB$ROOT;
+SQL> select con_id, instance_number, snap_id, begin_interval_time, end_interval_time from cdb_hist_snapshot order by 1,2,3;
+
+#测试完成后，生成AWR报告---只需要进入一个实例，去pdb里生成awr报告
+alter session set container=stuwork;
+
+#rac
+@?/rdbms/admin/awrgrpt.sql
+
+Specify the location of AWR Data
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+AWR_ROOT - Use AWR data from root (default)
+AWR_PDB - Use AWR data from PDB
+Enter value for awr_location:
+
+#单独该实例的
+@?/rdbms/admin/awrrpt.sql
+
+Specify the location of AWR Data
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+AWR_ROOT - Use AWR data from root (default)
+AWR_PDB - Use AWR data from PDB
+Enter value for awr_location:
+```
+
+
+
+#oracle文档说明
+
+```bash
+#AWR Snapshots and Reports from Oracle Multitentant Database(CDB, PDB) (Doc ID 2295998.1)
+- In 12.1
+AWR Snapshots and Reports can be created only at the CDB level.
+
+- In 12.2 and later
+AWR Snapshots and Reports can be created both at the CDB level and at the PDB level.
+AWR Snapshots can be generated only at the CDB level by default.
+
+ 
+
+#Manual creation of PDB AWR snapshot.
+   SQL> connect <username>/<password> as sysdba
+   SQL> alter session set container=PDB1;
+   SQL> exec dbms_workload_repository.create_snapshot();
+
+
+#Configuration for automatic creation of PDB AWR snapshots.
+
+SQL> alter session set container = CDB$ROOT;
+SQL> alter system set AWR_PDB_AUTOFLUSH_ENABLED = TRUE;
+SQL> alter system set AWR_SNAPSHOT_TIME_OFFSET=1000000; 
+
+SQL> select * from cdb_hist_wr_control;    
+
+      DBID SNAP_INTERVAL                            RETENTION                                TOPNSQL        CON_ID
+---------- ---------------------------------------- ---------------------------------------- ---------- ----------
+1793141417 +00000 01:00:00.0                        +00008 00:00:00.0                        DEFAULT             0
+4182556862 +40150 00:01:00.0                        +00008 00:00:00.0                        DEFAULT             3  
+
+#The snap_interval for PDB is too long by default, so it is required to change it.
+
+SQL> alter session set container=PDB1;
+SQL> exec dbms_workload_repository.modify_snapshot_settings(interval => 30, dbid => 4182556862);
+
+SQL> alter session set container = CDB$ROOT;
+SQL> select * from cdb_hist_wr_control;
+
+      DBID SNAP_INTERVAL                            RETENTION                                TOPNSQL        CON_ID
+---------- ---------------------------------------- ---------------------------------------- ---------- ----------
+1793141417 +00000 01:00:00.0                        +00008 00:00:00.0                        DEFAULT             0
+4182556862 +00000 00:30:00.0                        +00008 00:00:00.0                        DEFAULT             3
+
+
+
+#You can find AWR snapshots(CDB,PDB) from cdb_hist_snapshot.
+
+
+SQL> alter session set container=CDB$ROOT;
+SQL> select con_id, instance_number, snap_id, begin_interval_time, end_interval_time from cdb_hist_snapshot order by 1,2,3;
+
+    CON_ID INSTANCE_NUMBER    SNAP_ID BEGIN_INTERVAL_TIME              END_INTERVAL_TIME
+---------- --------------- ---------- -------------------------------- --------------------------------
+         0               1          1 28-FEB-19 06.26.06.000 PM        28-FEB-19 07.00.14.425 PM
+         0               1          2 28-FEB-19 07.00.14.425 PM        28-FEB-19 08.00.30.362 PM
+         0               1          3 28-FEB-19 08.00.30.362 PM        28-FEB-19 09.00.46.286 PM
+         0               1          4 28-FEB-19 09.00.46.286 PM        28-FEB-19 10.00.02.598 PM
+         0               1          5 28-FEB-19 10.00.02.598 PM        28-FEB-19 11.00.15.351 PM
+         3               1          1 28-FEB-19 07.00.14.425 PM        28-FEB-19 07.30.36.225 PM   <<--- PDB snapshot
+         3               1          2 28-FEB-19 07.30.36.225 PM        28-FEB-19 08.00.31.532 PM   <<--- PDB snapshot
+         3               1          3 28-FEB-19 08.00.31.532 PM        28-FEB-19 08.30.10.270 PM   <<--- PDB snapshot
+
+
+#Creation of CDB AWR report
+SQL> alter session set container=CDB$ROOT;
+SQL> @?/rdbms/admin/awrrpt    
+
+#Creation of PDB AWR report
+
+
+SQL> alter session set container=PDB1;
+SQL> @?/rdbms/admin/awrrpt
+
+Specify the Report Type
+~~~~~~~~~~~~~~~~~~~~~~~
+AWR reports can be generated in the following formats.  Please enter the name of the format at the prompt.  Default value is 'html'.
+
+'html'          HTML format (default)
+'text'          Text format
+'active-html'   Includes Performance Hub active report
+
+Enter value for report_type:
+
+Specify the location of AWR Data
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+AWR_ROOT - Use AWR data from root (default)  
+AWR_PDB  - Use AWR data from PDB          <<------- This can be chosen only if PDB snapshots have been created separately.
+ 
+Enter value for awr_location: AWR_PDB
+...........
+```
+
+
+
+#无法通过循环创建pdb的快照
+
+#error
+
+```sql
+-- 在CDB$ROOT容器中执行，自动在所有实例的指定PDB中创建快照
+sqlplus / as sysdba
+
+DECLARE
+  v_con_name VARCHAR2(30) := 'STUWORK';
+BEGIN
+  FOR rec IN (SELECT inst_id FROM gv$instance) LOOP
+    dbms_workload_repository.create_snapshot(
+      con_id => (SELECT con_id FROM cdb_pdbs WHERE pdb_name = v_con_name),
+      inst_id => rec.inst_id
+    );
+  END LOOP;
+END;
+/
+```
+
+```sql
+-- 在CDB$ROOT容器中执行，自动在所有实例的指定PDB中创建快照
+sqlplus / as sysdba
+
+DECLARE
+  v_con_id NUMBER;
+  v_pdb_name VARCHAR2(30) := 'STUWORK';
+BEGIN
+  -- 获取PDB的CON_ID
+  SELECT con_id INTO v_con_id FROM cdb_pdbs WHERE pdb_name = v_pdb_name;
+
+  -- 循环所有实例创建快照
+  FOR rec IN (SELECT inst_id FROM gv$instance) LOOP
+    dbms_workload_repository.create_snapshot(
+      con_id => v_con_id,
+      inst_id => rec.inst_id
+    );
+  END LOOP;
+END;
+/
+```
+
+
+
+#测试完成后，生成AWR报告
+
+```sql
+#测试完成后，生成AWR报告
+alter session set container=stuwork;
+@?/rdbms/admin/awrrpt.sql
+```
+
+
+
+##### 11.1.5.3.分析Swingbench结果
+
+#Swingbench生成的结果文件可以用来分析性能
+
+```bash
+#生成pdf文件
+./bin/results2pdf -c results.xml -o 100results.pdf
+
+#下载查看
+```
+
+#图形化时
+
+![image-20250408161626299](oracle19cRacole7threenodes\image-20250408161626299.png)
+
+
+
+![image-20250408165010423](oracle19cRacole7threenodes\image-20250408165010423.png)
+
+
+
+![image-20250408165113716](oracle19cRacole7threenodes\image-20250408165113716.png)
+
+
+
+![image-20250408165246711](oracle19cRacole7threenodes\image-20250408165246711.png)
+
+
+
+#### 11.1.6.清理测试环境
+
+#测试完成后，可以清理测试数据
+
+```bash
+# 删除SOE架构
+./bin/oewizard \
+  -cl \
+  -cs //172.18.13.176:1521/s_stuwork \
+  -u soe \
+  -p soe \
+  -drop
+  
+```
+
+```sql
+-- 或者通过SQL删除用户和表空间
+DROP USER soe CASCADE;
+DROP TABLESPACE swingbench_data INCLUDING CONTENTS AND DATAFILES;
+DROP TABLESPACE swingbench_index INCLUDING CONTENTS AND DATAFILES;
+```
+
+#### 11.1.7.常见问题解决
+
+##### 11.1.7.1.连接问题
+
+如果遇到连接问题，检查：
+- tnsnames.ora配置是否正确
+- 监听器是否正常运行
+- 防火墙设置是否允许连接
+
+##### 11.1.7.2.性能问题
+
+如果性能不如预期：
+- 检查表空间是否有足够空间
+- 确认数据库参数设置是否合理
+- 检查网络延迟是否过高
+
+##### 11.1.7.3.资源限制
+
+如果遇到资源限制：
+- 增加processes参数值
+- 调整sessions参数
+- 检查操作系统资源限制
+
+#### 11.1.8.操作日志logs
+
+```bash
+[oracle@k8s-rac01 ~]$ sqlplus system/Oracle2023#Sys@172.18.13.176:1521/s_stuwork
+
+SQL*Plus: Release 19.0.0.0.0 - Production on Tue Apr 8 10:21:42 2025
+Version 19.21.0.0.0
+
+Copyright (c) 1982, 2022, Oracle.  All rights reserved.
+
+Last Successful login time: Fri Apr 04 2025 23:17:01 +08:00
+
+Connected to:
+Oracle Database 19c Enterprise Edition Release 19.0.0.0.0 - Production
+Version 19.3.0.0.0
+
+SYSTEM@172.18.13.176:1521/s_stuwork> select instance_name from v$instance;
+
+INSTANCE_NAME
+----------------
+xydb3
+
+SYSTEM@172.18.13.176:1521/s_stuwork> 
+
+SYSTEM@172.18.13.176:1521/s_stuwork> exit
+Disconnected from Oracle Database 19c Enterprise Edition Release 19.0.0.0.0 - Production
+Version 19.3.0.0.0
+[oracle@k8s-rac01 ~]$ 
+
+[oracle@k8s-rac01 ~]$ cd /home/oracle/swingbench/swingbench
+[oracle@k8s-rac01 swingbench]$ ls
+bin  configs  launcher  lib  log  README.md  source  sql  utils  winbin  wizardconfigs
+[oracle@k8s-rac01 swingbench]$ ls bin
+charbench    data              jsonwizard  moviewizard  results2pdf  shwizard    swingbench   tpchwizard
+coordinator  jsonsocialwizard  minibench   oewizard     sbutil       sqlbuilder  tpcdswizard
+[oracle@k8s-rac01 swingbench]$ ./bin/oewizard -h
+usage: parameters:
+ -allindexes             build all indexes for schema
+ -async_off              run without async transactions
+ -async_on               run with async transactions (default)
+ -bigfile                use big file tablespaces
+ -bs <size>              the batch size of rows inserted into the database
+ -c <filename>           wizard config file
+ -cf <file>              the location of a credentials file for Oracle
+                         Autonomous Database
+ -cl                     run in character mode
+ -compositepart          use a composite paritioning model if it exisits
+ -compress               use default compression model if it exists
+ -constraints            only create primary/foreign keys for schema
+ -create                 create benchmarks schema
+ -cs <connectString>     connectring for database
+ -dba <username>         dba username for schema creation
+ -dbap <password>        password for schema creation
+ -debug                  turn on debugging output
+ -debugf <debugfile>     turn on debugging. Write output to <debugfile>
+                         defaults to debug.log
+ -df <datafile>          datafile name used to create schema in
+ -drop                   drop benchmarks schema
+ -dt <driverType>        driver type (oci|thin)
+ -g                      run in graphical mode (default)
+ -generate               generate data for benchmark if available
+ -h,--help               print this message
+ -hashpart               use hash paritioning model if it exists
+ -hcccompress            use HCC compression if it exisits
+ -idf <datafile>         index datafile used to create indexes in
+ -its <datafile>         index tablespace used to create indexes in
+ -nc                     Don't use color output
+ -nocompress             don't use any database compression
+ -noindexes              don't build any indexes for schema
+ -nopart                 don't use any database partitioning
+ -normalfile             use normal file tablespaces
+ -oltpcompress           use OLTP compression if it exisits
+ -ot <output type>       output type (json or std), defaults to std
+ -p <password>           password for benchmark schema
+ -part                   use default paritioning model if it exists
+ -rangepart              use a range paritioning model if it exisits
+ -ro                     reverse the order in which data is generated
+                         (smallest first)
+ -s                      run in silent mode
+ -scale <scale>          mulitiplier for default config
+ -sp <soft partitions>   the number of softparitions used. Defaults to cpu
+                         count
+ -tc <thread count>      the number of threads(parallelism) used to
+                         generate data. Defaults to cpus*2
+ -ts <tablespace>        tablespace to create schema in
+ -u <username>           username for benchmark schema
+ -v                      run in verbose mode when running from command
+                         line
+ -version <version>      version of the benchmark to run
+ 
+[oracle@k8s-rac01 swingbench]$ ./bin/oewizard -cl \
+  -cs //172.18.13.176:1521/s_stuwork \
+  -u soe \
+  -p soe \
+  -ts swingbench_data \
+  -its swingbench_index \
+  -scale 1 \
+  -create \
+  -v \
+  -c /home/oracle/swingbench/configs/SOE_Server_Side_V2.xml \
+  -df +DATA \
+  -nopart
+  
+SwingBench Wizard
+Author  :	Dominic Giles
+Version :	2.7.0.1511
+
+Running in Lights Out Mode using config file : ../wizardconfigs/oewizard.xml
+ERROR : Cannot connect to the database using the details provided.                       
+ERROR :  ORA-01017: invalid username/password; logon denied
+
+https://docs.oracle.com/error-help/db/ora-01017/ 
+
+
+
+[oracle@k8s-rac01 swingbench]$ ./bin/oewizard -cl \
+  -cs //172.18.13.176:1521/s_stuwork \
+  -dba "sys as sysdba" \
+  -dbap "abc123" \
+  -u soe \
+  -p soe \
+  -ts swingbench_data \
+  -its swingbench_index \
+  -scale 1 \
+  -create \
+  -v \
+  -c /home/oracle/swingbench/configs/SOE_Server_Side_V2.xml \
+  -df +DATA \
+  -nopart
+
+
+SwingBench Wizard
+Author  :	Dominic Giles
+Version :	2.7.0.1511
+
+Running in Lights Out Mode using config file : ../wizardconfigs/oewizard.xml
+Starting run                                                                            
+Starting script ../sql/orderentry/soedgdrop2.sql                                        
+Script completed in 0 hour(s) 0 minute(s) 0 second(s) 136 millisecond(s)                
+Starting script ../sql/orderentry/soedgcreatetables2.sql                                
+Script completed in 0 hour(s) 0 minute(s) 0 second(s) 350 millisecond(s)                
+Starting script ../sql/orderentry/soedgviews.sql                                        
+Script completed in 0 hour(s) 0 minute(s) 0 second(s) 66 millisecond(s)                 
+Starting script ../sql/orderentry/soedgsqlset.sql                                       
+Script completed in 0 hour(s) 0 minute(s) 0 second(s) 235 millisecond(s)                
+Inserting data into table PRODUCT_INFORMATION                                           
+Inserting data into table INVENTORIES                                                   
+Inserting data into table ADDRESSES_16 
+Inserting data into table ADDRESSES_14                                                  
+Inserting data into table ADDRESSES_4                                                   
+Inserting data into table ADDRESSES_15                                                  
+Inserting data into table ADDRESSES_5                                                   
+Inserting data into table ADDRESSES_6                                                   
+Inserting data into table ADDRESSES_3 
+Inserting data into table ADDRESSES_1                                                   
+Inserting data into table ADDRESSES_2                                                   
+Inserting data into table ADDRESSES_10                                                  
+Inserting data into table ADDRESSES_13                                                  
+Inserting data into table ADDRESSES_9                                                   
+Inserting data into table ADDRESSES_8                                                   
+Inserting data into table ADDRESSES_11                                                  
+Inserting data into table ADDRESSES_7                                                   
+Inserting data into table ADDRESSES_12                                                  
+Inserting data into table CUSTOMERS_16                                                  
+Inserting data into table CUSTOMERS_1                                                   
+Inserting data into table CUSTOMERS_6                                                   
+Inserting data into table CUSTOMERS_10                                                  
+Inserting data into table CUSTOMERS_11                                                  
+Inserting data into table CUSTOMERS_12                                                  
+Inserting data into table CUSTOMERS_13                                                  
+Inserting data into table CUSTOMERS_14                                                  
+Inserting data into table CUSTOMERS_15 
+Inserting data into table CUSTOMERS_5                                                   
+Inserting data into table CUSTOMERS_4                                                   
+Inserting data into table CUSTOMERS_3                                                   
+Inserting data into table CUSTOMERS_2                                                   
+Inserting data into table CUSTOMERS_9                                                   
+Completed processing table PRODUCT_INFORMATION in 0:00:01                               
+Inserting data into table CUSTOMERS_8                                                   
+Completed processing table CUSTOMERS_9 in 0:00:05 a generation completed : 12.49%       
+Inserting data into table CUSTOMERS_7                                                   
+Completed processing table CUSTOMERS_16 in 0:00:05                                      
+Inserting data into table ORDERS_16                                                     
+Inserting data into table ORDER_ITEMS_1340415                                           
+Completed processing table CUSTOMERS_13 in 0:00:05                                      
+Inserting data into table ORDER_ITEMS_268083                                            
+Completed processing table ADDRESSES_16 in 0:00:05 
+Inserting data into table ORDERS_4                                                      
+Completed processing table CUSTOMERS_1 in 0:00:05                                       
+Completed processing table ADDRESSES_13 in 0:00:05                                      
+Inserting data into table ORDER_ITEMS_536166                                            
+Inserting data into table ORDERS_7                                                      
+Completed processing table CUSTOMERS_15 in 0:00:06                                      
+Completed processing table CUSTOMERS_14 in 0:00:06                                      
+Inserting data into table ORDER_ITEMS_714888                                            
+Inserting data into table ORDERS_9                                                      
+Completed processing table ADDRESSES_5 in 0:00:06                                       
+Completed processing table ADDRESSES_12 in 0:00:06                                      
+Inserting data into table ORDERS_13                                                     
+Inserting data into table ORDER_ITEMS_1072332                                           
+Completed processing table ADDRESSES_8 in 0:00:06                                       
+Completed processing table ADDRESSES_7 in 0:00:06                                       
+Inserting data into table ORDERS_14                                                     
+Inserting data into table ORDER_ITEMS_1161693 
+Completed processing table ADDRESSES_10 in 0:00:06                                      
+Completed processing table ADDRESSES_14 in 0:00:06                                      
+Inserting data into table ORDER_ITEMS_446805                                            
+Inserting data into table ORDERS_6                                                      
+Completed processing table CUSTOMERS_5 in 0:00:06                                       
+Inserting data into table ORDER_ITEMS_0                                                 
+Completed processing table CUSTOMERS_8 in 0:00:05 
+Inserting data into table ORDERS_1                                                      
+Completed processing table CUSTOMERS_11 in 0:00:07                                      
+Inserting data into table ORDER_ITEMS_178722                                            
+Completed processing table CUSTOMERS_3 in 0:00:07 
+Inserting data into table ORDERS_3                                                      
+Completed processing table CUSTOMERS_2 in 0:00:07                                       
+Completed processing table ADDRESSES_9 in 0:00:07                                       
+Inserting data into table ORDERS_10                                                     
+Inserting data into table ORDER_ITEMS_804249                                            
+Completed processing table CUSTOMERS_4 in 0:00:07                                       
+Inserting data into table ORDERS_12                                                     
+Completed processing table CUSTOMERS_6 in 0:00:07 
+Inserting data into table ORDER_ITEMS_982971 
+Completed processing table CUSTOMERS_10 in 0:00:07                                      
+Inserting data into table ORDER_ITEMS_357444                                            
+Completed processing table CUSTOMERS_12 in 0:00:07 
+Inserting data into table ORDERS_5                                                      
+Completed processing table ADDRESSES_4 in 0:00:07                                       
+Inserting data into table ORDER_ITEMS_625527                                            
+Inserting data into table ORDERS_8                                                      
+Completed processing table ADDRESSES_15 in 0:00:08 
+Completed processing table ADDRESSES_11 in 0:00:08                                      
+Inserting data into table ORDER_ITEMS_893610                                            
+Inserting data into table ORDERS_11                                                     
+Completed processing table CUSTOMERS_7 in 0:00:03 
+Completed processing table ADDRESSES_2 in 0:00:08                                       
+Inserting data into table ORDER_ITEMS_1251054                                           
+Inserting data into table ORDERS_15                                                     
+Completed processing table ADDRESSES_3 in 0:00:08 
+Completed processing table ADDRESSES_6 in 0:00:08                                       
+Completed processing table ADDRESSES_1 in 0:00:08                                       
+Inserting data into table ORDER_ITEMS_89361                                             
+Inserting data into table ORDERS_2 
+Completed processing table INVENTORIES in 0:00:11                                       
+Completed processing table ORDERS_3 in 0:00:22                                          
+Inserting data into table CARD_DETAILS_16 
+Completed processing table ORDERS_6 in 0:00:23                                          
+Inserting data into table CARD_DETAILS_15                                               
+Completed processing table ORDERS_1 in 0:00:23                                          
+Inserting data into table CARD_DETAILS_13                                               
+Completed processing table ORDERS_2 in 0:00:21                                          
+Inserting data into table CARD_DETAILS_12                                               
+Completed processing table ORDERS_9 in 0:00:24                                          
+Inserting data into table CARD_DETAILS_7                                                
+Completed processing table ORDERS_10 in 0:00:23                                         
+Inserting data into table CARD_DETAILS_14                                               
+Completed processing table ORDERS_5 in 0:00:23                                          
+Inserting data into table CARD_DETAILS_10                                               
+Completed processing table ORDERS_15 in 0:00:22                                         
+Inserting data into table CARD_DETAILS_8                                                
+Completed processing table ORDERS_8 in 0:00:23                                          
+Inserting data into table CARD_DETAILS_2                                                
+Completed processing table ORDERS_12 in 0:00:24                                         
+Inserting data into table CARD_DETAILS_4                                                
+Completed processing table ORDER_ITEMS_446805 in 0:00:25                                
+Inserting data into table CARD_DETAILS_9                                                
+Completed processing table ORDER_ITEMS_714888 in 0:00:25                                
+Inserting data into table CARD_DETAILS_6                                                
+Completed processing table ORDERS_11 in 0:00:24                                         
+Inserting data into table CARD_DETAILS_3                                                
+Completed processing table ORDER_ITEMS_89361 in 0:00:23                                 
+Inserting data into table CARD_DETAILS_1                                                
+Completed processing table ORDER_ITEMS_804249 in 0:00:25                                
+Inserting data into table CARD_DETAILS_5                                                
+Completed processing table ORDER_ITEMS_357444 in 0:00:25                                
+Inserting data into table CARD_DETAILS_11                                               
+Completed processing table CARD_DETAILS_9 in 0:00:01                                    
+Inserting data into table LOGON_16                                                      
+Completed processing table CARD_DETAILS_15 in 0:00:03                                   
+Inserting data into table LOGON_15                                                      
+Completed processing table CARD_DETAILS_13 in 0:00:02                                   
+Inserting data into table LOGON_10                                                      
+Completed processing table CARD_DETAILS_10 in 0:00:02                                   
+Inserting data into table LOGON_9                                                       
+Completed processing table CARD_DETAILS_7 in 0:00:02                                    
+Inserting data into table LOGON_8 ds (32/32) : Data generation completed : 74.61%       
+Completed processing table CARD_DETAILS_14 in 0:00:02                                   
+Inserting data into table LOGON_1                                                       
+Completed processing table CARD_DETAILS_16 in 0:00:04                                   
+Inserting data into table LOGON_12                                                      
+Completed processing table ORDER_ITEMS_178722 in 0:00:27                                
+Inserting data into table LOGON_6                                                       
+Completed processing table ORDER_ITEMS_0 in 0:00:27                                     
+Inserting data into table LOGON_2                                                       
+Completed processing table ORDER_ITEMS_1251054 in 0:00:25                               
+Inserting data into table LOGON_7                                                       
+Completed processing table CARD_DETAILS_4 in 0:00:02                                    
+Inserting data into table LOGON_4                                                       
+Completed processing table CARD_DETAILS_6 in 0:00:02                                    
+Inserting data into table LOGON_5                                                       
+Completed processing table ORDER_ITEMS_982971 in 0:00:27                                
+Inserting data into table LOGON_11                                                      
+Completed processing table CARD_DETAILS_5 in 0:00:02                                    
+Inserting data into table LOGON_14                                                      
+Completed processing table ORDER_ITEMS_893610 in 0:00:26                                
+Inserting data into table LOGON_3                                                       
+Completed processing table ORDER_ITEMS_625527 in 0:00:26                                
+Inserting data into table LOGON_13                                                      
+Completed processing table CARD_DETAILS_11 in 0:00:02                                   
+Inserting data into table PRODUCT_DESCRIPTIONS                                          
+Completed processing table PRODUCT_DESCRIPTIONS in 0:00:00                              
+Inserting data into table WAREHOUSES                                                    
+Completed processing table WAREHOUSES in 0:00:00                                        
+Completed processing table CARD_DETAILS_1 in 0:00:03                                    
+Completed processing table CARD_DETAILS_8 in 0:00:04                                    
+Completed processing table CARD_DETAILS_12 in 0:00:05                                   
+Completed processing table CARD_DETAILS_2 in 0:00:04                                    
+Completed processing table CARD_DETAILS_3 in 0:00:03                                    
+Completed processing table LOGON_1 in 0:00:04                                           
+Completed processing table LOGON_4 in 0:00:03                                           
+Completed processing table LOGON_14 in 0:00:03 Data generation completed : 95.89%       
+Completed processing table LOGON_16 in 0:00:04                                          
+Completed processing table LOGON_11 in 0:00:03                                          
+Completed processing table LOGON_10 in 0:00:04                                          
+Completed processing table LOGON_15 in 0:00:04                                          
+Completed processing table LOGON_13 in 0:00:03                                          
+Completed processing table LOGON_9 in 0:00:04                                           
+Completed processing table LOGON_7 in 0:00:03                                           
+Completed processing table LOGON_12 in 0:00:04                                          
+Completed processing table LOGON_5 in 0:00:03                                           
+Completed processing table ORDERS_7 in 0:00:32                                          
+Completed processing table LOGON_8 in 0:00:04                                           
+Completed processing table LOGON_2 in 0:00:04                                           
+Completed processing table LOGON_3 in 0:00:03                                           
+Completed processing table LOGON_6 in 0:00:04                                           
+Completed processing table ORDERS_4 in 0:00:33                                          
+Completed processing table ORDERS_13 in 0:00:32                                         
+Completed processing table ORDERS_16 in 0:00:34                                         
+Completed processing table ORDERS_14 in 0:00:33                                         
+Completed processing table ORDER_ITEMS_536166 in 0:00:34                                
+Completed processing table ORDER_ITEMS_268083 in 0:00:35                                
+Completed processing table ORDER_ITEMS_1072332 in 0:00:34                               
+Completed processing table ORDER_ITEMS_1340415 in 0:00:35                               
+Starting script ../sql/orderentry/soedganalyzeschema2.sql                               
+ERROR : The following statement failed : BEGIN                                           
+    DBMS_STATS.set_global_prefs ( 
+        pname   => 'CONCURRENT', 
+        pvalue  => 'AUTOMATIC' 
+    ); 
+END; 
+ : Due to : ORA-20000: Insufficient privileges
+ORA-06512: at "SYS.DBMS_STATS", line 10348
+ORA-06512: at "SYS.DBMS_STATS", line 52374
+ORA-06512: at "SYS.DBMS_STATS", line 52737
+ORA-06512: at line 2
+
+https://docs.oracle.com/error-help/db/ora-20000/
+
+Script completed in 0 hour(s) 0 minute(s) 28 second(s) 304 millisecond(s)               
+Starting script ../sql/orderentry/soedgconstraints2.sql                                 
+Script completed in 0 hour(s) 0 minute(s) 40 second(s) 886 millisecond(s)               
+Starting script ../sql/orderentry/soedgindexes2.sql                                     
+Script completed in 0 hour(s) 1 minute(s) 10 second(s) 599 millisecond(s)               
+Starting script ../sql/orderentry/soedgsequences2.sql                                   
+Script completed in 0 hour(s) 0 minute(s) 24 second(s) 456 millisecond(s)               
+Starting script ../sql/orderentry/soedgpackage2_header.sql                              
+Script completed in 0 hour(s) 0 minute(s) 0 second(s) 279 millisecond(s)                
+Starting script ../sql/orderentry/soedgpackage2_body.sql                                
+Script completed in 0 hour(s) 0 minute(s) 0 second(s) 214 millisecond(s)                
+Starting script ../sql/orderentry/soedgsetupmetadata.sql                                
+Script completed in 0 hour(s) 0 minute(s) 2 second(s) 445 millisecond(s)                
+
+Data Generation Runtime Metrics
++-------------------------+-------------+
+| Description             | Value       |
++-------------------------+-------------+
+| Connection Time         | 0:00:00.002 |
+| Data Generation Time    | 0:00:41.792 |
+| DDL Creation Time       | 0:02:48.034 |
+| Total Run Time          | 0:03:29.832 |
+| Rows Inserted per sec   | 379,612     |
+| Actual Rows Generated   | 15,857,704  |
+| Commits Completed       | 928         |
+| Batch Updates Completed | 79,406      |
++-------------------------+-------------+
+
+Validation Report                                                                       
+The schema appears to have been created successfully.
+
+Valid Objects
+Valid Tables : 'ORDERS','ORDER_ITEMS','CUSTOMERS','WAREHOUSES','ORDERENTRY_METADATA','INVENTORIES','PRODUCT_INFORMATION','PRODUCT_DESCRIPTIONS','ADDRESSES','CARD_DETAILS'
+Valid Indexes : 'PRD_DESC_PK','PROD_NAME_IX','PRODUCT_INFORMATION_PK','PROD_SUPPLIER_IX','PROD_CATEGORY_IX','INVENTORY_PK','INV_PRODUCT_IX','INV_WAREHOUSE_IX','ORDER_PK','ORD_SALES_REP_IX','ORD_CUSTOMER_IX','ORD_ORDER_DATE_IX','ORD_WAREHOUSE_IX','ORDER_ITEMS_PK','ITEM_ORDER_IX','ITEM_PRODUCT_IX','WAREHOUSES_PK','WHS_LOCATION_IX','CUSTOMERS_PK','CUST_EMAIL_IX','CUST_ACCOUNT_MANAGER_IX','CUST_FUNC_LOWER_NAME_IX','ADDRESS_PK','ADDRESS_CUST_IX','CARD_DETAILS_PK','CARDDETAILS_CUST_IX'
+Valid Views : 'PRODUCTS','PRODUCT_PRICES'
+Valid Sequences : 'CUSTOMER_SEQ','ORDERS_SEQ','ADDRESS_SEQ','LOGON_SEQ','CARD_DETAILS_SEQ'
+Valid Code : 'ORDERENTRY'
+Schema Created
+
+
+[oracle@k8s-rac01 orderentry]$ cat soedganalyzeschema2.sql
+BEGIN
+    DBMS_STATS.set_global_prefs (
+        pname   => 'CONCURRENT',
+        pvalue  => 'AUTOMATIC'
+    );
+END;
+/
+
+begin
+    dbms_stats.gather_schema_stats(
+        ownname => '&username',
+        estimate_percent => dbms_stats.auto_sample_size,
+        block_sample => true,
+        method_opt =>'FOR ALL COLUMNS SIZE SKEWONLY',
+        degree => &parallelism,
+        granularity => 'ALL',
+        cascade => true
+    );
+end;
+/
+
+--End
+[oracle@k8s-rac01 orderentry]$
+
+#解决办法
+#方案一
+#以具有足够权限的用户（如 SYS）执行操作
+BEGIN
+    DBMS_STATS.set_global_prefs (
+        pname   => 'CONCURRENT',
+        pvalue  => 'AUTOMATIC'
+    );
+END;
+/
+
+#方案二
+#以SYSDBA权限授予必要的权限给当前用户
+GRANT ANALYZE ANY TO soe;
+GRANT ANALYZE ANY DICTIONARY TO soe;
+
+
+
+[oracle@k8s-rac01 swingbench]$ cp configs/SOE_Server_Side_V2.xml configs/19RAC_Test.xml
+[oracle@k8s-rac01 swingbench]$ vi configs/19RAC_Test.xml
+
+
+[oracle@k8s-rac01 swingbench]$ ./bin/charbench \
+  -c ./configs/19RAC_Test.xml \
+  -cs //172.18.13.176:1521/s_stuwork \
+  -u soe \
+  -p soe \
+  -v users,tpm,tps \
+  -intermin 0 \
+  -intermax 0 \
+  -min 0 \
+  -max 0 \
+  -uc 100 \
+  -rt 00:30 \
+  -a
+  
+
+
+11:59:04  [100/100]   120090   3617    
+Saved results to results.xml 
+11:59:05  [0/100]     120016   3119    
+Completed Run. 
+[oracle@k8s-rac01 swingbench]$ ls
+bin  configs  launcher  lib  log  README.md  source  sql  utils  winbin  wizardconfigs
+[oracle@k8s-rac01 swingbench]$ find ./ -name results.xml
+./bin/results.xml
+[oracle@k8s-rac01 swingbench]$ ./bin/swingbench -h
+Error : You're trying to start swingbench on a server without a graphical frontend. Try using charbench instead.
+[oracle@k8s-rac01 swingbench]$ ./bin/swingbench --help
+Error : You're trying to start swingbench on a server without a graphical frontend. Try using charbench instead.
+[oracle@k8s-rac01 swingbench]$ ./bin/swingbench -ls ./bin/results.xml 
+Error : You're trying to start swingbench on a server without a graphical frontend. Try using charbench instead.
+[oracle@k8s-rac01 swingbench]$ ls bin
+charbench    data              jsonwizard  moviewizard  results2pdf  sbutil    sqlbuilder  tpcdswizard
+coordinator  jsonsocialwizard  minibench   oewizard     results.xml  shwizard  swingbench  tpchwizard
+[oracle@k8s-rac01 swingbench]$ ./bin/results2pdf -h
+Results2Pdf 
+Author  :  	 Dominic Giles 
+Version :  	 2.7.0.1511 
+usage: parameters:
+ -c <filename>   the config file to convert from xml to pdf
+ -debug          send debug information to stdout
+ -h,--help       print this message
+ -o <arg>        output filename
+[oracle@k8s-rac01 swingbench]$ ./bin/results2pdf -c ./bin/results.xml -o 100results.pdf
+Results2Pdf 
+Author  :  	 Dominic Giles 
+Version :  	 2.7.0.1511 
+The results file  ./bin/results.xml  does not exist. Exiting, please try again.
+[oracle@k8s-rac01 swingbench]$ ./bin/results2pdf -c results.xml -o 100results.pdf
+Results2Pdf 
+Author  :  	 Dominic Giles 
+Version :  	 2.7.0.1511 
+Success : Pdf file 100results.pdf was created from results.xml results file.
+[oracle@k8s-rac01 swingbench]$ ls bin
+100results.pdf  coordinator  jsonsocialwizard  minibench    oewizard     results.xml  shwizard    swingbench   tpchwizard
+charbench       data         jsonwizard        moviewizard  results2pdf  sbutil       sqlbuilder  tpcdswizard
+[oracle@k8s-rac01 swingbench]$ 
+
+
+
+#100并发时
+[oracle@k8s-19rac03 ~]$ sqlplus / as sysdba
+
+SQL*Plus: Release 19.0.0.0.0 - Production on Tue Apr 8 11:31:10 2025
+Version 19.3.0.0.0
+
+Copyright (c) 1982, 2019, Oracle.  All rights reserved.
+
+
+Connected to:
+Oracle Database 19c Enterprise Edition Release 19.0.0.0.0 - Production
+Version 19.3.0.0.0
+
+SQL> alter session set container=stuwork;
+
+Session altered.
+
+SQL> SELECT event, COUNT(*) 
+FROM gv$session 
+WHERE username = 'SOE' AND wait_class != 'Idle' 
+GROUP BY event 
+ORDER BY COUNT(*) DESC;  2    3    4    5  
+
+EVENT								   COUNT(*)
+---------------------------------------------------------------- ----------
+log file sync								 46
+gc buffer busy release							 18
+gc current request							 13
+gc cr request								  7
+gc buffer busy acquire							  6
+db file sequential read 						  5
+gc cr block 3-way							  3
+gc current grant 2-way							  1
+
+8 rows selected.
+
+SQL> /
+
+EVENT								   COUNT(*)
+---------------------------------------------------------------- ----------
+gc current request							 34
+gc cr request								 25
+log file sync								 19
+db file sequential read 						  6
+gc buffer busy acquire							  5
+gc cr multi block request						  3
+read by other session							  1
+gc current block 2-way							  1
+gc cr block 3-way							  1
+gc cr block 2-way							  1
+
+10 rows selected.
+
+SQL> SELECT inst_id, COUNT(*) 
+FROM gv$session 
+WHERE username = 'SOE' 
+GROUP BY inst_id;  2    3    4  
+
+   INST_ID   COUNT(*)
+---------- ----------
+	 1	   35
+	 2	   34
+	 3	   32
+
+SQL> SELECT inst_id, value 
+FROM gv$sysmetric 
+WHERE metric_name = 'CPU Usage Per Sec' 
+AND group_id = 2;  2    3    4  
+
+no rows selected
+
+SQL> SELECT inst_id, resource_name, current_utilization, max_utilization 
+FROM gv$resource_limit 
+WHERE resource_name IN ('processes', 'sessions', 'transactions') 
+ORDER BY inst_id, resource_name;  2    3    4  
+
+no rows selected
+
+SQL> SELECT event, COUNT(*) 
+FROM gv$session 
+WHERE username = 'SOE' AND wait_class != 'Idle' 
+GROUP BY event 
+ORDER BY COUNT(*) DESC;  2    3    4    5  
+
+EVENT								   COUNT(*)
+---------------------------------------------------------------- ----------
+log file sync								 38
+gc current request							 21
+gc cr request								 15
+gc cr block 2-way							  6
+gc current block busy							  4
+gc current block 2-way							  3
+library cache: mutex X							  3
+gc cr block 3-way							  1
+kfk: async disk IO							  1
+gc current grant busy							  1
+enq: HW - contention							  1
+
+EVENT								   COUNT(*)
+---------------------------------------------------------------- ----------
+gc current block 3-way							  1
+db file sequential read 						  1
+
+13 rows selected.
+
+SQL> SELECT inst_id, COUNT(*) 
+FROM gv$session 
+WHERE username = 'SOE' 
+GROUP BY inst_id;  2    3    4  
+
+   INST_ID   COUNT(*)
+---------- ----------
+	 1	   35
+	 2	   34
+	 3	   32
+
+SQL> SELECT inst_id, resource_name, current_utilization, max_utilization 
+FROM gv$resource_limit 
+WHERE resource_name IN ('processes', 'sessions', 'transactions') 
+ORDER BY inst_id, resource_name;  2    3    4  
+
+no rows selected
+
+SQL> 
+
+
+```
+
