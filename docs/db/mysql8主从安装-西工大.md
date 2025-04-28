@@ -1764,6 +1764,8 @@ SET @@GLOBAL.read_only = OFF;
 
 
 
+#此时如果主库全库导入旧库，那么导入后，双主库都需要重启mysql，不然mysql.user中的账户密码不生效
+
 #### 4、错误处理
 
 ##### 4.1.root/repl账户重复的报错
@@ -4752,7 +4754,9 @@ show replica status\G;
 #### 1、安装依赖包
 
 ```bash
-yum install -y pcre-devel openssl-devel popt-devel libnl libnl-devel psmisc gcc
+#yum install -y pcre-devel openssl-devel popt-devel libnl libnl-devel psmisc gcc
+
+yum install -y pcre-devel openssl-devel popt-devel psmisc gcc
 ```
 
 
@@ -4772,10 +4776,85 @@ keepalived -v
 #logs
 
 ```bash
+#centos 7.9
 [root@DB01-test network-scripts]# keepalived -v
 Keepalived v1.3.5 (03/19,2017), git commit v1.3.5-6-g6fa32f2
 
 #如果版本过低，低于2.2.8，那么可以离线部署
+
+#kylin
+[root@DB01-test ~]# yum install -y pcre-devel openssl-devel popt-devel libnl libnl-devel psmisc gcc
+Last metadata expiration check: 2:09:42 ago on Mon 21 Apr 2025 07:28:07 AM CST.
+Package pcre-devel-8.44-2.ky10.x86_64 is already installed.
+Package openssl-devel-1:1.1.1f-4.p22.ky10.x86_64 is already installed.
+No match for argument: libnl
+No match for argument: libnl-devel
+Package psmisc-23.3-2.ky10.x86_64 is already installed.
+Package gcc-7.3.0-20190804.35.p07.ky10.x86_64 is already installed.
+Error: Unable to find a match: libnl libnl-devel
+[root@DB01-test ~]# yum install -y keepalived
+Last metadata expiration check: 2:10:16 ago on Mon 21 Apr 2025 07:28:07 AM CST.
+Dependencies resolved.
+=========================================================================================================================================================
+ Package                                 Architecture               Version                                   Repository                            Size
+=========================================================================================================================================================
+Installing:
+ keepalived                              x86_64                     2.0.20-19.p01.ky10                        ks10-adv-updates                     294 k
+Installing dependencies:
+ mariadb-connector-c                     x86_64                     3.0.6-8.p01.ky10                          ks10-adv-updates                     127 k
+ net-snmp                                x86_64                     1:5.9-3.p05.ky10                          ks10-adv-updates                     1.1 M
+
+Transaction Summary
+=========================================================================================================================================================
+Install  3 Packages
+
+Total download size: 1.5 M
+Installed size: 6.2 M
+Downloading Packages:
+(1/3): mariadb-connector-c-3.0.6-8.p01.ky10.x86_64.rpm                                                                   402 kB/s | 127 kB     00:00
+(2/3): net-snmp-5.9-3.p05.ky10.x86_64.rpm                                                                                2.7 MB/s | 1.1 MB     00:00
+(3/3): keepalived-2.0.20-19.p01.ky10.x86_64.rpm                                                                          443 kB/s | 294 kB     00:00
+---------------------------------------------------------------------------------------------------------------------------------------------------------
+Total                                                                                                                    2.2 MB/s | 1.5 MB     00:00
+Running transaction check
+Transaction check succeeded.
+Running transaction test
+Transaction test succeeded.
+Running transaction
+  Running scriptlet: mariadb-connector-c-3.0.6-8.p01.ky10.x86_64                                                                                     1/1
+  Preparing        :                                                                                                                                 1/1
+  Installing       : mariadb-connector-c-3.0.6-8.p01.ky10.x86_64                                                                                     1/3
+  Installing       : net-snmp-1:5.9-3.p05.ky10.x86_64                                                                                                2/3
+  Running scriptlet: net-snmp-1:5.9-3.p05.ky10.x86_64                                                                                                2/3
+  Installing       : keepalived-2.0.20-19.p01.ky10.x86_64                                                                                            3/3
+  Running scriptlet: keepalived-2.0.20-19.p01.ky10.x86_64                                                                                            3/3
+/sbin/ldconfig: /usr/lib64/libLLVM-7.so is not a symbolic link
+
+
+  Verifying        : keepalived-2.0.20-19.p01.ky10.x86_64                                                                                            1/3
+  Verifying        : mariadb-connector-c-3.0.6-8.p01.ky10.x86_64                                                                                     2/3
+  Verifying        : net-snmp-1:5.9-3.p05.ky10.x86_64                                                                                                3/3
+
+Installed:
+  keepalived-2.0.20-19.p01.ky10.x86_64             mariadb-connector-c-3.0.6-8.p01.ky10.x86_64             net-snmp-1:5.9-3.p05.ky10.x86_64
+
+Complete!
+[root@DB01-test ~]# keepalived -v
+Keepalived v2.0.20 (01/22,2020)
+
+Copyright(C) 2001-2020 Alexandre Cassen, <acassen@gmail.com>
+
+Built with kernel headers for Linux 4.19.90
+Running on Linux 4.19.90-25.44.v2101.ky10.x86_64 #1 SMP Thu Nov 7 17:33:30 CST 2024
+
+configure options: --build=x86_64-koji-linux-gnu --host=x86_64-koji-linux-gnu --program-prefix= --disable-dependency-tracking --prefix=/usr --exec-prefix=/usr --bindir=/usr/bin --sbindir=/usr/sbin --sysconfdir=/etc --datadir=/usr/share --includedir=/usr/include --libdir=/usr/lib64 --libexecdir=/usr/libexec --localstatedir=/var --sharedstatedir=/var/lib --mandir=/usr/share/man --infodir=/usr/share/info --enable-sha1 --with-init=systemd --enable-nftables --disable-iptables --disable-ipset --enable-snmp --enable-snmp-rfc build_alias=x86_64-koji-linux-gnu host_alias=x86_64-koji-linux-gnu PKG_CONFIG_PATH=:/usr/lib64/pkgconfig:/usr/share/pkgconfig CFLAGS=-O2 -g -pipe -Wall -Werror=format-security -Wp,-D_FORTIFY_SOURCE=2 -Wp,-D_GLIBCXX_ASSERTIONS -fexceptions -fstack-protector-strong -grecord-gcc-switches -specs=/usr/lib/rpm/kylin/kylin-hardened-cc1 -m64 -mtune=generic -fasynchronous-unwind-tables -fstack-clash-protection  LDFLAGS=-Wl,-z,relro -Wl,-z,now -specs=/usr/lib/rpm/kylin/kylin-hardened-ld
+
+Config options:  NFTABLES LVS VRRP VRRP_AUTH OLD_CHKSUM_COMPAT FIB_ROUTING SNMP_V3_FOR_V2 SNMP_VRRP SNMP_CHECKER SNMP_RFCV2 SNMP_RFCV3
+
+System options:  PIPE2 SIGNALFD INOTIFY_INIT1 VSYSLOG EPOLL_CREATE1 IPV4_DEVCONF IPV6_ADVANCED_API LIBNL3 RTA_ENCAP RTA_EXPIRES RTA_NEWDST RTA_PREF FRA_SUPPRESS_PREFIXLEN FRA_SUPPRESS_IFGROUP FRA_TUN_ID RTAX_CC_ALGO RTAX_QUICKACK RTEXT_FILTER_SKIP_STATS FRA_L3MDEV FRA_UID_RANGE RTAX_FASTOPEN_NO_COOKIE RTA_VIA FRA_OIFNAME FRA_PROTOCOL FRA_IP_PROTO FRA_SPORT_RANGE FRA_DPORT_RANGE RTA_TTL_PROPAGATE IFA_FLAGS IP_MULTICAST_ALL LWTUNNEL_ENCAP_MPLS LWTUNNEL_ENCAP_ILA NET_LINUX_IF_H_COLLISION LIBIPVS_NETLINK IPVS_DEST_ATTR_ADDR_FAMILY IPVS_SYNCD_ATTRIBUTES IPVS_64BIT_STATS VRRP_VMAC VRRP_IPVLAN IFLA_LINK_NETNSID CN_PROC SOCK_NONBLOCK SOCK_CLOEXEC O_PATH GLOB_BRACE INET6_ADDR_GEN_MODE VRF SO_MARK SCHED_RESET_ON_FORK
+[root@DB01-test ~]#
+
+
 ```
 
 
@@ -4787,12 +4866,23 @@ Keepalived v1.3.5 (03/19,2017), git commit v1.3.5-6-g6fa32f2
 #官网https://www.keepalived.org/download.html
 
 ```bash
+#2024
 wget --no-check-certificate https://www.keepalived.org/software/keepalived-2.2.8.tar.gz
 tar -zxvf keepalived-2.2.8.tar.gz
 cd keepalived-2.2.8
 #yum install -y gcc
 ./configure --prefix=/usr/local/keepalived-2.2.8
 make && make install
+
+#20250422
+yum remove keepalived -y
+wget --no-check-certificate https://www.keepalived.org/software/keepalived-2.3.3.tar.gz
+tar -zxvf keepalived-2.3.3.tar.gz
+cd keepalived-2.3.3
+#yum install -y gcc
+./configure --prefix=/usr/local/keepalived-2.3.3
+make && make install
+
 
 mkdir /etc/keepalived
 cp keepalived/etc/keepalived/keepalived.conf.sample /etc/keepalived/keepalived.conf
@@ -4810,6 +4900,59 @@ chmod +x /etc/keepalived/shutdown.sh
 
 
 
+#logs
+
+```bash
+./configure --prefix=/usr/local/keepalived-2.3.3
+
+.............
+Keepalived configuration
+------------------------
+Keepalived version       : 2.3.3
+Compiler                 : gcc gcc (GCC) 7.3.0
+Preprocessor flags       : -D_GNU_SOURCE
+Compiler flags           : -g -g -O2 -Wall -Wextra -Wunused -Wstrict-prototypes -Wabi -Walloca -Walloc-zero -Warray-bounds=2 -Wbad-function-cast -Wcast-align -Wcast-qual -Wchkp -Wdate-time -Wdisabled-optimization -Wdouble-promotion -Wduplicated-branches -Wduplicated-cond -Wfloat-conversion -Wfloat-equal -Wformat-overflow -Wformat-signedness -Wformat-truncation -Wframe-larger-than=5120 -Wimplicit-fallthrough=3 -Winit-self -Winline -Winvalid-pch -Wjump-misses-init -Wlogical-op -Wmissing-declarations -Wmissing-field-initializers -Wmissing-include-dirs -Wmissing-prototypes -Wnested-externs -Wnormalized -Wnull-dereference -Wold-style-definition -Woverlength-strings -Wpointer-arith -Wredundant-decls -Wshadow -Wshift-overflow=2 -Wstack-protector -Wstrict-overflow=4 -Wstringop-overflow=2 -Wsuggest-attribute=format -Wsuggest-attribute=noreturn -Wsuggest-attribute=pure -Wsync-nand -Wtrampolines -Wundef -Wuninitialized -Wunknown-pragmas -Wunsafe-loop-optimizations -Wunsuffixed-float-constants -Wunused-const-variable=2 -Wvariadic-macros -Wwrite-strings -fno-strict-aliasing -fPIE -Wformat -Werror=format-security -fexceptions -fstack-protector-strong --param=ssp-buffer-size=4 -grecord-gcc-switches -D_FORTIFY_SOURCE=3 -O2
+Linker flags             : -pie -Wl,-z,relro -Wl,-z,now
+Extra Lib                : -lm -lssl -lcrypto -lsystemd
+Use IPVS Framework       : Yes
+IPVS use libnl           : No
+IPVS syncd attributes    : Yes
+IPVS 64 bit stats        : Yes
+HTTP_GET regex support   : No
+fwmark socket support    : Yes
+Use VRRP Framework       : Yes
+Use VRRP VMAC            : Yes
+Use VRRP authentication  : Yes
+With track_process       : Yes
+With linkbeat            : Yes
+Use NetworkManager       : No
+Use BFD Framework        : No
+SNMP vrrp support        : No
+SNMP checker support     : No
+SNMP RFCv2 support       : No
+SNMP RFCv3 support       : No
+DBUS support             : No
+Use JSON output          : No
+libnl version            : None
+Use IPv4 devconf         : Yes
+Use iptables             : No
+Use nftables             : No
+init type                : systemd
+systemd notify           : Yes
+Strict config checks     : No
+Build documentation      : No
+iproute usr directory    : /etc/iproute2
+iproute etc directory    : /etc/iproute2
+Default runtime options  : -D
+
+*** WARNING - this build will not support IPVS with IPv6. Please install libnl/libnl-3 dev libraries to support IPv6 with IPVS.
+
+```
+
+
+
+
+
 #### 3、修改/etc/keepalived/keepalived.conf
 
 ###主库
@@ -4822,7 +4965,7 @@ cat >> /etc/keepalived/keepalived.conf <<EOF
 
 #主要配置故障发生时的通知对象及机器标识
 global_defs {
-   router_id MYSQL-110                   #主机标识符，唯一即可
+   router_id MYSQL-80                   #主机标识符，唯一即可
    vrrp_skip_check_adv_addr
    vrrp_strict
    vrrp_garp_interval 0
@@ -4834,8 +4977,8 @@ global_defs {
 #用来定义对外提供服务的VIP区域及相关属性
 vrrp_instance VI_1 {
     state BACKUP                     #表示keepalived角色，都是设成BACKUP则以优先级为主要参考
-    interface eth0                 #指定HA监听的网络接口，刚才ifconfig查看的接口名称
-    virtual_router_id 112            #虚拟路由标识，取值0-255，master-1和master-2保持一致
+    interface enp4s1                 #指定HA监听的网络接口，刚才ifconfig查看的接口名称
+    virtual_router_id 83            #虚拟路由标识，取值0-255，master-1和master-2保持一致
     priority 100                     #优先级，用来选举master，取值范围1-255
     advert_int 1                     #发VRRP包时间间隔，即多久进行一次master选举
     authentication {
@@ -4843,12 +4986,12 @@ vrrp_instance VI_1 {
         auth_pass 1111
     }
     virtual_ipaddress {              #虚拟出来的地址
-        222.204.70.112
+        222.24.203.83
     }
 }
 
 #虚拟服务器定义
-virtual_server 222.204.70.112 3306 { #虚拟出来的地址加端口
+virtual_server 222.24.203.83 3306 { #虚拟出来的地址加端口
     delay_loop 2                     #设置运行情况检查时间，单位为秒
     lb_algo rr                       #设置后端调度器算法，rr为轮询算法
     lb_kind DR                       #设置LVS实现负载均衡的机制，有DR、NAT、TUN三种模式可选
@@ -4880,7 +5023,7 @@ cat >> /etc/keepalived/keepalived.conf <<EOF
 ! Configuration File for keepalived
 
 global_defs {
-   router_id MYSQL-110                   
+   router_id MYSQL-80                   
    vrrp_skip_check_adv_addr
    vrrp_strict
    vrrp_garp_interval 0
@@ -4892,8 +5035,8 @@ global_defs {
 
 vrrp_instance VI_1 {
     state BACKUP                    
-    interface eth0                
-    virtual_router_id 112            
+    interface enp4s1                
+    virtual_router_id 83            
     priority 100                     
     advert_int 1                    
     authentication {
@@ -4901,12 +5044,12 @@ vrrp_instance VI_1 {
         auth_pass 1111
     }
     virtual_ipaddress {             
-        222.204.70.112
+        222.24.203.83
     }
 }
 
 
-virtual_server 222.204.70.112 3306 { 
+virtual_server 222.24.203.83 3306 { 
     delay_loop 2                   
     lb_algo rr                      
     lb_kind DR                     
@@ -4941,7 +5084,7 @@ cat >> /etc/keepalived/keepalived.conf <<EOF
 
 #主要配置故障发生时的通知对象及机器标识
 global_defs {
-   router_id MYSQL-111                   #主机标识符，唯一即可
+   router_id MYSQL-81                   #主机标识符，唯一即可
    vrrp_skip_check_adv_addr
    vrrp_strict
    vrrp_garp_interval 0
@@ -4953,8 +5096,8 @@ global_defs {
 #用来定义对外提供服务的VIP区域及相关属性
 vrrp_instance VI_1 {
     state BACKUP                     #表示keepalived角色，都是设成BACKUP则以优先级为主要参考
-    interface eth0                 #指定HA监听的网络接口，刚才ifconfig查看的接口名称
-    virtual_router_id 112            #虚拟路由标识，取值0-255，master-1和master-2保持一致
+    interface enp4s1                 #指定HA监听的网络接口，刚才ifconfig查看的接口名称
+    virtual_router_id 83            #虚拟路由标识，取值0-255，master-1和master-2保持一致
     priority 40                      #优先级，用来选举master，取值范围1-255
     advert_int 1                     #发VRRP包时间间隔，即多久进行一次master选举
     authentication {
@@ -4962,12 +5105,12 @@ vrrp_instance VI_1 {
         auth_pass 1111
     }
     virtual_ipaddress {              #虚拟出来的地址
-        222.204.70.112
+        222.24.203.83
     }
 }
 
 #虚拟服务器定义
-virtual_server 222.204.70.112 3306 { #虚拟出来的地址加端口
+virtual_server 222.24.203.83 3306 { #虚拟出来的地址加端口
     delay_loop 2                     #设置运行情况检查时间，单位为秒
     lb_algo rr                       #设置后端调度器算法，rr为轮询算法
     lb_kind DR                       #设置LVS实现负载均衡的机制，有DR、NAT、TUN三种模式可选
@@ -5000,7 +5143,7 @@ cat >> /etc/keepalived/keepalived.conf <<EOF
 
 
 global_defs {
-   router_id MYSQL-111
+   router_id MYSQL-81
    vrrp_skip_check_adv_addr
    vrrp_strict
    vrrp_garp_interval 0
@@ -5012,8 +5155,8 @@ global_defs {
 
 vrrp_instance VI_1 {
     state BACKUP                     
-    interface eth0                 
-    virtual_router_id 112            
+    interface enp4s1                 
+    virtual_router_id 83            
     priority 40                     
     advert_int 1                     
     authentication {
@@ -5021,12 +5164,12 @@ vrrp_instance VI_1 {
         auth_pass 1111
     }
     virtual_ipaddress {              
-        222.204.70.112
+        222.24.203.83
     }
 }
 
 
-virtual_server 222.204.70.112 3306 { 
+virtual_server 222.24.203.83 3306 { 
     delay_loop 2                     
     lb_algo rr                       
     lb_kind DR                       
@@ -5062,6 +5205,149 @@ systemctl status keepalived
 systemctl enable keepalived
 ```
 
+
+
+#logs
+
+```bash
+[root@DB01-test keepalived-2.3.3]# systemctl start keepalived
+[root@DB01-test keepalived-2.3.3]# systemctl status keepalived
+● keepalived.service - LVS and VRRP High Availability Monitor
+   Loaded: loaded (/usr/lib/systemd/system/keepalived.service; disabled; vendor preset: disabled)
+   Active: active (running) since Tue 2025-04-22 09:34:23 CST; 1s ago
+     Docs: man:keepalived(8)
+           man:keepalived.conf(5)
+           man:genhash(1)
+           https://keepalived.org
+ Main PID: 2628369 (keepalived)
+    Tasks: 3
+   Memory: 1.0M
+   CGroup: /system.slice/keepalived.service
+           ├─2628369 /usr/local/keepalived-2.3.3/sbin/keepalived --dont-fork -D
+           ├─2628370 /usr/local/keepalived-2.3.3/sbin/keepalived --dont-fork -D
+           └─2628371 /usr/local/keepalived-2.3.3/sbin/keepalived --dont-fork -D
+
+Apr 22 09:34:23 DB01-test Keepalived_healthcheckers[2628370]: Activating healthchecker for service [222.24.203.80]:tcp:3306 for VS [222.24.203.83]:tcp:3>
+Apr 22 09:34:23 DB01-test Keepalived_vrrp[2628371]: (VI_1) Strict mode does not support authentication. Ignoring.
+Apr 22 09:34:23 DB01-test Keepalived_vrrp[2628371]: Assigned address 222.24.203.80 for interface enp4s1
+Apr 22 09:34:23 DB01-test Keepalived_vrrp[2628371]: Registering gratuitous ARP shared channel
+Apr 22 09:34:23 DB01-test Keepalived_vrrp[2628371]: (VI_1) removing VIPs.
+Apr 22 09:34:23 DB01-test Keepalived[2628369]: Startup complete
+Apr 22 09:34:23 DB01-test systemd[1]: Started LVS and VRRP High Availability Monitor.
+Apr 22 09:34:23 DB01-test Keepalived_vrrp[2628371]: (VI_1) removing VIPs.
+Apr 22 09:34:23 DB01-test Keepalived_vrrp[2628371]: (VI_1) Entering BACKUP STATE (init)
+Apr 22 09:34:23 DB01-test Keepalived_vrrp[2628371]: VRRP sockpool: [ifindex(  2), family(IPv4), proto(112), fd(15,16) multicast, address(224.0.0.18)]
+[root@DB01-test keepalived-2.3.3]# ip a
+1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN group default qlen 1000
+    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
+    inet 127.0.0.1/8 scope host lo
+       valid_lft forever preferred_lft forever
+2: enp4s1: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc fq_codel state UP group default qlen 1000
+    link/ether 28:6e:d4:89:ab:99 brd ff:ff:ff:ff:ff:ff
+    inet 222.24.203.80/24 brd 222.24.203.255 scope global noprefixroute enp4s1
+       valid_lft forever preferred_lft forever
+    inet 222.24.203.83/32 scope global enp4s1
+       valid_lft forever preferred_lft forever
+[root@DB01-test keepalived-2.3.3]# systemctl status keepalived
+● keepalived.service - LVS and VRRP High Availability Monitor
+   Loaded: loaded (/usr/lib/systemd/system/keepalived.service; disabled; vendor preset: disabled)
+   Active: active (running) since Tue 2025-04-22 09:34:23 CST; 8s ago
+     Docs: man:keepalived(8)
+           man:keepalived.conf(5)
+           man:genhash(1)
+           https://keepalived.org
+ Main PID: 2628369 (keepalived)
+    Tasks: 3
+   Memory: 936.0K
+   CGroup: /system.slice/keepalived.service
+           ├─2628369 /usr/local/keepalived-2.3.3/sbin/keepalived --dont-fork -D
+           ├─2628370 /usr/local/keepalived-2.3.3/sbin/keepalived --dont-fork -D
+           └─2628371 /usr/local/keepalived-2.3.3/sbin/keepalived --dont-fork -D
+
+Apr 22 09:34:26 DB01-test Keepalived_healthcheckers[2628370]: TCP connection to [222.24.203.80]:tcp:3306 success.
+Apr 22 09:34:26 DB01-test Keepalived_vrrp[2628371]: (VI_1) Receive advertisement timeout
+Apr 22 09:34:26 DB01-test Keepalived_vrrp[2628371]: (VI_1) Entering MASTER STATE
+Apr 22 09:34:26 DB01-test Keepalived_vrrp[2628371]: (VI_1) setting VIPs.
+Apr 22 09:34:26 DB01-test Keepalived_vrrp[2628371]: (VI_1) Sending/queueing gratuitous ARPs on enp4s1 for 222.24.203.83
+Apr 22 09:34:26 DB01-test Keepalived_vrrp[2628371]: Sending gratuitous ARP on enp4s1 for 222.24.203.83
+Apr 22 09:34:26 DB01-test Keepalived_vrrp[2628371]: Sending gratuitous ARP on enp4s1 for 222.24.203.83
+Apr 22 09:34:26 DB01-test Keepalived_vrrp[2628371]: Sending gratuitous ARP on enp4s1 for 222.24.203.83
+Apr 22 09:34:26 DB01-test Keepalived_vrrp[2628371]: Sending gratuitous ARP on enp4s1 for 222.24.203.83
+Apr 22 09:34:26 DB01-test Keepalived_vrrp[2628371]: Sending gratuitous ARP on enp4s1 for 222.24.203.83
+[root@DB01-test keepalived-2.3.3]#
+
+
+[root@DB02-test keepalived-2.3.3]#  systemctl start keepalived
+[root@DB02-test keepalived-2.3.3]#  systemctl status keepalived
+● keepalived.service - LVS and VRRP High Availability Monitor
+   Loaded: loaded (/usr/lib/systemd/system/keepalived.service; disabled; vendor preset: disabled)
+   Active: active (running) since Tue 2025-04-22 09:36:53 CST; 2s ago
+     Docs: man:keepalived(8)
+           man:keepalived.conf(5)
+           man:genhash(1)
+           https://keepalived.org
+ Main PID: 1211770 (keepalived)
+    Tasks: 3
+   Memory: 972.0K
+   CGroup: /system.slice/keepalived.service
+           ├─1211770 /usr/local/keepalived-2.3.3/sbin/keepalived --dont-fork -D
+           ├─1211771 /usr/local/keepalived-2.3.3/sbin/keepalived --dont-fork -D
+           └─1211772 /usr/local/keepalived-2.3.3/sbin/keepalived --dont-fork -D
+
+Apr 22 09:36:53 DB02-test Keepalived_vrrp[1211772]: Assigned address 222.24.203.81 for interface enp4s1
+Apr 22 09:36:53 DB02-test Keepalived_vrrp[1211772]: Registering gratuitous ARP shared channel
+Apr 22 09:36:53 DB02-test Keepalived[1211770]: Startup complete
+Apr 22 09:36:53 DB02-test Keepalived_vrrp[1211772]: (VI_1) removing VIPs.
+Apr 22 09:36:53 DB02-test systemd[1]: Started LVS and VRRP High Availability Monitor.
+Apr 22 09:36:53 DB02-test Keepalived_vrrp[1211772]: (VI_1) removing VIPs.
+Apr 22 09:36:53 DB02-test Keepalived_vrrp[1211772]: (VI_1) Entering BACKUP STATE (init)
+Apr 22 09:36:53 DB02-test Keepalived_vrrp[1211772]: VRRP sockpool: [ifindex(  2), family(IPv4), proto(112), fd(15,16) multicast, address(224.0.0.18)]
+Apr 22 09:36:53 DB02-test Keepalived_vrrp[1211772]: (VI_1) master set to 222.24.203.80
+Apr 22 09:36:55 DB02-test Keepalived_healthcheckers[1211771]: TCP connection to [222.24.203.81]:tcp:3306 success.
+[root@DB02-test keepalived-2.3.3]# ip a
+1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN group default qlen 1000
+    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
+    inet 127.0.0.1/8 scope host lo
+       valid_lft forever preferred_lft forever
+    inet 222.24.203.84/32 scope global lo
+       valid_lft forever preferred_lft forever
+2: enp4s1: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc fq_codel state UP group default qlen 1000
+    link/ether 28:6e:d4:89:b8:35 brd ff:ff:ff:ff:ff:ff
+    inet 222.24.203.81/24 brd 222.24.203.255 scope global noprefixroute enp4s1
+       valid_lft forever preferred_lft forever
+[root@DB02-test keepalived-2.3.3]#  systemctl status keepalived
+● keepalived.service - LVS and VRRP High Availability Monitor
+   Loaded: loaded (/usr/lib/systemd/system/keepalived.service; disabled; vendor preset: disabled)
+   Active: active (running) since Tue 2025-04-22 09:36:53 CST; 10s ago
+     Docs: man:keepalived(8)
+           man:keepalived.conf(5)
+           man:genhash(1)
+           https://keepalived.org
+ Main PID: 1211770 (keepalived)
+    Tasks: 3
+   Memory: 940.0K
+   CGroup: /system.slice/keepalived.service
+           ├─1211770 /usr/local/keepalived-2.3.3/sbin/keepalived --dont-fork -D
+           ├─1211771 /usr/local/keepalived-2.3.3/sbin/keepalived --dont-fork -D
+           └─1211772 /usr/local/keepalived-2.3.3/sbin/keepalived --dont-fork -D
+
+Apr 22 09:36:53 DB02-test Keepalived_vrrp[1211772]: Assigned address 222.24.203.81 for interface enp4s1
+Apr 22 09:36:53 DB02-test Keepalived_vrrp[1211772]: Registering gratuitous ARP shared channel
+Apr 22 09:36:53 DB02-test Keepalived[1211770]: Startup complete
+Apr 22 09:36:53 DB02-test Keepalived_vrrp[1211772]: (VI_1) removing VIPs.
+Apr 22 09:36:53 DB02-test systemd[1]: Started LVS and VRRP High Availability Monitor.
+Apr 22 09:36:53 DB02-test Keepalived_vrrp[1211772]: (VI_1) removing VIPs.
+Apr 22 09:36:53 DB02-test Keepalived_vrrp[1211772]: (VI_1) Entering BACKUP STATE (init)
+Apr 22 09:36:53 DB02-test Keepalived_vrrp[1211772]: VRRP sockpool: [ifindex(  2), family(IPv4), proto(112), fd(15,16) multicast, address(224.0.0.18)]
+Apr 22 09:36:53 DB02-test Keepalived_vrrp[1211772]: (VI_1) master set to 222.24.203.80
+Apr 22 09:36:55 DB02-test Keepalived_healthcheckers[1211771]: TCP connection to [222.24.203.81]:tcp:3306 success.
+
+```
+
+
+
+
+
 #### 5、查看vip是否启动
 
 ```bash
@@ -5070,9 +5356,10 @@ ip a
 ping xxx.xxx.xx.xx
 
 #如果此时ping不通第二个IP，那么可以关闭keepalived后，手动添加第二个IP，再ping测试
-ip addr add 192.168.1.100/24 dev eth0
+ip addr add 222.24.203.84/32 dev eth0
 ping 192.168.1.100
 
+#ip addr del 222.24.203.84/32 dev enp4s1
 ```
 
 发现vip在主库上：
@@ -5089,6 +5376,156 @@ ping 192.168.1.100
     inet 222.204.70.112/32 scope global eth0
        valid_lft forever preferred_lft forever
 ```
+
+#报错处理
+
+#现象
+
+```bash
+ping vip时：
+ping: sendmsg: Operation not permitted
+```
+
+#原因
+
+```bash
+#这不是网络不通，而是操作系统内核拒绝发送 ICMP 包，因为该 VIP (222.24.203.83/32) 是通过 LVS DR 模式绑定的，而不是标准的接口绑定方式
+
+#在 Keepalived 中：
+
+#如果启用了 vrrp_strict：
+
+#非 MASTER 节点即使绑了 VIP，也不能发 ARP，也不能响应 ping 请求（会触发 kernel 层级 drop）。
+
+#本机也不能对自己绑定的 VIP 发起访问或 ping 请求。
+```
+
+#接近办法
+
+```bash
+#方法一：
+注释掉参数vrrp_strict，生产环境不建议
+
+#方法二：
+安装keepalive最新版
+```
+
+
+
+#logs
+
+```bash
+
+[root@DB01-test ~]# systemctl status keepalived
+● keepalived.service - LVS and VRRP High Availability Monitor
+   Loaded: loaded (/usr/lib/systemd/system/keepalived.service; enabled; vendor preset: disabled)
+   Active: active (running) since Mon 2025-04-21 10:40:00 CST; 52s ago
+  Process: 2320497 ExecStart=/usr/sbin/keepalived $KEEPALIVED_OPTIONS (code=exited, status=0/SUCCESS)
+ Main PID: 2320499 (keepalived)
+    Tasks: 3
+   Memory: 1004.0K
+   CGroup: /system.slice/keepalived.service
+           ├─2320499 /usr/sbin/keepalived -D
+           ├─2320500 /usr/sbin/keepalived -D
+           └─2320501 /usr/sbin/keepalived -D
+
+Apr 21 10:40:04 DB01-test Keepalived_vrrp[2320501]: Sending gratuitous ARP on enp4s1 for 222.24.203.83
+Apr 21 10:40:04 DB01-test Keepalived_vrrp[2320501]: Sending gratuitous ARP on enp4s1 for 222.24.203.83
+Apr 21 10:40:04 DB01-test Keepalived_vrrp[2320501]: Sending gratuitous ARP on enp4s1 for 222.24.203.83
+Apr 21 10:40:04 DB01-test Keepalived_vrrp[2320501]: Sending gratuitous ARP on enp4s1 for 222.24.203.83
+Apr 21 10:40:09 DB01-test Keepalived_vrrp[2320501]: Sending gratuitous ARP on enp4s1 for 222.24.203.83
+Apr 21 10:40:09 DB01-test Keepalived_vrrp[2320501]: (VI_1) Sending/queueing gratuitous ARPs on enp4s1 for 222.24.203.83
+Apr 21 10:40:09 DB01-test Keepalived_vrrp[2320501]: Sending gratuitous ARP on enp4s1 for 222.24.203.83
+Apr 21 10:40:09 DB01-test Keepalived_vrrp[2320501]: Sending gratuitous ARP on enp4s1 for 222.24.203.83
+Apr 21 10:40:09 DB01-test Keepalived_vrrp[2320501]: Sending gratuitous ARP on enp4s1 for 222.24.203.83
+Apr 21 10:40:09 DB01-test Keepalived_vrrp[2320501]: Sending gratuitous ARP on enp4s1 for 222.24.203.83
+[root@DB01-test ~]# ip a
+1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN group default qlen 1000
+    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
+    inet 127.0.0.1/8 scope host lo
+       valid_lft forever preferred_lft forever
+2: enp4s1: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc fq_codel state UP group default qlen 1000
+    link/ether 28:6e:d4:89:ab:99 brd ff:ff:ff:ff:ff:ff
+    inet 222.24.203.80/24 brd 222.24.203.255 scope global noprefixroute enp4s1
+       valid_lft forever preferred_lft forever
+    inet 222.24.203.83/32 scope global enp4s1
+       valid_lft forever preferred_lft forever
+[root@DB01-test ~]# ping 222.24.203.83
+PING 222.24.203.83 (222.24.203.83) 56(84) bytes of data.
+ping: sendmsg: Operation not permitted
+ping: sendmsg: Operation not permitted
+^C
+--- 222.24.203.83 ping statistics ---
+2 packets transmitted, 0 received, 100% packet loss, time 1003ms
+
+
+[root@DB02-test ~]# systemctl status keepalived
+● keepalived.service - LVS and VRRP High Availability Monitor
+   Loaded: loaded (/usr/lib/systemd/system/keepalived.service; enabled; vendor preset: disabled)
+   Active: active (running) since Mon 2025-04-21 10:40:18 CST; 14s ago
+  Process: 904047 ExecStart=/usr/sbin/keepalived $KEEPALIVED_OPTIONS (code=exited, status=0/SUCCESS)
+ Main PID: 904048 (keepalived)
+    Tasks: 3
+   Memory: 1.0M
+   CGroup: /system.slice/keepalived.service
+           ├─904048 /usr/sbin/keepalived -D
+           ├─904049 /usr/sbin/keepalived -D
+           └─904050 /usr/sbin/keepalived -D
+
+Apr 21 10:40:18 DB02-test Keepalived_healthcheckers[904049]: Activating healthchecker for service [222.24.203.81]:tcp:3306 for VS [222.24.203.83]:tcp:33>
+Apr 21 10:40:18 DB02-test Keepalived_vrrp[904050]: Opening file '/etc/keepalived/keepalived.conf'.
+Apr 21 10:40:18 DB02-test Keepalived_vrrp[904050]: (VI_1) Strict mode does not support authentication. Ignoring.
+Apr 21 10:40:18 DB02-test Keepalived_vrrp[904050]: Assigned address 222.24.203.81 for interface enp4s1
+Apr 21 10:40:18 DB02-test Keepalived_vrrp[904050]: Registering gratuitous ARP shared channel
+Apr 21 10:40:18 DB02-test Keepalived_vrrp[904050]: (VI_1) removing VIPs.
+Apr 21 10:40:18 DB02-test Keepalived_vrrp[904050]: (VI_1) removing firewall drop rule
+Apr 21 10:40:18 DB02-test Keepalived_vrrp[904050]: (VI_1) Entering BACKUP STATE (init)
+Apr 21 10:40:18 DB02-test Keepalived_vrrp[904050]: VRRP sockpool: [ifindex(2), family(IPv4), proto(112), unicast(0), fd(13,14)]
+Apr 21 10:40:21 DB02-test Keepalived_healthcheckers[904049]: TCP connection to [222.24.203.81]:tcp:3306 success.
+[root@DB02-test ~]# ping 222.24.203.83
+PING 222.24.203.83 (222.24.203.83) 56(84) bytes of data.
+^C
+--- 222.24.203.83 ping statistics ---
+6 packets transmitted, 0 received, 100% packet loss, time 5108ms
+
+[root@DB02-test ~]# ping 222.24.203.80
+PING 222.24.203.80 (222.24.203.80) 56(84) bytes of data.
+64 bytes from 222.24.203.80: icmp_seq=1 ttl=64 time=0.822 ms
+64 bytes from 222.24.203.80: icmp_seq=2 ttl=64 time=0.793 ms
+^C
+--- 222.24.203.80 ping statistics ---
+2 packets transmitted, 2 received, 0% packet loss, time 1027ms
+rtt min/avg/max/mdev = 0.793/0.807/0.822/0.014 ms
+[root@DB02-test ~]# systemctl status keepalived
+● keepalived.service - LVS and VRRP High Availability Monitor
+   Loaded: loaded (/usr/lib/systemd/system/keepalived.service; enabled; vendor preset: disabled)
+   Active: active (running) since Mon 2025-04-21 10:40:18 CST; 3min 20s ago
+  Process: 904047 ExecStart=/usr/sbin/keepalived $KEEPALIVED_OPTIONS (code=exited, status=0/SUCCESS)
+ Main PID: 904048 (keepalived)
+    Tasks: 3
+   Memory: 1004.0K
+   CGroup: /system.slice/keepalived.service
+           ├─904048 /usr/sbin/keepalived -D
+           ├─904049 /usr/sbin/keepalived -D
+           └─904050 /usr/sbin/keepalived -D
+
+Apr 21 10:40:18 DB02-test Keepalived_healthcheckers[904049]: Activating healthchecker for service [222.24.203.81]:tcp:3306 for VS [222.24.203.83]:tcp:33>
+Apr 21 10:40:18 DB02-test Keepalived_vrrp[904050]: Opening file '/etc/keepalived/keepalived.conf'.
+Apr 21 10:40:18 DB02-test Keepalived_vrrp[904050]: (VI_1) Strict mode does not support authentication. Ignoring.
+Apr 21 10:40:18 DB02-test Keepalived_vrrp[904050]: Assigned address 222.24.203.81 for interface enp4s1
+Apr 21 10:40:18 DB02-test Keepalived_vrrp[904050]: Registering gratuitous ARP shared channel
+Apr 21 10:40:18 DB02-test Keepalived_vrrp[904050]: (VI_1) removing VIPs.
+Apr 21 10:40:18 DB02-test Keepalived_vrrp[904050]: (VI_1) removing firewall drop rule
+Apr 21 10:40:18 DB02-test Keepalived_vrrp[904050]: (VI_1) Entering BACKUP STATE (init)
+Apr 21 10:40:18 DB02-test Keepalived_vrrp[904050]: VRRP sockpool: [ifindex(2), family(IPv4), proto(112), unicast(0), fd(13,14)]
+Apr 21 10:40:21 DB02-test Keepalived_healthcheckers[904049]: TCP connection to [222.24.203.81]:tcp:3306 success.
+[root@DB02-test ~]#
+
+```
+
+
+
+
 
 #### 6、主库关闭mysqld/keepalived测试
 
@@ -5187,6 +5624,15 @@ ip addr
 ```
 
 #因为是双主，中间无缝切换
+
+```bash
+#如果执行systemctl stop mysqld，那么关闭数据库会有时间消耗
+#如果执行reboot服务器，那么间隔很短暂
+```
+
+
+
+
 
 
 #### 8、Mysql双主双活+keepalived高可用整体测试
@@ -5307,6 +5753,150 @@ select count(1) from ceshi1;
 
 3、Slave节点服务器配置不要太差，否则更容易导致复制延迟，作为热备节点的slave服务器，硬件配置不能低于master节点；
 如果对延迟很敏感的话，可考虑使用MariaDB分支版本，利用多线程复制的方式可以很大降低复制延迟。
+```
+#主库重启后，追从库数据logs
+
+```bash
+*************************** 1. row ***************************
+             Replica_IO_State: Waiting for source to send event
+                  Source_Host: 222.24.203.81
+                  Source_User: repl
+                  Source_Port: 3306
+                Connect_Retry: 60
+              Source_Log_File: mysql-bin.000049
+          Read_Source_Log_Pos: 490306513
+               Relay_Log_File: relay-bin.000101
+                Relay_Log_Pos: 60777814
+        Relay_Source_Log_File: mysql-bin.000049
+           Replica_IO_Running: Yes
+          Replica_SQL_Running: Yes
+              Replicate_Do_DB:
+          Replicate_Ignore_DB:
+           Replicate_Do_Table:
+       Replicate_Ignore_Table:
+      Replicate_Wild_Do_Table:
+  Replicate_Wild_Ignore_Table:
+                   Last_Errno: 0
+                   Last_Error:
+                 Skip_Counter: 0
+          Exec_Source_Log_Pos: 356401275
+              Relay_Log_Space: 193642728
+              Until_Condition: None
+               Until_Log_File:
+                Until_Log_Pos: 0
+           Source_SSL_Allowed: No
+           Source_SSL_CA_File:
+           Source_SSL_CA_Path:
+              Source_SSL_Cert:
+            Source_SSL_Cipher:
+               Source_SSL_Key:
+        Seconds_Behind_Source: 343
+Source_SSL_Verify_Server_Cert: No
+                Last_IO_Errno: 0
+                Last_IO_Error:
+               Last_SQL_Errno: 0
+               Last_SQL_Error:
+  Replicate_Ignore_Server_Ids:
+             Source_Server_Id: 81
+                  Source_UUID: 69fc8d5a-1c39-11f0-88c3-286ed489b835
+             Source_Info_File: mysql.slave_master_info
+                    SQL_Delay: 0
+          SQL_Remaining_Delay: NULL
+    Replica_SQL_Running_State: Waiting for dependent transaction to commit
+           Source_Retry_Count: 86400
+                  Source_Bind:
+      Last_IO_Error_Timestamp:
+     Last_SQL_Error_Timestamp:
+               Source_SSL_Crl:
+           Source_SSL_Crlpath:
+           Retrieved_Gtid_Set: 69fc8d5a-1c39-11f0-88c3-286ed489b835:5329-199273
+            Executed_Gtid_Set: 69fc8d5a-1c39-11f0-88c3-286ed489b835:1-64138,
+6a48c612-1c39-11f0-b37f-286ed489ab99:1-427600
+                Auto_Position: 1
+         Replicate_Rewrite_DB:
+                 Channel_Name:
+           Source_TLS_Version:
+       Source_public_key_path:
+        Get_Source_public_key: 0
+            Network_Namespace:
+1 row in set (0.00 sec)
+
+ERROR:
+No query specified
+
+root@localhost:mysql.sock [(none)]>
+
+root@localhost:mysql.sock [(none)]> show replica status\G;
+*************************** 1. row ***************************
+             Replica_IO_State: Waiting for source to send event
+                  Source_Host: 222.24.203.81
+                  Source_User: repl
+                  Source_Port: 3306
+                Connect_Retry: 60
+              Source_Log_File: mysql-bin.000049
+          Read_Source_Log_Pos: 490342017
+               Relay_Log_File: relay-bin.000101
+                Relay_Log_Pos: 193642524
+        Relay_Source_Log_File: mysql-bin.000049
+           Replica_IO_Running: Yes
+          Replica_SQL_Running: Yes
+              Replicate_Do_DB:
+          Replicate_Ignore_DB:
+           Replicate_Do_Table:
+       Replicate_Ignore_Table:
+      Replicate_Wild_Do_Table:
+  Replicate_Wild_Ignore_Table:
+                   Last_Errno: 0
+                   Last_Error:
+                 Skip_Counter: 0
+          Exec_Source_Log_Pos: 490342017
+              Relay_Log_Space: 193642728
+              Until_Condition: None
+               Until_Log_File:
+                Until_Log_Pos: 0
+           Source_SSL_Allowed: No
+           Source_SSL_CA_File:
+           Source_SSL_CA_Path:
+              Source_SSL_Cert:
+            Source_SSL_Cipher:
+               Source_SSL_Key:
+        Seconds_Behind_Source: 0
+Source_SSL_Verify_Server_Cert: No
+                Last_IO_Errno: 0
+                Last_IO_Error:
+               Last_SQL_Errno: 0
+               Last_SQL_Error:
+  Replicate_Ignore_Server_Ids:
+             Source_Server_Id: 81
+                  Source_UUID: 69fc8d5a-1c39-11f0-88c3-286ed489b835
+             Source_Info_File: mysql.slave_master_info
+                    SQL_Delay: 0
+          SQL_Remaining_Delay: NULL
+    Replica_SQL_Running_State: Replica has read all relay log; waiting for more updates
+           Source_Retry_Count: 86400
+                  Source_Bind:
+      Last_IO_Error_Timestamp:
+     Last_SQL_Error_Timestamp:
+               Source_SSL_Crl:
+           Source_SSL_Crlpath:
+           Retrieved_Gtid_Set: 69fc8d5a-1c39-11f0-88c3-286ed489b835:5329-199273
+            Executed_Gtid_Set: 69fc8d5a-1c39-11f0-88c3-286ed489b835:1-199273,
+6a48c612-1c39-11f0-b37f-286ed489ab99:1-427652
+                Auto_Position: 1
+         Replicate_Rewrite_DB:
+                 Channel_Name:
+           Source_TLS_Version:
+       Source_public_key_path:
+        Get_Source_public_key: 0
+            Network_Namespace:
+1 row in set (0.00 sec)
+
+ERROR:
+No query specified
+
+root@localhost:mysql.sock [(none)]>
+
+
 ```
 
 
