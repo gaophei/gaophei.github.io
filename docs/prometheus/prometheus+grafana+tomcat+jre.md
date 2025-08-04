@@ -726,6 +726,8 @@ JAVA_OPTS="$JAVA_OPTS -Djava.protocol.handler.pkgs=org.apache.catalina.webresour
 ```bash
 firewall-cmd --add-port=30018/tcp  --permanent
 firewall-cmd --reload
+
+#firewall-cmd --remove-port=30018/tcp  --permanent
 ```
 
 
@@ -926,6 +928,17 @@ firewall-cmd --add-port=30018/tcp  --permanent
 firewall-cmd --add-port=30020/tcp  --permanent
 firewall-cmd --add-port=30021/tcp  --permanent
 firewall-cmd --reload
+
+#
+firewall-cmd --remove-port=30018/tcp  --permanent
+firewall-cmd --remove-port=30020/tcp  --permanent
+firewall-cmd --remove-port=30021/tcp  --permanent
+
+firewall-cmd --remove-port=9100/tcp  --permanent
+
+firewall-cmd --reload
+
+firewall-cmd --list-all
 ```
 
 #### 7、查看jmx exporter采集的数据

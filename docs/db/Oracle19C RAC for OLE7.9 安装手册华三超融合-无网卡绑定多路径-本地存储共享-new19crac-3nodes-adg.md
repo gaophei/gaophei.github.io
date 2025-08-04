@@ -3326,6 +3326,43 @@ multipath -ll
 /sbin/udevadm trigger --type=devices --action=change
 
 ll /dev|grep asm
+
+=============
+[root@DTMysql1 mysql]# multipath -ll
+mpatha (360002ac0000000000000000300021f88) dm-2 3PARdata,VV
+size=800G features='1 queue_if_no_path' hwhandler='1 alua' wp=rw
+`-+- policy='service-time 0' prio=50 status=active
+  |- 13:0:0:0 sdb 8:16 active ready running
+  |- 13:0:1:0 sdc 8:32 active ready running
+  |- 14:0:0:0 sdd 8:48 active ready running
+  `- 14:0:1:0 sde 8:64 active ready running
+
+[root@DTMysql1 mysql]# ls /sys/class/fc_host/
+host13  host14
+[root@DTMysql1 mysql]# ls /sys/class/scsi_
+scsi_device/  scsi_disk/    scsi_generic/ scsi_host/    
+[root@DTMysql1 mysql]# ls /sys/class/scsi_host/
+host0  host1  host10  host11  host12  host13  host14  host15  host2  host3  host4  host5  host6  host7  host8  host9
+
+[root@DTMysql1 mysql]# echo "- - -" >/sys/class/scsi_host/host13/scan 
+[root@DTMysql1 mysql]# echo "- - -" >/sys/class/scsi_host/host14/scan 
+
+[root@DTMysql1 mysql]# multipath -ll
+mpathb (368c83e8100174ef9003837b900000006) dm-4 HUAWEI,XSG1
+size=5.0T features='1 queue_if_no_path' hwhandler='0' wp=rw
+`-+- policy='service-time 0' prio=1 status=active
+  |- 13:0:2:1 sdf 8:80  active ready running
+  |- 13:0:3:1 sdg 8:96  active ready running
+  |- 14:0:2:1 sdh 8:112 active ready running
+  `- 14:0:3:1 sdi 8:128 active ready running
+mpatha (360002ac0000000000000000300021f88) dm-2 3PARdata,VV
+size=800G features='1 queue_if_no_path' hwhandler='1 alua' wp=rw
+`-+- policy='service-time 0' prio=50 status=active
+  |- 13:0:0:0 sdb 8:16  active ready running
+  |- 13:0:1:0 sdc 8:32  active ready running
+  |- 14:0:0:0 sdd 8:48  active ready running
+  `- 14:0:1:0 sde 8:64  active ready running
+[root@DTMysql1 mysql]# vi /etc/multipath.conf
 ```
 ### 2.10. 配置互信
 

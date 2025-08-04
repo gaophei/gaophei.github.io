@@ -220,6 +220,7 @@ https://download.kingbase.com.cn/xzzx/index.htm
 cd /opt/Kingbase/storage
 
 wget https://kingbase.oss-cn-beijing.aliyuncs.com/KESV8R3/V008R006C009B0014/KingbaseES_V008R006C009B0014_Lin64_install.iso
+#https://kingbase.oss-cn-beijing.aliyuncs.com/KESV8R3/V008R006C009B0014/KingbaseES_V008R006C009B0014_Kunpeng64_install.iso
 
 chmod o+rwx /opt/Kingbase/ES/V8
 
@@ -474,7 +475,7 @@ max_stack_depth = 3MB
 #temp_buffers = 8 MB
 
 work_mem = 64MB
-maintenance_work_mem = 1G
+maintenance_work_mem = 1GB
 
 dynamic_shared_memory_type = posix
 
@@ -886,6 +887,9 @@ vi /home/kingbase/.kbpass
 chmod 0600 /home/kingbase/.kbpass
 chown kingbase:kingbase /home/kingbase/.kbpass
 
+
+
+
 [kingbase@DBServer backup]$ ls
 kingbase_backup.sh  kingbase_cron.log
 [kingbase@DBServer backup]$ cat kingbase_backup.sh
@@ -912,6 +916,7 @@ for DB in $DATABASES; do
 done
 
 
+
 echo "---------------压缩备份文件$(date +"%Y-%m-%d %H:%M:%S")----------------"
 cd ${OUTPUT_BASE_DIR}
 tar -czvf ${DATENOW}.tar.gz ${DATENOW} --remove-files
@@ -925,6 +930,16 @@ echo "---------------${DATENOW}结束备份----------------"| tee -a ${OUTPUT_BA
 [kingbase@DBServer backup]$
 ```
 
+#单次备份
+
+```bash
+ DATABASES=$(/opt/Kingbase/ES/V8/Server/bin/ksql -h 192.168.106.84 -p 54321 -U system -d test -t -c "SELECT datname FROM pg_database WHERE datname NOT IN ('template0', 'template1');")
+ 
+ for DB in $DATABASES; do
+    /opt/Kingbase/ES/V8/Server/bin/sys_dump -h 192.168.106.84 -p 54321 -U system -d $DB -f "/home/kingbase/$DB.sql"
+done
+```
+
 
 
 #还原
@@ -933,7 +948,26 @@ echo "---------------${DATENOW}结束备份----------------"| tee -a ${OUTPUT_BA
 /opt/Kingbase/ES/V8/Server/bin/sys_restore -h 127.0.0.1 -p 54321 -d db_demo -U system /opt/backup/db_demo.sql >> /opt/backup/restore.log  2>&1
 
 
-/opt/Kingbase/ES/V8/Server/bin/ksql -h 127.0.0.1 -p 54321 -d db_demo -U system /opt/backup/db_demo.sql >> /opt/backup/restore.log  2>&1
+/opt/Kingbase/ES/V8/Server/bin/ksql -h 127.0.0.1 -p 54321 -d db_demo -U system -f /opt/backup/db_demo.sql >> /opt/backup/restore.log  2>&1
+
+for DB in `ls |awk -F '.' '{print $1}'`;  do
+   /opt/Kingbase/ES/V8/Server/bin/ksql -h 127.0.0.1 -p 54321 -d $DB -U system /opt/backup/$DB.sql >> /opt/backup/restore.log  2>&1
+done
+
+--------------------------------------
+
+DATABASES=$(ls /home/kingbase/back-exp/2025-06-04/*.sql | xargs -n1 basename | sed 's/\.sql$//')
+
+# 创建数据库
+for DB in $DATABASES; do
+  /opt/Kingbase/ES/V8/Server/bin/ksql -h 新服务器IP -p 54321 -U system -d test -c "CREATE DATABASE $DB;"
+done
+
+# 导入数据
+for DB in $DATABASES; do
+  /opt/Kingbase/ES/V8/Server/bin/ksql -h 172.18.13.147 -p 54321 -U system -d $DB -f "/home/kingbase/back-exp/2025-06-04/$DB.sql" >> import.log 2>&1
+done
+
 ```
 
 
@@ -1010,7 +1044,7 @@ JOIN METADATA_TABLE MT ON MT.ID=MC.TABLE_ID
 WHERE MT.DS_ID='-1' AND MC.ENCRYPT_TYPE=1;
 
 
-#查询死元组排名前十的表
+#单库查询死元组排名前十的表
 SELECT
     schemaname,
     relname,
@@ -1110,7 +1144,19 @@ VACUUM FREEZE METADATA_COLUMN;
 
 
 
+#批量查询所有库的前十名死元组
+$ cat check.sh
+#!/bin/bash
+DBUSER=system
+DBHOST=172.16.50.230
+# 查询所有库名
+databases=$(ksql -U $DBUSER -h $DBHOST -d test -Atc "SELECT datname FROM pg_database WHERE datistemplate = false;")
 
+for db in $databases; do
+    echo "==== $db ===="
+    ksql -U $DBUSER -h $DBHOST -d $db -c \
+    "SELECT schemaname, relname, n_dead_tup FROM pg_stat_user_tables ORDER BY n_dead_tup DESC LIMIT 10;"
+done
 
 
 ```
@@ -1501,6 +1547,17 @@ dataassets=#
 #### 6.6.关于某个表相关的sql
 
 ```sql
+#查看某张表的表结构（列信息）
+-- psql命令
+\d 表名
+
+-- SQL查询
+SELECT column_name, data_type, is_nullable, column_default
+FROM information_schema.columns
+WHERE table_name = '表名'
+ORDER BY ordinal_position;
+
+
 #查询当前正在执行的与METADATA_COLUMN相关的SQL
 SELECT pid, usename, application_name, client_addr, 
        state, query_start, now() - query_start AS duration, 
@@ -1592,6 +1649,105 @@ WHERE xact_start IS NOT NULL
 ORDER BY xact_start;
 
 #
+SELECT
+  blocked_locks.pid AS blocked_pid,
+  blocked_activity.usename AS blocked_user,
+  blocking_locks.pid AS blocking_pid,
+  blocking_activity.usename AS blocking_user,
+  blocked_activity.query AS blocked_query,
+  blocking_activity.query AS blocking_query,
+  now() - blocked_activity.query_start AS blocked_duration
+FROM pg_locks blocked_locks
+JOIN pg_stat_activity blocked_activity ON blocked_activity.pid = blocked_locks.pid
+JOIN pg_locks blocking_locks ON blocking_locks.locktype = blocked_locks.locktype
+  AND blocking_locks.database IS NOT DISTINCT FROM blocked_locks.database
+  AND blocking_locks.relation IS NOT DISTINCT FROM blocked_locks.relation
+  AND blocking_locks.page IS NOT DISTINCT FROM blocked_locks.page
+  AND blocking_locks.tuple IS NOT DISTINCT FROM blocked_locks.tuple
+  AND blocking_locks.pid != blocked_locks.pid
+JOIN pg_stat_activity blocking_activity ON blocking_activity.pid = blocking_locks.pid
+WHERE NOT blocked_locks.granted;
 
 ```
+
+
+
+#### 6.7.数据库大小
+
+```sql
+#数据库列表
+SELECT datname FROM pg_database WHERE datistemplate = false;
+
+#查看当前数据库大小
+SELECT pg_size_pretty(pg_database_size(current_database()));
+
+#查看指定数据库大小
+SELECT pg_size_pretty(pg_database_size('数据库名'));
+
+#查看所有数据库的大小列表
+SELECT
+  datname,
+  pg_size_pretty(pg_database_size(datname)) AS size
+FROM
+  pg_database
+ORDER BY
+  pg_database_size(datname) DESC;
+  
+#查看某个表的大小
+SELECT
+  relname AS table_name,
+  pg_size_pretty(pg_total_relation_size(relid)) AS total_size
+FROM
+  pg_catalog.pg_statio_user_tables
+ORDER BY
+  pg_total_relation_size(relid) DESC;
+
+# 查看当前数据库中所有表的大小
+SELECT
+  relname AS table_name,
+  pg_size_pretty(pg_total_relation_size(relid)) AS total_size
+FROM
+  pg_catalog.pg_statio_user_tables
+ORDER BY
+  pg_total_relation_size(relid) DESC;
+
+#当前库表大小的前十名
+SELECT
+  relname AS table_name,
+  pg_size_pretty(pg_total_relation_size(relid)) AS total_size
+FROM
+  pg_catalog.pg_statio_user_tables
+ORDER BY
+  pg_total_relation_size(relid) DESC limit 10;
+
+#当前库索引大小的前十名
+SELECT
+  schemaname,
+  relname,
+  indexrelname,
+  pg_size_pretty(pg_relation_size(indexrelid)) AS index_size
+FROM
+  pg_stat_user_indexes
+ORDER BY
+  pg_relation_size(indexrelid) DESC limit 10;
+
+
+```
+
+
+
+### 7.更新license
+
+```bash
+su - kingbase
+
+vi /opt/Kingbase/ES/V8/license.dat
+
+#重启kingbase
+sys_ctl stop -D /opt/Kingbase/ES/V8/data/
+
+sys_ctl -w start -D /opt/Kingbase/ES/V8/data/ -l "/opt/Kingbase/ES/V8/data/sys_log/startup.log"
+```
+
+
 

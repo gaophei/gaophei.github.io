@@ -10,11 +10,14 @@
 #建议
 
 ```
-vm: 32核/64G 
+vm: 16核/32G 
 
-OS: Anolis OS 7.9(3.10.0-1160.an7.x86_64)
+OS: 
+Kylin Linux Advanced Server
+release V10 (SP2) /(Sword)-x86_64-Build09.01/20210524
 
-磁盘LVM管理，500G，/data为最大分区
+
+磁盘LVM管理，1T，/为最大分区
 ```
 
 ## 部署过程
@@ -26,26 +29,241 @@ OS: Anolis OS 7.9(3.10.0-1160.an7.x86_64)
 #当前/home分区最大
 
 ```bash
-[root@localhost ~]# lsblk
-NAME        MAJ:MIN RM   SIZE RO TYPE MOUNTPOINT
-sr0          11:0    1   1.2G  0 rom
-vda         252:0    0   500G  0 disk
-├─vda1      252:1    0     1G  0 part /boot
-└─vda2      252:2    0   499G  0 part
-  ├─ao-root 253:0    0    50G  0 lvm  /
-  ├─ao-swap 253:1    0  15.7G  0 lvm  [SWAP]
-  └─ao-home 253:2    0 433.3G  0 lvm  /home
-[root@localhost ~]# df -h
-文件系统             容量  已用  可用 已用% 挂载点
-devtmpfs              32G     0   32G    0% /dev
-tmpfs                 32G     0   32G    0% /dev/shm
-tmpfs                 32G  8.8M   32G    1% /run
-tmpfs                 32G     0   32G    0% /sys/fs/cgroup
-/dev/mapper/ao-root   50G  2.9G   48G    6% /
-/dev/mapper/ao-home  434G   33M  434G    1% /home
-/dev/vda1           1014M  175M  840M   18% /boot
-tmpfs                6.3G     0  6.3G    0% /run/user/0
-tmpfs                 60M     0   60M    0% /var/log/rtlog
+[root@MHsql-db01 ~]# df -h
+文件系统                 容量  已用  可用 已用% 挂载点
+devtmpfs                  31G     0   31G    0% /dev
+tmpfs                     31G   88K   31G    1% /dev/shm
+tmpfs                     31G  282M   31G    1% /run
+tmpfs                     31G     0   31G    0% /sys/fs/cgroup
+/dev/mapper/rootvg-root  253G   17G  237G    7% /
+tmpfs                     31G   32K   31G    1% /tmp
+/dev/mapper/rootvg-home   30G  248M   30G    1% /home
+/dev/vda1               1014M  212M  803M   21% /boot
+tmpfs                    6.2G   44K  6.2G    1% /run/user/0
+tmpfs                    6.2G     0  6.2G    0% /run/user/1000
+[root@MHsql-db01 ~]# cat /etc/os-release
+NAME="Kylin Linux Advanced Server"
+VERSION="V10 (Sword)"
+ID="kylin"
+VERSION_ID="V10"
+PRETTY_NAME="Kylin Linux Advanced Server V10 (Sword)"
+ANSI_COLOR="0;31"
+
+[root@MHsql-db01 ~]# cat /etc/.productinfo
+Kylin Linux Advanced Server
+release V10 (SP2) /(Sword)-x86_64-Build09/20210524
+
+[root@MHsql-db01 ~]# lsblk
+NAME            MAJ:MIN RM  SIZE RO TYPE MOUNTPOINT
+fd0               2:0    1    4K  0 disk
+sr0              11:0    1 1024M  0 rom
+vda             252:0    0  100G  0 disk
+├─vda1          252:1    0    1G  0 part /boot
+└─vda2          252:2    0   99G  0 part
+  ├─rootvg-root 253:0    0  253G  0 lvm  /
+  ├─rootvg-swap 253:1    0   16G  0 lvm  [SWAP]
+  └─rootvg-home 253:2    0   30G  0 lvm  /home
+vdb             252:16   0  200G  0 disk
+└─rootvg-root   253:0    0  253G  0 lvm  /
+vdc             252:32   0  1.5T  0 disk
+└─datavg-datalv 253:3    0  1.5T  0 lvm
+
+[root@MHsql-db01 ~]# vgs
+  VG     #PV #LV #SN Attr   VSize   VFree
+  datavg   1   1   0 wz--n-   1.46t    0
+  rootvg   2   3   0 wz--n- 298.99g    0
+[root@MHsql-db01 ~]# lvs
+  LV     VG     Attr       LSize   Pool Origin Data%  Meta%  Move Log Cpy%Sync Convert
+  datalv datavg -wi-a-----   1.46t                                        
+  home   rootvg -wi-ao----  30.00g                                        
+  root   rootvg -wi-ao---- 252.99g                                        
+  swap   rootvg -wi-ao----  16.00g                                        
+[root@MHsql-db01 ~]#
+
+[root@MHsql-db01B ~]# df -h
+文件系统                 容量  已用  可用 已用% 挂载点
+devtmpfs                  31G     0   31G    0% /dev
+tmpfs                     31G   56K   31G    1% /dev/shm
+tmpfs                     31G  114M   31G    1% /run
+tmpfs                     31G     0   31G    0% /sys/fs/cgroup
+/dev/mapper/rootvg-root  253G   16G  238G    7% /
+tmpfs                     31G     0   31G    0% /tmp
+/dev/mapper/rootvg-home   30G  248M   30G    1% /home
+/dev/vda1               1014M  212M  803M   21% /boot
+tmpfs                    6.2G     0  6.2G    0% /run/user/993
+tmpfs                    6.2G     0  6.2G    0% /run/user/1000
+[root@MHsql-db01B ~]# lsblk
+NAME            MAJ:MIN RM  SIZE RO TYPE MOUNTPOINT
+fd0               2:0    1    4K  0 disk
+sr0              11:0    1 1024M  0 rom
+vda             252:0    0  100G  0 disk
+├─vda1          252:1    0    1G  0 part /boot
+└─vda2          252:2    0   99G  0 part
+  ├─rootvg-root 253:0    0  253G  0 lvm  /
+  ├─rootvg-swap 253:1    0   16G  0 lvm  [SWAP]
+  └─rootvg-home 253:3    0   30G  0 lvm  /home
+vdb             252:16   0  200G  0 disk
+└─rootvg-root   253:0    0  253G  0 lvm  /
+vdc             252:32   0  1.5T  0 disk
+└─datavg-datalv 253:2    0  1.5T  0 lvm
+[root@MHsql-db01B ~]# df -h
+文件系统                 容量  已用  可用 已用% 挂载点
+devtmpfs                  31G     0   31G    0% /dev
+tmpfs                     31G   56K   31G    1% /dev/shm
+tmpfs                     31G  114M   31G    1% /run
+tmpfs                     31G     0   31G    0% /sys/fs/cgroup
+/dev/mapper/rootvg-root  253G   16G  238G    7% /
+tmpfs                     31G     0   31G    0% /tmp
+/dev/mapper/rootvg-home   30G  248M   30G    1% /home
+/dev/vda1               1014M  212M  803M   21% /boot
+tmpfs                    6.2G     0  6.2G    0% /run/user/993
+tmpfs                    6.2G     0  6.2G    0% /run/user/1000
+[root@MHsql-db01B ~]# cat /etc/os-release
+NAME="Kylin Linux Advanced Server"
+VERSION="V10 (Sword)"
+ID="kylin"
+VERSION_ID="V10"
+PRETTY_NAME="Kylin Linux Advanced Server V10 (Sword)"
+ANSI_COLOR="0;31"
+
+[root@MHsql-db01B ~]# cat /etc/.productinfo
+Kylin Linux Advanced Server
+release V10 (SP2) /(Sword)-x86_64-Build09/20210524
+[root@MHsql-db01B ~]# lsblk
+NAME            MAJ:MIN RM  SIZE RO TYPE MOUNTPOINT
+fd0               2:0    1    4K  0 disk
+sr0              11:0    1 1024M  0 rom
+vda             252:0    0  100G  0 disk
+├─vda1          252:1    0    1G  0 part /boot
+└─vda2          252:2    0   99G  0 part
+  ├─rootvg-root 253:0    0  253G  0 lvm  /
+  ├─rootvg-swap 253:1    0   16G  0 lvm  [SWAP]
+  └─rootvg-home 253:3    0   30G  0 lvm  /home
+vdb             252:16   0  200G  0 disk
+└─rootvg-root   253:0    0  253G  0 lvm  /
+vdc             252:32   0  1.5T  0 disk
+└─datavg-datalv 253:2    0  1.5T  0 lvm
+[root@MHsql-db01B ~]# vgs
+  VG     #PV #LV #SN Attr   VSize   VFree
+  datavg   1   1   0 wz--n-   1.46t    0
+  rootvg   2   3   0 wz--n- 298.99g    0
+[root@MHsql-db01B ~]# lvs
+  LV     VG     Attr       LSize   Pool Origin Data%  Meta%  Move Log Cpy%Sync Convert
+  datalv datavg -wi-a-----   1.46t                                        
+  home   rootvg -wi-ao----  30.00g                                        
+  root   rootvg -wi-ao---- 252.99g                                        
+  swap   rootvg -wi-ao----  16.00g                                        
+[root@MHsql-db01B ~]#
+
+
+[root@HMsql-db02 ~]# df -h
+文件系统                 容量  已用  可用 已用% 挂载点
+devtmpfs                  16G     0   16G    0% /dev
+tmpfs                     16G   84K   16G    1% /dev/shm
+tmpfs                     16G  274M   15G    2% /run
+tmpfs                     16G     0   16G    0% /sys/fs/cgroup
+/dev/mapper/rootvg-root  253G   17G  237G    7% /
+tmpfs                     16G     0   16G    0% /tmp
+/dev/mapper/rootvg-home   30G  248M   30G    1% /home
+/dev/vda1               1014M  212M  803M   21% /boot
+tmpfs                    3.1G   40K  3.1G    1% /run/user/0
+tmpfs                    3.1G     0  3.1G    0% /run/user/1000
+[root@HMsql-db02 ~]# cat /etc/os-release
+NAME="Kylin Linux Advanced Server"
+VERSION="V10 (Sword)"
+ID="kylin"
+VERSION_ID="V10"
+PRETTY_NAME="Kylin Linux Advanced Server V10 (Sword)"
+ANSI_COLOR="0;31"
+
+[root@HMsql-db02 ~]# cat /etc/.productinfo
+Kylin Linux Advanced Server
+release V10 (SP2) /(Sword)-x86_64-Build09/20210524
+[root@HMsql-db02 ~]# lsblk
+NAME            MAJ:MIN RM  SIZE RO TYPE MOUNTPOINT
+fd0               2:0    1    4K  0 disk
+sr0              11:0    1 1024M  0 rom
+vda             252:0    0  100G  0 disk
+├─vda1          252:1    0    1G  0 part /boot
+└─vda2          252:2    0   99G  0 part
+  ├─rootvg-root 253:0    0  253G  0 lvm  /
+  ├─rootvg-swap 253:1    0   16G  0 lvm  [SWAP]
+  └─rootvg-home 253:2    0   30G  0 lvm  /home
+vdb             252:16   0  200G  0 disk
+└─rootvg-root   253:0    0  253G  0 lvm  /
+vdc             252:32   0  500G  0 disk
+└─datavg-datalv 253:3    0  500G  0 lvm
+[root@HMsql-db02 ~]# vgs
+  VG     #PV #LV #SN Attr   VSize    VFree
+  datavg   1   1   0 wz--n- <500.00g    0
+  rootvg   2   3   0 wz--n-  298.99g    0
+[root@HMsql-db02 ~]# lvs
+  LV     VG     Attr       LSize    Pool Origin Data%  Meta%  Move Log Cpy%Sync Convert
+  datalv datavg -wi-a----- <500.00g                                       
+  home   rootvg -wi-ao----   30.00g                                       
+  root   rootvg -wi-ao----  252.99g                                       
+  swap   rootvg -wi-ao----   16.00g                                       
+[root@HMsql-db02 ~]#
+
+[root@HMsql-db02B ~]# df -h
+文件系统                 容量  已用  可用 已用% 挂载点
+devtmpfs                  16G     0   16G    0% /dev
+tmpfs                     16G   56K   16G    1% /dev/shm
+tmpfs                     16G  114M   15G    1% /run
+tmpfs                     16G     0   16G    0% /sys/fs/cgroup
+/dev/mapper/rootvg-root  253G   16G  238G    7% /
+tmpfs                     16G     0   16G    0% /tmp
+/dev/vda1               1014M  212M  803M   21% /boot
+/dev/mapper/rootvg-home   30G  248M   30G    1% /home
+tmpfs                    3.1G     0  3.1G    0% /run/user/993
+tmpfs                    3.1G     0  3.1G    0% /run/user/1000
+[root@HMsql-db02B ~]# cat /etc/os-release
+NAME="Kylin Linux Advanced Server"
+VERSION="V10 (Sword)"
+ID="kylin"
+VERSION_ID="V10"
+PRETTY_NAME="Kylin Linux Advanced Server V10 (Sword)"
+ANSI_COLOR="0;31"
+
+[root@HMsql-db02B ~]# cat /etc/.productinfo
+Kylin Linux Advanced Server
+release V10 (SP2) /(Sword)-x86_64-Build09/20210524
+[root@HMsql-db02B ~]# lsblk
+NAME            MAJ:MIN RM  SIZE RO TYPE MOUNTPOINT
+fd0               2:0    1    4K  0 disk
+sr0              11:0    1 1024M  0 rom
+vda             252:0    0  100G  0 disk
+├─vda1          252:1    0    1G  0 part /boot
+└─vda2          252:2    0   99G  0 part
+  ├─rootvg-root 253:0    0  253G  0 lvm  /
+  ├─rootvg-swap 253:1    0   16G  0 lvm  [SWAP]
+  └─rootvg-home 253:2    0   30G  0 lvm  /home
+vdb             252:16   0  200G  0 disk
+└─rootvg-root   253:0    0  253G  0 lvm  /
+vdc             252:32   0  500G  0 disk
+└─datavg-datalv 253:3    0  500G  0 lvm
+[root@HMsql-db02B ~]# vgs
+  VG     #PV #LV #SN Attr   VSize    VFree
+  datavg   1   1   0 wz--n- <500.00g    0
+  rootvg   2   3   0 wz--n-  298.99g    0
+[root@HMsql-db02B ~]# lvs
+  LV     VG     Attr       LSize    Pool Origin Data%  Meta%  Move Log Cpy%Sync Convert
+  datalv datavg -wi-a----- <500.00g                                       
+  home   rootvg -wi-ao----   30.00g                                       
+  root   rootvg -wi-ao----  252.99g                                       
+  swap   rootvg -wi-ao----   16.00g                                       
+[root@HMsql-db02B ~]#
+
+```
+
+
+
+#data分区，单独挂载
+
+```bash
+vi /etc/fstab
+
+/dev/mapper/datavg-datalv /data xfs defaults 0 0
 ```
 
 
@@ -193,7 +411,7 @@ UUID=6349a9fd-b175-4645-8182-7b483fca9e09 /boot                   xfs     defaul
 #/dev/mapper/ao-home     /home                   xfs     defaults        0 0
 /dev/mapper/ao-swap     swap                    swap    defaults        0 0
 
-[root@mysql01 ~]# mkdir /data
+[root@MHsql-db01 ~]# mkdir /data
 ```
 
 
@@ -204,64 +422,97 @@ UUID=6349a9fd-b175-4645-8182-7b483fca9e09 /boot                   xfs     defaul
 
 ```bash
 cat >> /etc/hosts <<EOF
-222.204.70.110 mysql01
-222.204.70.111 mysql02
+ 222.24.203.31 MHsql-db01
+ 222.24.203.35 MHsql-db01B
 EOF
 
-#mysql01
-hostnamectl set-hostname mysql01
-#mysql02
-hostnamectl set-hostname mysql02
+#MHsql-db01
+hostnamectl set-hostname MHsql-db01
+#MHsql-db01B
+hostnamectl set-hostname MHsql-db01B
 
 hostnamectl status
 
-ping mysql01 
-ping mysql02
+ping MHsql-db01 
+ping MHsql-db01B
 
 ```
 
 ```
-[root@localhost ~]# hostnamectl set-hostname mysql01
+[root@localhost ~]# hostnamectl set-hostname MHsql-db01B
 [root@localhost ~]# exit
 
-[root@mysql01 ~]# hostnamectl status
-   Static hostname: mysql01
+[root@MHsql-db01B ~]# $ hostnamectl status
+   Static hostname: MHsql-db01B
          Icon name: computer-vm
            Chassis: vm
-        Machine ID: 4297f39ad4274e4daac0d4ad8b649309
-           Boot ID: 26507a91dc6c4ccd86b0b3102a2de3fd
+        Machine ID: 96673b7b63a1448eab69bc486cb9f432
+           Boot ID: c9cda86512674cb4a7c04e1e8630bd35
     Virtualization: kvm
-  Operating System: Anolis OS 7.9
-            Kernel: Linux 3.10.0-1160.an7.x86_64
+  Operating System: Kylin Linux Advanced Server V10 (Sword)
+            Kernel: Linux 4.19.90-24.4.v2101.ky10.x86_64
       Architecture: x86-64
-[root@mysql01 ~]#
 
-[root@mysql01 ~]# cat >> /etc/hosts <<EOF
-222.204.70.110 mysql01
-222.204.70.111 mysql02
+
+
+[root@MHsql-db01 ~]# cat >> /etc/hosts <<EOF
+10.40.10.132       MHmysql-db01       
+10.40.10.133       MHmysql-db02       
+10.40.10.134       MHmysql-db03       
+10.40.10.135       MHmysql-db04       
+10.40.10.136       MHmysql-db01B       
+10.40.10.137       MHmysql-db02B       
+10.40.10.138       MHmysql-db03B       
+10.40.10.139       MHmysql-db04B       
+
+
+222.24.203.31       MHmysql-db01       
+222.24.203.32       MHmysql-db02       
+222.24.203.33       MHmysql-db03       
+222.24.203.34       MHmysql-db04       
+222.24.203.35       MHmysql-db01B       
+222.24.203.36       MHmysql-db02B       
+222.24.203.37       MHmysql-db03B       
+222.24.203.38       MHmysql-db04B
 EOF
 
-[root@mysql01 ~]# cat /etc/hosts
+[root@MHsql-db01 ~]# cat /etc/hosts
 127.0.0.1   localhost localhost.localdomain localhost4 localhost4.localdomain4
 ::1         localhost localhost.localdomain localhost6 localhost6.localdomain6
-222.204.70.110 mysql01
-222.204.70.111 mysql02
+10.40.10.132       MHmysql-db01       
+10.40.10.133       MHmysql-db02       
+10.40.10.134       MHmysql-db03       
+10.40.10.135       MHmysql-db04       
+10.40.10.136       MHmysql-db01B       
+10.40.10.137       MHmysql-db02B       
+10.40.10.138       MHmysql-db03B       
+10.40.10.139       MHmysql-db04B       
 
-[root@mysql01 ~]# ping mysql01 -c 1
-PING mysql01 (222.204.70.110) 56(84) bytes of data.
-64 bytes from mysql01 (222.204.70.110): icmp_seq=1 ttl=64 time=0.065 ms
 
---- mysql01 ping statistics ---
+222.24.203.31       MHmysql-db01       
+222.24.203.32       MHmysql-db02       
+222.24.203.33       MHmysql-db03       
+222.24.203.34       MHmysql-db04       
+222.24.203.35       MHmysql-db01B       
+222.24.203.36       MHmysql-db02B       
+222.24.203.37       MHmysql-db03B       
+222.24.203.38       MHmysql-db04B
+
+[root@MHsql-db01 ~]# ping MHsql-db01 -c 1
+PING MHsql-db01 ( 222.24.203.31) 56(84) bytes of data.
+64 bytes from MHsql-db01 ( 222.24.203.31): icmp_seq=1 ttl=64 time=0.065 ms
+
+--- MHsql-db01 ping statistics ---
 1 packets transmitted, 1 received, 0% packet loss, time 0ms
 rtt min/avg/max/mdev = 0.065/0.065/0.065/0.000 ms
-[root@mysql01 ~]# ping mysql02 -c 1
-PING mysql02 (222.204.70.111) 56(84) bytes of data.
-64 bytes from mysql02 (222.204.70.111): icmp_seq=1 ttl=64 time=0.619 ms
+[root@MHsql-db01 ~]# ping MHsql-db01B -c 1
+PING MHsql-db01B ( 222.24.203.35) 56(84) bytes of data.
+64 bytes from MHsql-db01B ( 222.24.203.35): icmp_seq=1 ttl=64 time=0.619 ms
 
---- mysql02 ping statistics ---
+--- MHsql-db01B ping statistics ---
 1 packets transmitted, 1 received, 0% packet loss, time 0ms
 rtt min/avg/max/mdev = 0.619/0.619/0.619/0.000 ms
-[root@mysql01 ~]#
+[root@MHsql-db01 ~]#
 
 ```
 
@@ -290,20 +541,20 @@ cat /etc/selinux/config
 #oracle linux server直接使用自己的yum源，此处不做修改
 #Anolis OS 直接使用自己的yum源，此处不做修改
 
-[root@mysql01 ~]# cat /etc/anolis-release
+[root@MHsql-db01 ~]# cat /etc/anolis-release
 Anolis OS release 7.9
 
-[root@mysql01 ~]# ls /etc/yum.repos.d/
+[root@MHsql-db01 ~]# ls /etc/yum.repos.d/
 AnolisOS-Debuginfo.repo  AnolisOS-os.repo    AnolisOS-Source.repo
 AnolisOS-extras.repo     AnolisOS-Plus.repo  AnolisOS-updates.repo
-[root@mysql01 ~]# cat /etc/yum.repos.d/AnolisOS-os.repo
+[root@MHsql-db01 ~]# cat /etc/yum.repos.d/AnolisOS-os.repo
 [os]
 name=AnolisOS-7.9 - os
 baseurl=http://mirrors.openanolis.cn/anolis/7.9/os/$basearch/os
 enabled=1
 gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-ANOLIS
 gpgcheck=1
-[root@mysql01 ~]#
+[root@MHsql-db01 ~]#
 
 
 #centos7.9
@@ -342,6 +593,63 @@ deb http://mirrors.aliyun.com/ubuntu/ focal-security multiverse
 EOF
 
 apt update
+
+
+#Kylin Linux Advanced Server 10
+[root@MHsql-db01 ~]# cd /etc/yum.repos.d/
+[root@MHsql-db01 yum.repos.d]# ls
+kylin_x86_64.repo  kylin_x86_64.repo.bak  yum_kylin_local.repo
+[root@MHsql-db01 yum.repos.d]# cat kylin_x86_64.repo
+###Kylin Linux Advanced Server 10 - os repo###
+
+[ks10-adv-os]
+name = Kylin Linux Advanced Server 10 - Os
+baseurl = http://update.cs2c.com.cn:8080/NS/V10/V10SP2/os/adv/lic/base/$basearch/
+gpgcheck = 1
+gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-kylin
+enabled = 1
+
+[ks10-adv-updates]
+name = Kylin Linux Advanced Server 10 - Updates
+baseurl = http://update.cs2c.com.cn:8080/NS/V10/V10SP2/os/adv/lic/updates/$basearch/
+gpgcheck = 1
+gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-kylin
+enabled = 1
+
+[ks10-adv-addons]
+name = Kylin Linux Advanced Server 10 - Addons
+baseurl = http://update.cs2c.com.cn:8080/NS/V10/V10SP2/os/adv/lic/addons/$basearch/
+gpgcheck = 1
+gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-kylin
+enabled = 0
+[docker-ce-stable]
+name=Docker CE Stable
+baseurl=https://mirrors.aliyun.com/docker-ce/linux/centos/8/$basearch/stable
+enabled=1
+gpgcheck=1
+gpgkey=https://mirrors.aliyun.com/docker-ce/linux/centos/gpg
+
+[centos-extras]
+name=centos-extras Stable
+baseurl=https://mirrors.aliyun.com/centos/8/extras/$basearch/os
+enabled=1
+gpgcheck=0
+
+------------
+[docker-ce-stable]
+name=Docker CE Stable
+baseurl=https://mirrors.aliyun.com/docker-ce/linux/centos/7.9/$basearch/stable
+enabled=1
+gpgcheck=1
+gpgkey=https://mirrors.aliyun.com/docker-ce/linux/centos/gpg
+
+[centos-extras]
+name=centos-extras Stable
+baseurl=https://mirrors.aliyun.com/centos/7/extras/$basearch
+enabled=1
+gpgcheck=0
+[devel@docker01-test yum.repos.d]$
+
 ```
 
 #### 4、开始时间同步及修改东8区
@@ -370,7 +678,8 @@ vi /etc/ntp.conf
 
 #学校如果有ntp服务器
 #centos7.9配置
-server times.neuq.edu.cn iburst
+#server times.neuq.edu.cn iburst
+server 222.24.211.121
 #ubuntu22.04
 pool times.neuq.edu.cn iburst
 
@@ -423,9 +732,8 @@ kernel.perf_event_paranoid=-1
 
 #sysctls for k8s node config
 net.ipv4.tcp_slow_start_after_idle=0
-net.core.rmem_default=33554432
-net.core.rmem_max=33554432
-
+net.core.rmem_max=16777216
+net.core.rmem_default=16777216
 fs.inotify.max_user_watches=524288
 kernel.softlockup_all_cpu_backtrace=1
 
@@ -541,7 +849,15 @@ EOF
 
 ```bash
 rpm -qa |grep -i mariadb
-yum remove -y mariadb-libs.x86_64
+yum remove mariadb* -y
+
+[root@DB03-test ~]# rpm -qa |grep -i mariadb
+mariadb-errmessage-10.3.39-1.p01.ky10.x86_64
+mariadb-server-10.3.39-1.p01.ky10.x86_64
+mariadb-connector-c-3.0.6-8.p01.ky10.x86_64
+mariadb-common-10.3.39-1.p01.ky10.x86_64
+mariadb-10.3.39-1.p01.ky10.x86_64
+[root@DB03-test ~]#yum remove mariadb* -y
 ```
 
 #### 2、安装mysql
@@ -553,16 +869,31 @@ yum install -y wget net-tools
 #mysql 8.4.x
 wget https://dev.mysql.com/get/mysql84-community-release-el7-1.noarch.rpm
 
+
 #8.0.39
 wget https://dev.mysql.com/get/mysql80-community-release-el7-11.noarch.rpm
-
 yum localinstall -y mysql80-community-release-el7-11.noarch.rpm
+
+#Kylin Linux Advanced Server 10
+[root@MHsql-db01 ~]# uname -a
+Linux MHsql-db01 4.19.90-25.44.v2101.ky10.x86_64 #1 SMP Thu Nov 7 17:33:30 CST 2024 x86_64 x86_64 x86_64 GNU/Linux
+
+wget https://dev.mysql.com/get/mysql80-community-release-el8-3.noarch.rpm
+
+yum localinstall -y mysql80-community-release-el8-3.noarch.rpm
+
 
 yum search mysql-community-server
 yum list mysql-community-server.x86_64  --showduplicates | sort -r
 yum list mysql-community-client-plugins.x86_64  --showduplicates | sort -r
 
-yum install -y mysql-community-server
+#yum install -y mysql-community-server
+yum install -y mysql-community-server --nogpgcheck
+
+[root@MHsql-db01 ~]# mysql -V
+mysql  Ver 8.0.42 for Linux on x86_64 (MySQL Community Server - GPL)
+
+
 
 #指定某版本
 yum install -y mysql-community-{server,client,client-plugins,icu-data-files,common,libs,libs-compat}-8.0.20-1.el7
@@ -649,7 +980,7 @@ yum install -y mysql-community-server
 
 
 
-#### 3、优化mysql---mysql01和mysql02有细微差别
+#### 3、优化mysql---MHsql-db01和MHsql-db01B有细微差别
 
 #检查my.cnf
 
@@ -662,33 +993,33 @@ mysqld --defaults-file=/etc/my.cnf  --validate-config --log-error-verbosity=2
 ```bash
 #启动前
 
-[root@mysql01 ~]# mysqld --defaults-file=/etc/my.cnf  --validate-config --log-error-verbosity=2
+[root@MHsql-db01 ~]# mysqld --defaults-file=/etc/my.cnf  --validate-config --log-error-verbosity=2
 2024-08-21T12:11:55.450283+08:00 0 [Warning] [MY-011070] [Server] 'binlog_format' is deprecated and will be removed in a future release.
 2024-08-21T12:11:55.450361+08:00 0 [Warning] [MY-011069] [Server] The syntax '--master-info-repository' is deprecated and will be removed in a future release.
 2024-08-21T12:11:55.450366+08:00 0 [Warning] [MY-011069] [Server] The syntax '--relay-log-info-repository' is deprecated and will be removed in a future release.
 2024-08-21T12:11:55.450375+08:00 0 [Warning] [MY-011070] [Server] '--sync-relay-log-info' is deprecated and will be removed in a future release.
 2024-08-21T12:11:55.450384+08:00 0 [Warning] [MY-011069] [Server] The syntax '--replica-parallel-type' is deprecated and will be removed in a future release.
 2024-08-21T12:11:55.450471+08:00 0 [Warning] [MY-010091] [Server] Can't create test file /data/mysql/mysqld_tmp_file_case_insensitive_test.lower-test
-[root@mysql01 ~]#
+[root@MHsql-db01 ~]#
 
 #启动后
-[root@mysql01 data]# mysqld --defaults-file=/etc/my.cnf  --validate-config --log-error-verbosity=2
+[root@MHsql-db01 data]# mysqld --defaults-file=/etc/my.cnf  --validate-config --log-error-verbosity=2
 2024-08-21T12:16:21.793327+08:00 0 [Warning] [MY-011070] [Server] 'binlog_format' is deprecated and will be removed in a future release.
 2024-08-21T12:16:21.793404+08:00 0 [Warning] [MY-011069] [Server] The syntax '--master-info-repository' is deprecated and will be removed in a future release.
 2024-08-21T12:16:21.793410+08:00 0 [Warning] [MY-011069] [Server] The syntax '--relay-log-info-repository' is deprecated and will be removed in a future release.
 2024-08-21T12:16:21.793419+08:00 0 [Warning] [MY-011070] [Server] '--sync-relay-log-info' is deprecated and will be removed in a future release.
 2024-08-21T12:16:21.793428+08:00 0 [Warning] [MY-011069] [Server] The syntax '--replica-parallel-type' is deprecated and will be removed in a future release.
-[root@mysql01 data]#
+[root@MHsql-db01 data]#
 
 
 ```
 
 
 
-##### 1) mysql01---/etc/my.cnf
+##### 1) MHsql-db01---/etc/my.cnf
 
 ```bash
-#cp /etc/my.cnf /etc/my.cnf.bak
+cp /etc/my.cnf /etc/my.cnf.bak
 
 cat > /etc/my.cnf <<EOF
 [client]
@@ -714,8 +1045,8 @@ datadir = /data/mysql
 #tmpdir = /tmp
 socket = /data/mysql/mysql.sock
 #服务器唯一id，默认为1，值范围为1～2^32−1. ；主数据库和从数据库的server-id不能重复
-server_id = 110
-#server_id = 111
+server_id = 80
+#server_id = 81
 #mysqlx_port = 33060
 #管理员用来连接的端口号,注意如果admin_address没有设置的话,这个端口号是无效的
 admin_port = 33062
@@ -896,9 +1227,9 @@ replica_parallel_workers = 16
 ####################innodb#######################
 #内存的50%-70%
 #32G
-#innodb_buffer_pool_size = 16384M
+innodb_buffer_pool_size = 16384M
 #64G
-innodb_buffer_pool_size = 32768M
+#innodb_buffer_pool_size = 32768M
 #2个G一个instance,一般小于32G配置为4,大于32G配置为8
 innodb_buffer_pool_instances = 8
 #默认启用,指定在MySQL服务器启动时,InnoDB缓冲池通过加载之前保存的相同页面自动预热,通常与innodb_buffer_pool_dump_at_shutdown结合使用.
@@ -1005,7 +1336,7 @@ user = mysql
 port = 3306
 datadir = /data/mysql
 socket = /data/mysql/mysql.sock
-server_id = 110
+server_id = 80
 admin_port = 33062
 admin_address = '127.0.0.1'
 create_admin_listener_thread = on
@@ -1071,7 +1402,7 @@ relay_log_recovery = ON
 replica_preserve_commit_order = OFF
 replica_parallel_type = LOGICAL_CLOCK
 replica_parallel_workers = 16
-innodb_buffer_pool_size = 32768M
+innodb_buffer_pool_size = 16384M
 innodb_buffer_pool_instances = 8
 innodb_buffer_pool_load_at_startup = 1
 innodb_buffer_pool_dump_at_shutdown = 1
@@ -1116,7 +1447,7 @@ max_allowed_packet = 32M
 
 
 
-##### 2) mysql02---/etc/my.cnf
+##### 2) MHsql-db01B---/etc/my.cnf
 
 ```bash
 cp /etc/my.cnf /etc/my.cnf.bak
@@ -1145,8 +1476,8 @@ datadir = /data/mysql
 #tmpdir = /tmp
 socket = /data/mysql/mysql.sock
 #服务器唯一id，默认为1，值范围为1～2^32−1. ；主数据库和从数据库的server-id不能重复
-#server_id = 110
-server_id = 111
+#server_id = 80
+server_id = 81
 #mysqlx_port = 33060
 #管理员用来连接的端口号,注意如果admin_address没有设置的话,这个端口号是无效的
 admin_port = 33062
@@ -1325,7 +1656,10 @@ replica_parallel_workers = 16
 
 ####################innodb#######################
 #内存的50%-70%
-innodb_buffer_pool_size = 32768M
+#32G
+innodb_buffer_pool_size = 16384M
+#64G
+#innodb_buffer_pool_size = 32768M
 #2个G一个instance,一般小于32G配置为4,大于32G配置为8
 innodb_buffer_pool_instances = 8
 #默认启用,指定在MySQL服务器启动时,InnoDB缓冲池通过加载之前保存的相同页面自动预热,通常与innodb_buffer_pool_dump_at_shutdown结合使用.
@@ -1432,7 +1766,7 @@ user = mysql
 port = 3306
 datadir = /data/mysql
 socket = /data/mysql/mysql.sock
-server_id = 111
+server_id = 81
 admin_port = 33062
 admin_address = '127.0.0.1'
 create_admin_listener_thread = on
@@ -1498,7 +1832,7 @@ relay_log_recovery = ON
 replica_preserve_commit_order = OFF
 replica_parallel_type = LOGICAL_CLOCK
 replica_parallel_workers = 16
-innodb_buffer_pool_size = 32768M
+innodb_buffer_pool_size = 16384M
 innodb_buffer_pool_instances = 8
 innodb_buffer_pool_load_at_startup = 1
 innodb_buffer_pool_dump_at_shutdown = 1
@@ -1538,11 +1872,12 @@ performance_schema_instrument                                           = 'memor
 [mysqldump]
 quick
 max_allowed_packet = 32M
+
 ```
 
 
 
-##### 3) mysqld.server---mysql01/mysql02
+##### 3) mysqld.server---MHsql-db01/MHsql-db01B
 
 ```bash
 sed -i 's/LimitNOFILE = 10000/LimitNOFILE = 65500/g' /usr/lib/systemd/system/mysqld.service
@@ -1600,10 +1935,10 @@ flush privileges;
 ```sql
    set global validate_password.policy=0;
    set global validate_password.length=1;
-create user 'repl'@'222.204.70.%' identified with mysql_native_password by 'Repl123!@#2024';
-grant replication slave on *.* to 'repl'@'222.204.70.%';
+create user 'repl'@'10.40.10.%' identified with mysql_native_password by 'Repl123!@#2024';
+grant replication slave on *.* to 'repl'@'10.40.10.%';
 
-show grants for 'repl'@'222.204.70.%';
+show grants for 'repl'@'10.40.10.%';
 
 SET @@GLOBAL.read_only = ON;
 flush tables with read lock; 
@@ -1624,7 +1959,7 @@ flush tables with read lock;
 
 /usr/bin/tar -zcvf 20231102.sql.tar.gz 20231102.sql
 
- scp 20231102.sql.tar.gz 222.204.70.110:/root/
+ scp 20231102.sql.tar.gz  222.24.203.31:/root/
 ```
 
 
@@ -1650,7 +1985,7 @@ source /root/20231102.sql
 ```bash
 #SET @@GLOBAL.read_only = ON;
 
-CHANGE REPLICATION SOURCE TO SOURCE_HOST='222.204.70.110',SOURCE_PORT=3306,SOURCE_USER='repl',SOURCE_PASSWORD='Repl123!@#2024',SOURCE_AUTO_POSITION = 1;
+CHANGE REPLICATION SOURCE TO SOURCE_HOST='222.24.203.31',SOURCE_PORT=3306,SOURCE_USER='repl',SOURCE_PASSWORD='Repl123!@#2024',SOURCE_AUTO_POSITION = 1;
 
 show warnings;
 
@@ -1676,9 +2011,11 @@ SET @@GLOBAL.read_only = OFF;
 
 
 
+#此时如果主库全库导入旧库，那么导入后，双主库都需要重启mysql，不然mysql.user中的账户密码不生效
+
 #### 4、错误处理
 
-#从库开启主从后报错:
+##### 4.1.root/repl账户重复的报错
 
 #可能会有修改root账户及创建repl账户的相关错误
 
@@ -1801,6 +2138,16 @@ ALTER USER 'root'@'localhost' IDENTIFIED WITH 'caching_sha2_password' AS '$A$005
 
 ```
 
+```bash
+tail -f /data/mysql/error.log
+
+
+2025-04-18T18:07:35.195437+08:00 30 [ERROR] [MY-010584] [Repl] Replica SQL for channel '': Worker 1 failed executing transaction '6a48c612-1c39-11f0-b37f-286ed489ab99:1' at source log mysql-bin.000002, end_log_pos 477; Error 'Operation ALTER USER failed for 'root'@'localhost'' on query. Default database: ''. Query: 'ALTER USER 'root'@'localhost' IDENTIFIED WITH 'caching_sha2_password' AS '$A$005$fBjJG*L(q1Lyr\\C   EVWPQ/V2e4bFKNoXRTypFYRwkuoM4mZMU8Btryguz5D'', Error_code: MY-001396
+2025-04-18T18:07:35.195929+08:00 29 [ERROR] [MY-010586] [Repl] Error running query, replica SQL thread aborted. Fix the problem, and restart the replica SQL thread with "START REPLICA". We stopped at log 'mysql-bin.000002' position 157
+
+
+```
+
 
 
 #跳过部分
@@ -1808,11 +2155,11 @@ ALTER USER 'root'@'localhost' IDENTIFIED WITH 'caching_sha2_password' AS '$A$005
 ```
 stop replica;
  
- set @@session.gtid_next='b526a489-7796-11ee-b698-fefcfec91d86:109'; 
+ set @@session.gtid_next='b526a489-7796-11ee-b698-fefcfec91d86:1'; 
  begin; 
  commit; 
 
- set @@session.gtid_next='b526a489-7796-11ee-b698-fefcfec91d86:110'; 
+ set @@session.gtid_next='b526a489-7796-11ee-b698-fefcfec91d86:4'; 
  begin; 
  commit; 
 
@@ -1916,7 +2263,7 @@ tail -f /data/mysql/error.log
 
 2023-11-02T10:43:19.894271+08:00 47 [Warning] [MY-010897] [Repl] Storing MySQL user name or password information in the connection metadata repository is not secure and is therefore not recommended. Please consider using the USER and PASSWORD connection options for START REPLICA; see the 'START REPLICA Syntax' in the MySQL Manual for more information.
 2023-11-02T10:43:19.951855+08:00 48 [Note] [MY-010581] [Repl] Replica SQL thread for channel '' initialized, starting replication in log 'mysql-bin.000002' at position 157, relay log './relay-bin.000002' position: 373
-2023-11-02T10:43:19.953661+08:00 47 [System] [MY-014002] [Repl] Replica receiver thread for channel '': connected to source 'repl@222.204.70.110:3306' with server_uuid=6cfaa641-7926-11ee-bb23-fefcfe25467b, server_id=114. Starting GTID-based replication.
+2023-11-02T10:43:19.953661+08:00 47 [System] [MY-014002] [Repl] Replica receiver thread for channel '': connected to source 'repl@ 222.24.203.31:3306' with server_uuid=6cfaa641-7926-11ee-bb23-fefcfe25467b, server_id=114. Starting GTID-based replication.
 
 ```
 
@@ -1936,7 +2283,7 @@ tail -f /data/mysql/error.log
 
 ```bash
 
-[root@mysql01 mysql]# tail -f error.log
+[root@MHsql-db01 mysql]# tail -f error.log
 2024-08-21T12:16:03.112680+08:00 0 [Note] [MY-011243] [Server] Plugin mysqlx reported: 'Using OpenSSL for TLS connections'
 2024-08-21T12:16:03.112851+08:00 0 [System] [MY-010931] [Server] /usr/sbin/mysqld: ready for connections. Version: '8.0.39'  socket: '/data/mysql/mysql.sock'  port: 3306  MySQL Community Server - GPL.
 2024-08-21T12:16:03.112865+08:00 0 [System] [MY-013292] [Server] Admin interface ready for connections, address: '127.0.0.1'  port: 33062
@@ -1948,6 +2295,172 @@ tail -f /data/mysql/error.log
 2024-08-21T15:06:08.870261+08:00 12 [Note] [MY-010014] [Repl] While initializing dump thread for replica with UUID <0f76fa28-5f74-11ef-be67-fefcfe4ed56d>, found a zombie dump thread with the same UUID. Source is killing the zombie dump thread(11).
 2024-08-21T15:06:08.870411+08:00 12 [Note] [MY-010462] [Repl] Start binlog_dump to source_thread_id(12) replica_server(111), pos(, 4)
 
+```
+
+
+
+##### 4.2.配置主从时，在IP地址前多了个空格，导致报错
+
+#在配置主从时，`CHANGE MASTER TO` 命令中的 `MASTER_HOST` 参数误写为 **`' 222.24.203.31'`**（含空格），导致MySQL无法解析该主机名
+
+```sql
+root@localhost:mysql.sock [mysql]> CHANGE REPLICATION SOURCE TO SOURCE_HOST=' 222.24.203.31',SOURCE_PORT=3306,SOURCE_USER='repl',SOURCE_PASSWORD='ReplNwpu123!@#2025',SOURCE_AUTO_POSITION = 1;
+Query OK, 0 rows affected, 2 warnings (0.02 sec)
+
+root@localhost:mysql.sock [mysql]> SHOW REPLICA STATUS \G;
+*************************** 1. row ***************************
+             Replica_IO_State:
+                  Source_Host:  222.24.203.31
+                  Source_User: repl
+                  Source_Port: 3306
+                Connect_Retry: 60
+              Source_Log_File:
+          Read_Source_Log_Pos: 4
+               Relay_Log_File: relay-bin.000001
+                Relay_Log_Pos: 4
+        Relay_Source_Log_File:
+           Replica_IO_Running: No
+          Replica_SQL_Running: No
+              Replicate_Do_DB:
+          Replicate_Ignore_DB:
+           Replicate_Do_Table:
+       Replicate_Ignore_Table:
+      Replicate_Wild_Do_Table:
+  Replicate_Wild_Ignore_Table:
+                   Last_Errno: 0
+                   Last_Error:
+                 Skip_Counter: 0
+          Exec_Source_Log_Pos: 0
+              Relay_Log_Space: 157
+              Until_Condition: None
+               Until_Log_File:
+                Until_Log_Pos: 0
+           Source_SSL_Allowed: No
+           Source_SSL_CA_File:
+           Source_SSL_CA_Path:
+              Source_SSL_Cert:
+            Source_SSL_Cipher:
+               Source_SSL_Key:
+        Seconds_Behind_Source: NULL
+Source_SSL_Verify_Server_Cert: No
+                Last_IO_Errno: 0
+                Last_IO_Error:
+               Last_SQL_Errno: 0
+               Last_SQL_Error:
+  Replicate_Ignore_Server_Ids:
+             Source_Server_Id: 0
+                  Source_UUID:
+             Source_Info_File: mysql.slave_master_info
+                    SQL_Delay: 0
+          SQL_Remaining_Delay: NULL
+    Replica_SQL_Running_State:
+           Source_Retry_Count: 86400
+                  Source_Bind:
+      Last_IO_Error_Timestamp:
+     Last_SQL_Error_Timestamp:
+               Source_SSL_Crl:
+           Source_SSL_Crlpath:
+           Retrieved_Gtid_Set:
+            Executed_Gtid_Set: 69fc8d5a-1c39-11f0-88c3-286ed489b835:1-5
+                Auto_Position: 1
+         Replicate_Rewrite_DB:
+                 Channel_Name:
+           Source_TLS_Version:
+       Source_public_key_path:
+        Get_Source_public_key: 0
+            Network_Namespace:
+1 row in set (0.00 sec)
+
+ERROR:
+No query specified
+
+root@localhost:mysql.sock [mysql]> start replica;
+Query OK, 0 rows affected (0.13 sec)
+
+root@localhost:mysql.sock [mysql]> SHOW REPLICA STATUS \G;
+*************************** 1. row ***************************
+             Replica_IO_State: Connecting to source
+                  Source_Host:  222.24.203.31
+                  Source_User: repl
+                  Source_Port: 3306
+                Connect_Retry: 60
+              Source_Log_File:
+          Read_Source_Log_Pos: 4
+               Relay_Log_File: relay-bin.000001
+                Relay_Log_Pos: 4
+        Relay_Source_Log_File:
+           Replica_IO_Running: Connecting
+          Replica_SQL_Running: Yes
+              Replicate_Do_DB:
+          Replicate_Ignore_DB:
+           Replicate_Do_Table:
+       Replicate_Ignore_Table:
+      Replicate_Wild_Do_Table:
+  Replicate_Wild_Ignore_Table:
+                   Last_Errno: 0
+                   Last_Error:
+                 Skip_Counter: 0
+          Exec_Source_Log_Pos: 0
+              Relay_Log_Space: 157
+              Until_Condition: None
+               Until_Log_File:
+                Until_Log_Pos: 0
+           Source_SSL_Allowed: No
+           Source_SSL_CA_File:
+           Source_SSL_CA_Path:
+              Source_SSL_Cert:
+            Source_SSL_Cipher:
+               Source_SSL_Key:
+        Seconds_Behind_Source: 0
+Source_SSL_Verify_Server_Cert: No
+                Last_IO_Errno: 2005
+                Last_IO_Error: Error connecting to source 'repl@ 222.24.203.31:3306'. This was attempt 1/86400, with a delay of 60 seconds between attempts. Message: Unknown MySQL server host '222.24.203.31' (-2)
+               Last_SQL_Errno: 0
+               Last_SQL_Error:
+  Replicate_Ignore_Server_Ids:
+             Source_Server_Id: 0
+                  Source_UUID:
+             Source_Info_File: mysql.slave_master_info
+                    SQL_Delay: 0
+          SQL_Remaining_Delay: NULL
+    Replica_SQL_Running_State: Replica has read all relay log; waiting for more updates
+           Source_Retry_Count: 86400
+                  Source_Bind:
+      Last_IO_Error_Timestamp: 250418 17:59:46
+     Last_SQL_Error_Timestamp:
+               Source_SSL_Crl:
+           Source_SSL_Crlpath:
+           Retrieved_Gtid_Set:
+            Executed_Gtid_Set: 69fc8d5a-1c39-11f0-88c3-286ed489b835:1-5
+                Auto_Position: 1
+         Replicate_Rewrite_DB:
+                 Channel_Name:
+           Source_TLS_Version:
+       Source_public_key_path:
+        Get_Source_public_key: 0
+            Network_Namespace:
+1 row in set (0.00 sec)
+
+ERROR:
+No query specified
+```
+
+```bash
+tail -f /data/mysql/error.log
+
+2025-04-18T18:00:46.217515+08:00 10 [ERROR] [MY-010584] [Repl] Replica I/O for channel '': Error connecting to source 'repl@ 222.24.203.31:3306'. This was attempt 2/86400, with a delay of 60 seconds between attempts. Message: Unknown MySQL server host ' 222.24.203.31' (-2), Error_code: MY-002005
+```
+
+
+
+#解决办法
+
+```sql
+STOP REPLICA;
+CHANGE REPLICATION SOURCE TO SOURCE_HOST='222.24.203.31' FOR CHANNEL ''; -- If you're using default channel
+-- OR
+-- CHANGE REPLICATION SOURCE TO SOURCE_HOST='222.24.203.31' FOR CHANNEL 'your_channel_name'; -- If you've named the channel
+START REPLICA;
 ```
 
 
@@ -2013,7 +2526,7 @@ mysql> select * from testdb.t_user01;
 root@localhost:mysql.sock [testdb]>  SHOW REPLICA STATUS \G;
 *************************** 1. row ***************************
              Replica_IO_State: Waiting for source to send event
-                  Source_Host: 222.204.70.110
+                  Source_Host:  222.24.203.31
                   Source_User: repl
                   Source_Port: 3306
                 Connect_Retry: 60
@@ -2305,7 +2818,7 @@ mysql> show master status;
 mysql> show replica status\G;
 *************************** 1. row ***************************
              Replica_IO_State: Waiting for source to send event
-                  Source_Host: 222.204.70.111
+                  Source_Host:  222.24.203.35
                   Source_User: repl
                   Source_Port: 3306
                 Connect_Retry: 60
@@ -2380,7 +2893,7 @@ No query specified
 > show replica status\G;
 *************************** 1. row ***************************
              Replica_IO_State: Waiting for source to send event
-                  Source_Host: 222.204.70.110
+                  Source_Host:  222.24.203.31
                   Source_User: repl
                   Source_Port: 3306
                 Connect_Retry: 60
@@ -2450,7 +2963,7 @@ No query specified
 > show replica status\G;
 *************************** 1. row ***************************
              Replica_IO_State: Waiting for source to send event
-                  Source_Host: 222.204.70.110
+                  Source_Host:  222.24.203.31
                   Source_User: repl
                   Source_Port: 3306
                 Connect_Retry: 60
@@ -2533,7 +3046,7 @@ stop slave;
 reset slave all;
 
 -- 重新指定主
-CHANGE REPLICATION SOURCE TO SOURCE_HOST='222.204.70.110',SOURCE_PORT=3306,SOURCE_USER='repl',SOURCE_PASSWORD='Repl123!@#2023',SOURCE_AUTO_POSITION = 1;
+CHANGE REPLICATION SOURCE TO SOURCE_HOST='222.24.203.31',SOURCE_PORT=3306,SOURCE_USER='repl',SOURCE_PASSWORD='Repl123!@#2023',SOURCE_AUTO_POSITION = 1;
 
 -- 启动slave
 #start slave
@@ -2550,7 +3063,7 @@ reset slave all;
 
 -- 重新建立关系  子厚两个参数查看master状态即可 和主库保持一致
 #change master to master_host = '192.168.22.22', master_user = 'user', master_port=3306, master_password='pwd', master_log_file = 'mysqld-bin.000001', master_log_pos=1234; 
-CHANGE REPLICATION SOURCE TO SOURCE_HOST='222.204.70.111',SOURCE_PORT=3306,SOURCE_USER='repl',SOURCE_PASSWORD='Repl123!@#2023',SOURCE_AUTO_POSITION = 1;
+CHANGE REPLICATION SOURCE TO SOURCE_HOST='222.24.203.35',SOURCE_PORT=3306,SOURCE_USER='repl',SOURCE_PASSWORD='Repl123!@#2023',SOURCE_AUTO_POSITION = 1;
 
 
 -- 启动slave
@@ -2619,7 +3132,7 @@ mysql> select * from testdb01.t_user01;
 mysql> show replica status\G;
 *************************** 1. row ***************************
              Replica_IO_State: Waiting for source to send event
-                  Source_Host: 222.204.70.110
+                  Source_Host:  222.24.203.31
                   Source_User: repl
                   Source_Port: 3306
                 Connect_Retry: 60
@@ -2713,7 +3226,7 @@ mysql> select * from testdb01.t_user01;
 mysql> show replica status\G;
 *************************** 1. row ***************************
              Replica_IO_State: Waiting for source to send event
-                  Source_Host: 222.204.70.110
+                  Source_Host:  222.24.203.31
                   Source_User: repl
                   Source_Port: 3306
                 Connect_Retry: 60
@@ -2802,7 +3315,7 @@ mysql> select * from t_user01;
 mysql> show replica status\G;
 *************************** 1. row ***************************
              Replica_IO_State: Waiting for source to send event
-                  Source_Host: 222.204.70.111
+                  Source_Host:  222.24.203.35
                   Source_User: repl
                   Source_Port: 3306
                 Connect_Retry: 60
@@ -2903,7 +3416,7 @@ root@localhost:mysql.sock [(none)]> SHOW MASTER STATUS;
 root@localhost:mysql.sock [(none)]>  SHOW REPLICA STATUS \G;
 *************************** 1. row ***************************
              Replica_IO_State:
-                  Source_Host: 222.204.70.110
+                  Source_Host:  222.24.203.31
                   Source_User: repl
                   Source_Port: 3306
                 Connect_Retry: 60
@@ -3012,7 +3525,7 @@ flush tables with read lock;
 
 -- 传输到从库
 
- scp 20240305.sql.tar.gz 222.204.70.110:/root/
+ scp 20240305.sql.tar.gz  222.24.203.31:/root/
 
 3、从库操作
 
@@ -3026,7 +3539,7 @@ source /root/20240305.sql
 
 -- 重新建立关系  子厚两个参数查看master状态即可 和主库保持一致
 #change master to master_host = '192.168.22.22', master_user = 'user', master_port=3306, master_password='pwd', master_log_file = 'mysqld-bin.000001', master_log_pos=1234; 
-CHANGE REPLICATION SOURCE TO SOURCE_HOST='222.204.70.110',SOURCE_PORT=3306,SOURCE_USER='repl',SOURCE_PASSWORD='Repl123!@#2023',SOURCE_AUTO_POSITION = 1;
+CHANGE REPLICATION SOURCE TO SOURCE_HOST='222.24.203.31',SOURCE_PORT=3306,SOURCE_USER='repl',SOURCE_PASSWORD='Repl123!@#2023',SOURCE_AUTO_POSITION = 1;
 
 
 -- 启动slave
@@ -3204,7 +3717,7 @@ root@localhost:mysql.sock [(none)]> SHOW MASTER STATUS;
 root@localhost:mysql.sock [(none)]>  SHOW REPLICA STATUS \G;
 *************************** 1. row ***************************
              Replica_IO_State:
-                  Source_Host: 222.204.70.110
+                  Source_Host:  222.24.203.31
                   Source_User: repl
                   Source_Port: 3306
                 Connect_Retry: 60
@@ -3313,7 +3826,7 @@ flush tables with read lock;
 
 -- 传输到从库
 
- scp 20240305.sql.tar.gz 222.204.70.110:/root/
+ scp 20240305.sql.tar.gz  222.24.203.31:/root/
 
 3、从库操作
 
@@ -3329,7 +3842,7 @@ reset master;
 
 -- 重新建立关系  子厚两个参数查看master状态即可 和主库保持一致
 #change master to master_host = '192.168.22.22', master_user = 'user', master_port=3306, master_password='pwd', master_log_file = 'mysqld-bin.000001', master_log_pos=1234; 
-CHANGE REPLICATION SOURCE TO SOURCE_HOST='222.204.70.110',SOURCE_PORT=3306,SOURCE_USER='repl',SOURCE_PASSWORD='Repl123!@#2023',SOURCE_AUTO_POSITION = 1;
+CHANGE REPLICATION SOURCE TO SOURCE_HOST='222.24.203.31',SOURCE_PORT=3306,SOURCE_USER='repl',SOURCE_PASSWORD='Repl123!@#2023',SOURCE_AUTO_POSITION = 1;
 
 
 -- 启动slave
@@ -3346,7 +3859,7 @@ SET @@GLOBAL.read_only = OFF;
 stop slave;
 reset slave all;
 
-CHANGE REPLICATION SOURCE TO SOURCE_HOST='222.204.70.111',SOURCE_PORT=3306,SOURCE_USER='repl',SOURCE_PASSWORD='Repl123!@#2023',SOURCE_AUTO_POSITION = 1;
+CHANGE REPLICATION SOURCE TO SOURCE_HOST='222.24.203.35',SOURCE_PORT=3306,SOURCE_USER='repl',SOURCE_PASSWORD='Repl123!@#2023',SOURCE_AUTO_POSITION = 1;
 
 start replica;
 
@@ -3411,7 +3924,7 @@ mysql> select * from testdb01.t_user01;
 mysql> show replica status\G;
 *************************** 1. row ***************************
              Replica_IO_State: Waiting for source to send event
-                  Source_Host: 222.204.70.110
+                  Source_Host:  222.24.203.31
                   Source_User: repl
                   Source_Port: 3306
                 Connect_Retry: 60
@@ -3505,7 +4018,7 @@ mysql> select * from testdb01.t_user01;
 mysql> show replica status\G;
 *************************** 1. row ***************************
              Replica_IO_State: Waiting for source to send event
-                  Source_Host: 222.204.70.110
+                  Source_Host:  222.24.203.31
                   Source_User: repl
                   Source_Port: 3306
                 Connect_Retry: 60
@@ -3594,7 +4107,7 @@ mysql> select * from t_user01;
 mysql>  show replica status\G;
 *************************** 1. row ***************************
              Replica_IO_State: Waiting for source to send event
-                  Source_Host: 222.204.70.111
+                  Source_Host:  222.24.203.35
                   Source_User: repl
                   Source_Port: 3306
                 Connect_Retry: 60
@@ -3669,7 +4182,7 @@ No query specified
 #所以主从间报错
 
 ```log
-2024-03-11T15:52:24.709143+08:00 5 [ERROR] [MY-010584] [Repl] Replica I/O for channel '': Error connecting to source 'repl@222.204.70.111:3306'. This was attempt 1/86400, with a delay of 60 seconds between attempts. Message: Authentication plugin 'caching_sha2_password' reported error: Authentication requires secure connection. Error_code: MY-002061
+2024-03-11T15:52:24.709143+08:00 5 [ERROR] [MY-010584] [Repl] Replica I/O for channel '': Error connecting to source 'repl@ 222.24.203.35:3306'. This was attempt 1/86400, with a delay of 60 seconds between attempts. Message: Authentication plugin 'caching_sha2_password' reported error: Authentication requires secure connection. Error_code: MY-002061
 2024-03-11T15:52:42.080809+08:00 52 [Warning] [MY-013360] [Server] Plugin mysql_native_password reported: ''mysql_native_password' is deprecated and will be removed in a future release. Please use caching_sha2_password instead'
 ```
 
@@ -3677,7 +4190,7 @@ No query specified
 mysql> show replica status\G;
 *************************** 1. row ***************************
              Replica_IO_State: Connecting to source
-                  Source_Host: 222.204.70.110
+                  Source_Host:  222.24.203.31
                   Source_User: repl
                   Source_Port: 3306
                 Connect_Retry: 60
@@ -3711,7 +4224,7 @@ mysql> show replica status\G;
         Seconds_Behind_Source: NULL
 Source_SSL_Verify_Server_Cert: No
                 Last_IO_Errno: 1045
-                Last_IO_Error: Error connecting to source 'repl@222.204.70.110:3306'. This was attempt 12/86400, with a delay of 60 seconds between attempts. Message: Access denied for user 'repl'@'222.204.70.111' (using password: YES)
+                Last_IO_Error: Error connecting to source 'repl@ 222.24.203.31:3306'. This was attempt 12/86400, with a delay of 60 seconds between attempts. Message: Access denied for user 'repl'@'222.24.203.35' (using password: YES)
                Last_SQL_Errno: 0
                Last_SQL_Error: 
   Replicate_Ignore_Server_Ids: 
@@ -3781,7 +4294,7 @@ commit;
 #此时从库先进行repl连接主库测试，使用生产环境密码
 
 ```bash
-mysql -u repl -p -h 222.204.70.110
+mysql -u repl -p -h  222.24.203.31
 ```
 
 
@@ -3806,7 +4319,7 @@ show replica status\G;
 mysql> show replica status\G;
 *************************** 1. row ***************************
              Replica_IO_State: Waiting for source to send event
-                  Source_Host: 222.204.70.110
+                  Source_Host:  222.24.203.31
                   Source_User: repl
                   Source_Port: 3306
                 Connect_Retry: 60
@@ -3902,7 +4415,7 @@ Query OK, 0 rows affected (0.05 sec)
 mysql> show replica status\G;
 *************************** 1. row ***************************
              Replica_IO_State: Waiting for source to send event
-                  Source_Host: 222.204.70.110
+                  Source_Host:  222.24.203.31
                   Source_User: repl
                   Source_Port: 3306
                 Connect_Retry: 60
@@ -4440,7 +4953,7 @@ SET @@GLOBAL.read_only = ON;
 #### 10、主从变双主
 #在主节点上执行
 ```mysql
-CHANGE REPLICATION SOURCE TO SOURCE_HOST='222.204.70.111',SOURCE_PORT=3306,SOURCE_USER='repl',SOURCE_PASSWORD='Repl123!@#2024',SOURCE_AUTO_POSITION = 1;
+CHANGE REPLICATION SOURCE TO SOURCE_HOST='222.24.203.35',SOURCE_PORT=3306,SOURCE_USER='repl',SOURCE_PASSWORD='Repl123!@#2024',SOURCE_AUTO_POSITION = 1;
 
 start replica;
 show replica status\G;
@@ -4448,7 +4961,7 @@ show replica status\G;
 mysql> select * from performance_schema.replication_applier_status_by_worker where LAST_ERROR_NUMBER=1396;
 
  stop replica;
- set @@session.gtid_next='0f76fa28-5f74-11ef-be67-fefcfe4ed56d:1'; 
+ set @@session.gtid_next='69fc8d5a-1c39-11f0-88c3-286ed489b835:1'; 
  begin; 
  commit; 
  
@@ -4459,7 +4972,7 @@ mysql> select * from performance_schema.replication_applier_status_by_worker whe
  SHOW REPLICA STATUS \G;
  
  stop replica;
- set @@session.gtid_next='0f76fa28-5f74-11ef-be67-fefcfe4ed56d:4'; 
+ set @@session.gtid_next='69fc8d5a-1c39-11f0-88c3-286ed489b835:4'; 
  begin; 
  commit; 
  
@@ -4488,14 +5001,19 @@ show replica status\G;
 #### 1、安装依赖包
 
 ```bash
-yum install -y pcre-devel openssl-devel popt-devel libnl libnl-devel psmisc gcc
+#yum install -y pcre-devel openssl-devel popt-devel libnl libnl-devel psmisc gcc
+
+yum install -y pcre-devel openssl-devel popt-devel psmisc gcc
 ```
 
 
 
 #### 2、安装keepalived
 
-#在线安装
+#推荐离线安装
+
+##### 2.1、在线安装
+#在线安装---版本较低
 
 ```bash
 yum install -y keepalived
@@ -4508,27 +5026,113 @@ keepalived -v
 #logs
 
 ```bash
-[root@mysql01 network-scripts]# keepalived -v
+#centos 7.9
+[root@MHsql-db01 network-scripts]# keepalived -v
 Keepalived v1.3.5 (03/19,2017), git commit v1.3.5-6-g6fa32f2
 
 #如果版本过低，低于2.2.8，那么可以离线部署
+
+#kylin
+[root@MHsql-db01 ~]# yum install -y pcre-devel openssl-devel popt-devel libnl libnl-devel psmisc gcc
+Last metadata expiration check: 2:09:42 ago on Mon 21 Apr 2025 07:28:07 AM CST.
+Package pcre-devel-8.44-2.ky10.x86_64 is already installed.
+Package openssl-devel-1:1.1.1f-4.p22.ky10.x86_64 is already installed.
+No match for argument: libnl
+No match for argument: libnl-devel
+Package psmisc-23.3-2.ky10.x86_64 is already installed.
+Package gcc-7.3.0-20190804.35.p07.ky10.x86_64 is already installed.
+Error: Unable to find a match: libnl libnl-devel
+[root@MHsql-db01 ~]# yum install -y keepalived
+Last metadata expiration check: 2:10:16 ago on Mon 21 Apr 2025 07:28:07 AM CST.
+Dependencies resolved.
+=========================================================================================================================================================
+ Package                                 Architecture               Version                                   Repository                            Size
+=========================================================================================================================================================
+Installing:
+ keepalived                              x86_64                     2.0.20-19.p01.ky10                        ks10-adv-updates                     294 k
+Installing dependencies:
+ mariadb-connector-c                     x86_64                     3.0.6-8.p01.ky10                          ks10-adv-updates                     127 k
+ net-snmp                                x86_64                     1:5.9-3.p05.ky10                          ks10-adv-updates                     1.1 M
+
+Transaction Summary
+=========================================================================================================================================================
+Install  3 Packages
+
+Total download size: 1.5 M
+Installed size: 6.2 M
+Downloading Packages:
+(1/3): mariadb-connector-c-3.0.6-8.p01.ky10.x86_64.rpm                                                                   402 kB/s | 127 kB     00:00
+(2/3): net-snmp-5.9-3.p05.ky10.x86_64.rpm                                                                                2.7 MB/s | 1.1 MB     00:00
+(3/3): keepalived-2.0.20-19.p01.ky10.x86_64.rpm                                                                          443 kB/s | 294 kB     00:00
+---------------------------------------------------------------------------------------------------------------------------------------------------------
+Total                                                                                                                    2.2 MB/s | 1.5 MB     00:00
+Running transaction check
+Transaction check succeeded.
+Running transaction test
+Transaction test succeeded.
+Running transaction
+  Running scriptlet: mariadb-connector-c-3.0.6-8.p01.ky10.x86_64                                                                                     1/1
+  Preparing        :                                                                                                                                 1/1
+  Installing       : mariadb-connector-c-3.0.6-8.p01.ky10.x86_64                                                                                     1/3
+  Installing       : net-snmp-1:5.9-3.p05.ky10.x86_64                                                                                                2/3
+  Running scriptlet: net-snmp-1:5.9-3.p05.ky10.x86_64                                                                                                2/3
+  Installing       : keepalived-2.0.20-19.p01.ky10.x86_64                                                                                            3/3
+  Running scriptlet: keepalived-2.0.20-19.p01.ky10.x86_64                                                                                            3/3
+/sbin/ldconfig: /usr/lib64/libLLVM-7.so is not a symbolic link
+
+
+  Verifying        : keepalived-2.0.20-19.p01.ky10.x86_64                                                                                            1/3
+  Verifying        : mariadb-connector-c-3.0.6-8.p01.ky10.x86_64                                                                                     2/3
+  Verifying        : net-snmp-1:5.9-3.p05.ky10.x86_64                                                                                                3/3
+
+Installed:
+  keepalived-2.0.20-19.p01.ky10.x86_64             mariadb-connector-c-3.0.6-8.p01.ky10.x86_64             net-snmp-1:5.9-3.p05.ky10.x86_64
+
+Complete!
+[root@MHsql-db01 ~]# keepalived -v
+Keepalived v2.0.20 (01/22,2020)
+
+Copyright(C) 2001-2020 Alexandre Cassen, <acassen@gmail.com>
+
+Built with kernel headers for Linux 4.19.90
+Running on Linux 4.19.90-25.44.v2101.ky10.x86_64 #1 SMP Thu Nov 7 17:33:30 CST 2024
+
+configure options: --build=x86_64-koji-linux-gnu --host=x86_64-koji-linux-gnu --program-prefix= --disable-dependency-tracking --prefix=/usr --exec-prefix=/usr --bindir=/usr/bin --sbindir=/usr/sbin --sysconfdir=/etc --datadir=/usr/share --includedir=/usr/include --libdir=/usr/lib64 --libexecdir=/usr/libexec --localstatedir=/var --sharedstatedir=/var/lib --mandir=/usr/share/man --infodir=/usr/share/info --enable-sha1 --with-init=systemd --enable-nftables --disable-iptables --disable-ipset --enable-snmp --enable-snmp-rfc build_alias=x86_64-koji-linux-gnu host_alias=x86_64-koji-linux-gnu PKG_CONFIG_PATH=:/usr/lib64/pkgconfig:/usr/share/pkgconfig CFLAGS=-O2 -g -pipe -Wall -Werror=format-security -Wp,-D_FORTIFY_SOURCE=2 -Wp,-D_GLIBCXX_ASSERTIONS -fexceptions -fstack-protector-strong -grecord-gcc-switches -specs=/usr/lib/rpm/kylin/kylin-hardened-cc1 -m64 -mtune=generic -fasynchronous-unwind-tables -fstack-clash-protection  LDFLAGS=-Wl,-z,relro -Wl,-z,now -specs=/usr/lib/rpm/kylin/kylin-hardened-ld
+
+Config options:  NFTABLES LVS VRRP VRRP_AUTH OLD_CHKSUM_COMPAT FIB_ROUTING SNMP_V3_FOR_V2 SNMP_VRRP SNMP_CHECKER SNMP_RFCV2 SNMP_RFCV3
+
+System options:  PIPE2 SIGNALFD INOTIFY_INIT1 VSYSLOG EPOLL_CREATE1 IPV4_DEVCONF IPV6_ADVANCED_API LIBNL3 RTA_ENCAP RTA_EXPIRES RTA_NEWDST RTA_PREF FRA_SUPPRESS_PREFIXLEN FRA_SUPPRESS_IFGROUP FRA_TUN_ID RTAX_CC_ALGO RTAX_QUICKACK RTEXT_FILTER_SKIP_STATS FRA_L3MDEV FRA_UID_RANGE RTAX_FASTOPEN_NO_COOKIE RTA_VIA FRA_OIFNAME FRA_PROTOCOL FRA_IP_PROTO FRA_SPORT_RANGE FRA_DPORT_RANGE RTA_TTL_PROPAGATE IFA_FLAGS IP_MULTICAST_ALL LWTUNNEL_ENCAP_MPLS LWTUNNEL_ENCAP_ILA NET_LINUX_IF_H_COLLISION LIBIPVS_NETLINK IPVS_DEST_ATTR_ADDR_FAMILY IPVS_SYNCD_ATTRIBUTES IPVS_64BIT_STATS VRRP_VMAC VRRP_IPVLAN IFLA_LINK_NETNSID CN_PROC SOCK_NONBLOCK SOCK_CLOEXEC O_PATH GLOB_BRACE INET6_ADDR_GEN_MODE VRF SO_MARK SCHED_RESET_ON_FORK
+[root@MHsql-db01 ~]#
+
+
 ```
 
 
 
-
+##### 2.2、离线安装
 
 #离线部署
 
 #官网https://www.keepalived.org/download.html
 
 ```bash
+#2024
 wget --no-check-certificate https://www.keepalived.org/software/keepalived-2.2.8.tar.gz
 tar -zxvf keepalived-2.2.8.tar.gz
 cd keepalived-2.2.8
 #yum install -y gcc
 ./configure --prefix=/usr/local/keepalived-2.2.8
 make && make install
+
+#20250422
+yum remove keepalived -y
+wget --no-check-certificate https://www.keepalived.org/software/keepalived-2.3.3.tar.gz
+tar -zxvf keepalived-2.3.3.tar.gz
+cd keepalived-2.3.3
+#yum install -y gcc
+./configure --prefix=/usr/local/keepalived-2.3.3
+make && make install
+
 
 mkdir /etc/keepalived
 cp keepalived/etc/keepalived/keepalived.conf.sample /etc/keepalived/keepalived.conf
@@ -4542,7 +5146,62 @@ killall keepalived
 EOF
 
 chmod +x /etc/keepalived/shutdown.sh
+
+mv /etc/keepalived/keepalived.conf  /etc/keepalived/keepalived.conf.bak
 ```
+
+
+
+#logs
+
+```bash
+./configure --prefix=/usr/local/keepalived-2.3.3
+
+.............
+Keepalived configuration
+------------------------
+Keepalived version       : 2.3.3
+Compiler                 : gcc gcc (GCC) 7.3.0
+Preprocessor flags       : -D_GNU_SOURCE
+Compiler flags           : -g -g -O2 -Wall -Wextra -Wunused -Wstrict-prototypes -Wabi -Walloca -Walloc-zero -Warray-bounds=2 -Wbad-function-cast -Wcast-align -Wcast-qual -Wchkp -Wdate-time -Wdisabled-optimization -Wdouble-promotion -Wduplicated-branches -Wduplicated-cond -Wfloat-conversion -Wfloat-equal -Wformat-overflow -Wformat-signedness -Wformat-truncation -Wframe-larger-than=5120 -Wimplicit-fallthrough=3 -Winit-self -Winline -Winvalid-pch -Wjump-misses-init -Wlogical-op -Wmissing-declarations -Wmissing-field-initializers -Wmissing-include-dirs -Wmissing-prototypes -Wnested-externs -Wnormalized -Wnull-dereference -Wold-style-definition -Woverlength-strings -Wpointer-arith -Wredundant-decls -Wshadow -Wshift-overflow=2 -Wstack-protector -Wstrict-overflow=4 -Wstringop-overflow=2 -Wsuggest-attribute=format -Wsuggest-attribute=noreturn -Wsuggest-attribute=pure -Wsync-nand -Wtrampolines -Wundef -Wuninitialized -Wunknown-pragmas -Wunsafe-loop-optimizations -Wunsuffixed-float-constants -Wunused-const-variable=2 -Wvariadic-macros -Wwrite-strings -fno-strict-aliasing -fPIE -Wformat -Werror=format-security -fexceptions -fstack-protector-strong --param=ssp-buffer-size=4 -grecord-gcc-switches -D_FORTIFY_SOURCE=3 -O2
+Linker flags             : -pie -Wl,-z,relro -Wl,-z,now
+Extra Lib                : -lm -lssl -lcrypto -lsystemd
+Use IPVS Framework       : Yes
+IPVS use libnl           : No
+IPVS syncd attributes    : Yes
+IPVS 64 bit stats        : Yes
+HTTP_GET regex support   : No
+fwmark socket support    : Yes
+Use VRRP Framework       : Yes
+Use VRRP VMAC            : Yes
+Use VRRP authentication  : Yes
+With track_process       : Yes
+With linkbeat            : Yes
+Use NetworkManager       : No
+Use BFD Framework        : No
+SNMP vrrp support        : No
+SNMP checker support     : No
+SNMP RFCv2 support       : No
+SNMP RFCv3 support       : No
+DBUS support             : No
+Use JSON output          : No
+libnl version            : None
+Use IPv4 devconf         : Yes
+Use iptables             : No
+Use nftables             : No
+init type                : systemd
+systemd notify           : Yes
+Strict config checks     : No
+Build documentation      : No
+iproute usr directory    : /etc/iproute2
+iproute etc directory    : /etc/iproute2
+Default runtime options  : -D
+
+*** WARNING - this build will not support IPVS with IPv6. Please install libnl/libnl-3 dev libraries to support IPv6 with IPVS.
+
+```
+
+
 
 
 
@@ -4551,14 +5210,14 @@ chmod +x /etc/keepalived/shutdown.sh
 ###主库
 
 ```bash
- mv /etc/keepalived/keepalived.conf  /etc/keepalived/keepalived.conf.bak
+#mv /etc/keepalived/keepalived.conf  /etc/keepalived/keepalived.conf.bak
 
 cat >> /etc/keepalived/keepalived.conf <<EOF
 ! Configuration File for keepalived
 
 #主要配置故障发生时的通知对象及机器标识
 global_defs {
-   router_id MYSQL-110                   #主机标识符，唯一即可
+   router_id MYSQL-80                   #主机标识符，唯一即可
    vrrp_skip_check_adv_addr
    vrrp_strict
    vrrp_garp_interval 0
@@ -4570,8 +5229,8 @@ global_defs {
 #用来定义对外提供服务的VIP区域及相关属性
 vrrp_instance VI_1 {
     state BACKUP                     #表示keepalived角色，都是设成BACKUP则以优先级为主要参考
-    interface eth0                 #指定HA监听的网络接口，刚才ifconfig查看的接口名称
-    virtual_router_id 112            #虚拟路由标识，取值0-255，master-1和master-2保持一致
+    interface enp4s1                 #指定HA监听的网络接口，刚才ifconfig查看的接口名称
+    virtual_router_id 83            #虚拟路由标识，取值0-255，master-1和master-2保持一致
     priority 100                     #优先级，用来选举master，取值范围1-255
     advert_int 1                     #发VRRP包时间间隔，即多久进行一次master选举
     authentication {
@@ -4579,25 +5238,25 @@ vrrp_instance VI_1 {
         auth_pass 1111
     }
     virtual_ipaddress {              #虚拟出来的地址
-        222.204.70.112
+        222.24.203.83
     }
 }
 
 #虚拟服务器定义
-virtual_server 222.204.70.112 3306 { #虚拟出来的地址加端口
+virtual_server 222.24.203.83 3306 { #虚拟出来的地址加端口
     delay_loop 2                     #设置运行情况检查时间，单位为秒
     lb_algo rr                       #设置后端调度器算法，rr为轮询算法
     lb_kind DR                       #设置LVS实现负载均衡的机制，有DR、NAT、TUN三种模式可选
     persistence_timeout 50           #会话保持时间，单位为秒
     protocol TCP                     #指定转发协议，有 TCP和UDP可选
 
-        real_server 222.204.70.110 3306 {          #实际本地ip+3306端口
+        real_server  222.24.203.31 3306 {          #实际本地ip+3306端口
        weight=5                      #表示服务器的权重值。权重值越高，服务器在负载均衡中被选中的概率就越大
         #当该ip 端口连接异常时，执行该脚本
         notify_down /etc/keepalived/shutdown.sh   #检查mysql服务down掉后执行的脚本
         TCP_CHECK {
             #实际物理机ip地址
-            connect_ip 222.204.70.110
+            connect_ip  222.24.203.31
             #实际物理机port端口
             connect_port 3306
             connect_timeout 3
@@ -4610,13 +5269,13 @@ virtual_server 222.204.70.112 3306 { #虚拟出来的地址加端口
 EOF
 
 ```
-
+#52
 ```config
 cat >> /etc/keepalived/keepalived.conf <<EOF
 ! Configuration File for keepalived
 
 global_defs {
-   router_id MYSQL-110                   
+   router_id MYSQL-132
    vrrp_skip_check_adv_addr
    vrrp_strict
    vrrp_garp_interval 0
@@ -4627,33 +5286,33 @@ global_defs {
 
 
 vrrp_instance VI_1 {
-    state BACKUP                    
-    interface eth0                
-    virtual_router_id 112            
-    priority 100                     
-    advert_int 1                    
+    state BACKUP
+    interface  enp4s2
+    virtual_router_id 52
+    priority 100
+    advert_int 1
     authentication {
         auth_type PASS
         auth_pass 1111
     }
-    virtual_ipaddress {             
-        222.204.70.112
+    virtual_ipaddress {
+        10.40.10.141
     }
 }
 
 
-virtual_server 222.204.70.112 3306 { 
-    delay_loop 2                   
-    lb_algo rr                      
-    lb_kind DR                     
-    persistence_timeout 50           
-    protocol TCP                  
+virtual_server 10.40.10.141 3306 {
+    delay_loop 2
+    lb_algo rr
+    lb_kind DR
+    persistence_timeout 50
+    protocol TCP
 
-        real_server 222.204.70.110 3306 {      
-       weight=5                    
-        notify_down /etc/keepalived/shutdown.sh  
+        real_server  10.40.10.132 3306 {
+       weight=5
+        notify_down /etc/keepalived/shutdown.sh
         TCP_CHECK {
-            connect_ip 222.204.70.110
+            connect_ip  10.40.10.132
             connect_port 3306
             connect_timeout 3
             nb_get_retry 3
@@ -4662,10 +5321,175 @@ virtual_server 222.204.70.112 3306 {
         }
     }
 }
+
+EOF
+```
+#123
+```bash
+cat >> /etc/keepalived/keepalived.conf <<EOF
+! Configuration File for keepalived
+
+global_defs {
+   router_id MYSQL-135
+   vrrp_skip_check_adv_addr
+   vrrp_strict
+   vrrp_garp_interval 0
+   vrrp_gna_interval 0
+   script_user root
+   enable_script_security
+}
+
+
+vrrp_instance VI_1 {
+    state BACKUP
+    interface  enp4s2
+    virtual_router_id 123
+    priority 100
+    advert_int 1
+    authentication {
+        auth_type PASS
+        auth_pass 1111
+    }
+    virtual_ipaddress {
+        10.40.10.142
+    }
+}
+
+
+virtual_server 10.40.10.142 3306 {
+    delay_loop 2
+    lb_algo rr
+    lb_kind DR
+    persistence_timeout 50
+    protocol TCP
+
+        real_server  10.40.10.135 3306 {
+       weight=5
+        notify_down /etc/keepalived/shutdown.sh
+        TCP_CHECK {
+            connect_ip  10.40.10.135
+            connect_port 3306
+            connect_timeout 3
+            nb_get_retry 3
+            delay_before_retry 3
+
+        }
+    }
+}
+
+EOF
+```
+#121
+```bash
+cat >> /etc/keepalived/keepalived.conf <<EOF
+! Configuration File for keepalived
+
+global_defs {
+   router_id MYSQL-133
+   vrrp_skip_check_adv_addr
+   vrrp_strict
+   vrrp_garp_interval 0
+   vrrp_gna_interval 0
+   script_user root
+   enable_script_security
+}
+
+
+vrrp_instance VI_1 {
+    state BACKUP
+    interface  enp4s2
+    virtual_router_id 121
+    priority 100
+    advert_int 1
+    authentication {
+        auth_type PASS
+        auth_pass 1111
+    }
+    virtual_ipaddress {
+        10.40.10.143
+    }
+}
+
+
+virtual_server 10.40.10.143 3306 {
+    delay_loop 2
+    lb_algo rr
+    lb_kind DR
+    persistence_timeout 50
+    protocol TCP
+
+        real_server  10.40.10.133 3306 {
+       weight=5
+        notify_down /etc/keepalived/shutdown.sh
+        TCP_CHECK {
+            connect_ip  10.40.10.133
+            connect_port 3306
+            connect_timeout 3
+            nb_get_retry 3
+            delay_before_retry 3
+
+        }
+    }
+}
+
 EOF
 ```
 
+#122
+```bash
+cat >> /etc/keepalived/keepalived.conf <<EOF
+! Configuration File for keepalived
 
+global_defs {
+   router_id MYSQL-134
+   vrrp_skip_check_adv_addr
+   vrrp_strict
+   vrrp_garp_interval 0
+   vrrp_gna_interval 0
+   script_user root
+   enable_script_security
+}
+
+
+vrrp_instance VI_1 {
+    state BACKUP
+    interface  enp4s2
+    virtual_router_id 122
+    priority 100
+    advert_int 1
+    authentication {
+        auth_type PASS
+        auth_pass 1111
+    }
+    virtual_ipaddress {
+        10.40.10.144
+    }
+}
+
+
+virtual_server 10.40.10.144 3306 {
+    delay_loop 2
+    lb_algo rr
+    lb_kind DR
+    persistence_timeout 50
+    protocol TCP
+
+        real_server  10.40.10.134 3306 {
+       weight=5
+        notify_down /etc/keepalived/shutdown.sh
+        TCP_CHECK {
+            connect_ip  10.40.10.134
+            connect_port 3306
+            connect_timeout 3
+            nb_get_retry 3
+            delay_before_retry 3
+
+        }
+    }
+}
+
+EOF
+```
 
 ###从库
 ```
@@ -4677,7 +5501,7 @@ cat >> /etc/keepalived/keepalived.conf <<EOF
 
 #主要配置故障发生时的通知对象及机器标识
 global_defs {
-   router_id MYSQL-111                   #主机标识符，唯一即可
+   router_id MYSQL-81                   #主机标识符，唯一即可
    vrrp_skip_check_adv_addr
    vrrp_strict
    vrrp_garp_interval 0
@@ -4689,8 +5513,8 @@ global_defs {
 #用来定义对外提供服务的VIP区域及相关属性
 vrrp_instance VI_1 {
     state BACKUP                     #表示keepalived角色，都是设成BACKUP则以优先级为主要参考
-    interface eth0                 #指定HA监听的网络接口，刚才ifconfig查看的接口名称
-    virtual_router_id 112            #虚拟路由标识，取值0-255，master-1和master-2保持一致
+    interface enp4s1                 #指定HA监听的网络接口，刚才ifconfig查看的接口名称
+    virtual_router_id 83            #虚拟路由标识，取值0-255，master-1和master-2保持一致
     priority 40                      #优先级，用来选举master，取值范围1-255
     advert_int 1                     #发VRRP包时间间隔，即多久进行一次master选举
     authentication {
@@ -4698,25 +5522,25 @@ vrrp_instance VI_1 {
         auth_pass 1111
     }
     virtual_ipaddress {              #虚拟出来的地址
-        222.204.70.112
+        222.24.203.83
     }
 }
 
 #虚拟服务器定义
-virtual_server 222.204.70.112 3306 { #虚拟出来的地址加端口
+virtual_server 222.24.203.83 3306 { #虚拟出来的地址加端口
     delay_loop 2                     #设置运行情况检查时间，单位为秒
     lb_algo rr                       #设置后端调度器算法，rr为轮询算法
     lb_kind DR                       #设置LVS实现负载均衡的机制，有DR、NAT、TUN三种模式可选
     persistence_timeout 50           #会话保持时间，单位为秒
     protocol TCP                     #指定转发协议，有 TCP和UDP可选
 
-        real_server 222.204.70.111 3306 {          #实际本地ip+3306端口
+        real_server  222.24.203.35 3306 {          #实际本地ip+3306端口
        weight=5                      #表示服务器的权重值。权重值越高，服务器在负载均衡中被选中的概率就越大
         #当该ip 端口连接异常时，执行该脚本
         notify_down /etc/keepalived/shutdown.sh   #检查mysql服务down掉后执行的脚本
         TCP_CHECK {
             #实际物理机ip地址
-            connect_ip 222.204.70.111
+            connect_ip  222.24.203.35
             #实际物理机port端口
             connect_port 3306
             connect_timeout 3
@@ -4736,7 +5560,7 @@ cat >> /etc/keepalived/keepalived.conf <<EOF
 
 
 global_defs {
-   router_id MYSQL-111
+   router_id MYSQL-136
    vrrp_skip_check_adv_addr
    vrrp_strict
    vrrp_garp_interval 0
@@ -4748,8 +5572,8 @@ global_defs {
 
 vrrp_instance VI_1 {
     state BACKUP                     
-    interface eth0                 
-    virtual_router_id 112            
+    interface enp4s2                 
+    virtual_router_id 52            
     priority 40                     
     advert_int 1                     
     authentication {
@@ -4757,23 +5581,81 @@ vrrp_instance VI_1 {
         auth_pass 1111
     }
     virtual_ipaddress {              
-        222.204.70.112
+        10.40.10.141
     }
 }
 
 
-virtual_server 222.204.70.112 3306 { 
+virtual_server 10.40.10.141 3306 { 
     delay_loop 2                     
     lb_algo rr                       
     lb_kind DR                       
     persistence_timeout 50           
     protocol TCP                   
 
-        real_server 222.204.70.111 3306 {          
+        real_server  10.40.10.136 3306 {          
        weight=5                      
         notify_down /etc/keepalived/shutdown.sh   
         TCP_CHECK {
-            connect_ip 222.204.70.111
+            connect_ip  10.40.10.136
+            connect_port 3306
+            connect_timeout 3
+            nb_get_retry 3
+            delay_before_retry 3
+
+        }
+    }
+}
+
+EOF
+```
+
+#123
+
+```bash
+cat >> /etc/keepalived/keepalived.conf <<EOF
+! Configuration File for keepalived
+
+
+global_defs {
+   router_id MYSQL-139
+   vrrp_skip_check_adv_addr
+   vrrp_strict
+   vrrp_garp_interval 0
+   vrrp_gna_interval 0
+   script_user root
+   enable_script_security   
+}
+
+
+vrrp_instance VI_1 {
+    state BACKUP                     
+    interface enp4s2                 
+    virtual_router_id 123            
+    priority 40                     
+    advert_int 1                     
+    authentication {
+        auth_type PASS
+        auth_pass 1111
+    }
+    virtual_ipaddress {              
+        10.40.10.142
+    }
+}
+
+
+virtual_server 10.40.10.142 3306 { 
+    delay_loop 2                     
+    lb_algo rr                       
+    lb_kind DR                       
+    persistence_timeout 50           
+    protocol TCP                   
+
+        real_server  10.40.10.139 3306 {          
+       weight=5                      
+        notify_down /etc/keepalived/shutdown.sh   
+        TCP_CHECK {
+            connect_ip  10.40.10.139
             connect_port 3306
             connect_timeout 3
             nb_get_retry 3
@@ -4788,15 +5670,280 @@ EOF
 
 
 
+#121
+
+```bash
+cat >> /etc/keepalived/keepalived.conf <<EOF
+! Configuration File for keepalived
+
+
+global_defs {
+   router_id MYSQL-137
+   vrrp_skip_check_adv_addr
+   vrrp_strict
+   vrrp_garp_interval 0
+   vrrp_gna_interval 0
+   script_user root
+   enable_script_security   
+}
+
+
+vrrp_instance VI_1 {
+    state BACKUP                     
+    interface enp4s2                 
+    virtual_router_id 121            
+    priority 40                     
+    advert_int 1                     
+    authentication {
+        auth_type PASS
+        auth_pass 1111
+    }
+    virtual_ipaddress {              
+        10.40.10.143
+    }
+}
+
+
+virtual_server 10.40.10.143 3306 { 
+    delay_loop 2                     
+    lb_algo rr                       
+    lb_kind DR                       
+    persistence_timeout 50           
+    protocol TCP                   
+
+        real_server  10.40.10.137 3306 {          
+       weight=5                      
+        notify_down /etc/keepalived/shutdown.sh   
+        TCP_CHECK {
+            connect_ip  10.40.10.137
+            connect_port 3306
+            connect_timeout 3
+            nb_get_retry 3
+            delay_before_retry 3
+
+        }
+    }
+}
+
+EOF
+```
+
+
+
+#122
+
+```bash
+cat >> /etc/keepalived/keepalived.conf <<EOF
+! Configuration File for keepalived
+
+
+global_defs {
+   router_id MYSQL-138
+   vrrp_skip_check_adv_addr
+   vrrp_strict
+   vrrp_garp_interval 0
+   vrrp_gna_interval 0
+   script_user root
+   enable_script_security   
+}
+
+
+vrrp_instance VI_1 {
+    state BACKUP                     
+    interface enp4s2                 
+    virtual_router_id 122            
+    priority 40                     
+    advert_int 1                     
+    authentication {
+        auth_type PASS
+        auth_pass 1111
+    }
+    virtual_ipaddress {              
+        10.40.10.144
+    }
+}
+
+
+virtual_server 10.40.10.144 3306 { 
+    delay_loop 2                     
+    lb_algo rr                       
+    lb_kind DR                       
+    persistence_timeout 50           
+    protocol TCP                   
+
+        real_server  10.40.10.138 3306 {          
+       weight=5                      
+        notify_down /etc/keepalived/shutdown.sh   
+        TCP_CHECK {
+            connect_ip  10.40.10.138
+            connect_port 3306
+            connect_timeout 3
+            nb_get_retry 3
+            delay_before_retry 3
+
+        }
+    }
+}
+
+EOF
+```
+
+
+
+
+
+
 #### 4、启动keepalived
 
 ```bash
-systemctl start keepalived
+systemctl start keepalived && systemctl enable keepalived
 
 systemctl status keepalived
 
-systemctl enable keepalived
 ```
+
+
+
+#logs
+
+```bash
+[root@MHsql-db01 keepalived-2.3.3]# systemctl start keepalived
+[root@MHsql-db01 keepalived-2.3.3]# systemctl status keepalived
+● keepalived.service - LVS and VRRP High Availability Monitor
+   Loaded: loaded (/usr/lib/systemd/system/keepalived.service; disabled; vendor preset: disabled)
+   Active: active (running) since Tue 2025-04-22 09:34:23 CST; 1s ago
+     Docs: man:keepalived(8)
+           man:keepalived.conf(5)
+           man:genhash(1)
+           https://keepalived.org
+ Main PID: 2628369 (keepalived)
+    Tasks: 3
+   Memory: 1.0M
+   CGroup: /system.slice/keepalived.service
+           ├─2628369 /usr/local/keepalived-2.3.3/sbin/keepalived --dont-fork -D
+           ├─2628370 /usr/local/keepalived-2.3.3/sbin/keepalived --dont-fork -D
+           └─2628371 /usr/local/keepalived-2.3.3/sbin/keepalived --dont-fork -D
+
+Apr 22 09:34:23 MHsql-db01 Keepalived_healthcheckers[2628370]: Activating healthchecker for service [222.24.203.31]:tcp:3306 for VS [222.24.203.83]:tcp:3>
+Apr 22 09:34:23 MHsql-db01 Keepalived_vrrp[2628371]: (VI_1) Strict mode does not support authentication. Ignoring.
+Apr 22 09:34:23 MHsql-db01 Keepalived_vrrp[2628371]: Assigned address 222.24.203.31 for interface enp4s1
+Apr 22 09:34:23 MHsql-db01 Keepalived_vrrp[2628371]: Registering gratuitous ARP shared channel
+Apr 22 09:34:23 MHsql-db01 Keepalived_vrrp[2628371]: (VI_1) removing VIPs.
+Apr 22 09:34:23 MHsql-db01 Keepalived[2628369]: Startup complete
+Apr 22 09:34:23 MHsql-db01 systemd[1]: Started LVS and VRRP High Availability Monitor.
+Apr 22 09:34:23 MHsql-db01 Keepalived_vrrp[2628371]: (VI_1) removing VIPs.
+Apr 22 09:34:23 MHsql-db01 Keepalived_vrrp[2628371]: (VI_1) Entering BACKUP STATE (init)
+Apr 22 09:34:23 MHsql-db01 Keepalived_vrrp[2628371]: VRRP sockpool: [ifindex(  2), family(IPv4), proto(112), fd(15,16) multicast, address(224.0.0.18)]
+[root@MHsql-db01 keepalived-2.3.3]# ip a
+1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN group default qlen 1000
+    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
+    inet 127.0.0.1/8 scope host lo
+       valid_lft forever preferred_lft forever
+2: enp4s1: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc fq_codel state UP group default qlen 1000
+    link/ether 28:6e:d4:89:ab:99 brd ff:ff:ff:ff:ff:ff
+    inet 222.24.203.31/24 brd 222.24.203.255 scope global noprefixroute enp4s1
+       valid_lft forever preferred_lft forever
+    inet 222.24.203.83/32 scope global enp4s1
+       valid_lft forever preferred_lft forever
+[root@MHsql-db01 keepalived-2.3.3]# systemctl status keepalived
+● keepalived.service - LVS and VRRP High Availability Monitor
+   Loaded: loaded (/usr/lib/systemd/system/keepalived.service; disabled; vendor preset: disabled)
+   Active: active (running) since Tue 2025-04-22 09:34:23 CST; 8s ago
+     Docs: man:keepalived(8)
+           man:keepalived.conf(5)
+           man:genhash(1)
+           https://keepalived.org
+ Main PID: 2628369 (keepalived)
+    Tasks: 3
+   Memory: 936.0K
+   CGroup: /system.slice/keepalived.service
+           ├─2628369 /usr/local/keepalived-2.3.3/sbin/keepalived --dont-fork -D
+           ├─2628370 /usr/local/keepalived-2.3.3/sbin/keepalived --dont-fork -D
+           └─2628371 /usr/local/keepalived-2.3.3/sbin/keepalived --dont-fork -D
+
+Apr 22 09:34:26 MHsql-db01 Keepalived_healthcheckers[2628370]: TCP connection to [222.24.203.31]:tcp:3306 success.
+Apr 22 09:34:26 MHsql-db01 Keepalived_vrrp[2628371]: (VI_1) Receive advertisement timeout
+Apr 22 09:34:26 MHsql-db01 Keepalived_vrrp[2628371]: (VI_1) Entering MASTER STATE
+Apr 22 09:34:26 MHsql-db01 Keepalived_vrrp[2628371]: (VI_1) setting VIPs.
+Apr 22 09:34:26 MHsql-db01 Keepalived_vrrp[2628371]: (VI_1) Sending/queueing gratuitous ARPs on enp4s1 for 222.24.203.83
+Apr 22 09:34:26 MHsql-db01 Keepalived_vrrp[2628371]: Sending gratuitous ARP on enp4s1 for 222.24.203.83
+Apr 22 09:34:26 MHsql-db01 Keepalived_vrrp[2628371]: Sending gratuitous ARP on enp4s1 for 222.24.203.83
+Apr 22 09:34:26 MHsql-db01 Keepalived_vrrp[2628371]: Sending gratuitous ARP on enp4s1 for 222.24.203.83
+Apr 22 09:34:26 MHsql-db01 Keepalived_vrrp[2628371]: Sending gratuitous ARP on enp4s1 for 222.24.203.83
+Apr 22 09:34:26 MHsql-db01 Keepalived_vrrp[2628371]: Sending gratuitous ARP on enp4s1 for 222.24.203.83
+[root@MHsql-db01 keepalived-2.3.3]#
+
+
+[root@MHsql-db01B keepalived-2.3.3]#  systemctl start keepalived
+[root@MHsql-db01B keepalived-2.3.3]#  systemctl status keepalived
+● keepalived.service - LVS and VRRP High Availability Monitor
+   Loaded: loaded (/usr/lib/systemd/system/keepalived.service; disabled; vendor preset: disabled)
+   Active: active (running) since Tue 2025-04-22 09:36:53 CST; 2s ago
+     Docs: man:keepalived(8)
+           man:keepalived.conf(5)
+           man:genhash(1)
+           https://keepalived.org
+ Main PID: 1211770 (keepalived)
+    Tasks: 3
+   Memory: 972.0K
+   CGroup: /system.slice/keepalived.service
+           ├─1211770 /usr/local/keepalived-2.3.3/sbin/keepalived --dont-fork -D
+           ├─1211771 /usr/local/keepalived-2.3.3/sbin/keepalived --dont-fork -D
+           └─1211772 /usr/local/keepalived-2.3.3/sbin/keepalived --dont-fork -D
+
+Apr 22 09:36:53 MHsql-db01B Keepalived_vrrp[1211772]: Assigned address 222.24.203.35 for interface enp4s1
+Apr 22 09:36:53 MHsql-db01B Keepalived_vrrp[1211772]: Registering gratuitous ARP shared channel
+Apr 22 09:36:53 MHsql-db01B Keepalived[1211770]: Startup complete
+Apr 22 09:36:53 MHsql-db01B Keepalived_vrrp[1211772]: (VI_1) removing VIPs.
+Apr 22 09:36:53 MHsql-db01B systemd[1]: Started LVS and VRRP High Availability Monitor.
+Apr 22 09:36:53 MHsql-db01B Keepalived_vrrp[1211772]: (VI_1) removing VIPs.
+Apr 22 09:36:53 MHsql-db01B Keepalived_vrrp[1211772]: (VI_1) Entering BACKUP STATE (init)
+Apr 22 09:36:53 MHsql-db01B Keepalived_vrrp[1211772]: VRRP sockpool: [ifindex(  2), family(IPv4), proto(112), fd(15,16) multicast, address(224.0.0.18)]
+Apr 22 09:36:53 MHsql-db01B Keepalived_vrrp[1211772]: (VI_1) master set to 222.24.203.31
+Apr 22 09:36:55 MHsql-db01B Keepalived_healthcheckers[1211771]: TCP connection to [222.24.203.35]:tcp:3306 success.
+[root@MHsql-db01B keepalived-2.3.3]# ip a
+1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN group default qlen 1000
+    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
+    inet 127.0.0.1/8 scope host lo
+       valid_lft forever preferred_lft forever
+    inet 222.24.203.84/32 scope global lo
+       valid_lft forever preferred_lft forever
+2: enp4s1: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc fq_codel state UP group default qlen 1000
+    link/ether 28:6e:d4:89:b8:35 brd ff:ff:ff:ff:ff:ff
+    inet 222.24.203.35/24 brd 222.24.203.255 scope global noprefixroute enp4s1
+       valid_lft forever preferred_lft forever
+[root@MHsql-db01B keepalived-2.3.3]#  systemctl status keepalived
+● keepalived.service - LVS and VRRP High Availability Monitor
+   Loaded: loaded (/usr/lib/systemd/system/keepalived.service; disabled; vendor preset: disabled)
+   Active: active (running) since Tue 2025-04-22 09:36:53 CST; 10s ago
+     Docs: man:keepalived(8)
+           man:keepalived.conf(5)
+           man:genhash(1)
+           https://keepalived.org
+ Main PID: 1211770 (keepalived)
+    Tasks: 3
+   Memory: 940.0K
+   CGroup: /system.slice/keepalived.service
+           ├─1211770 /usr/local/keepalived-2.3.3/sbin/keepalived --dont-fork -D
+           ├─1211771 /usr/local/keepalived-2.3.3/sbin/keepalived --dont-fork -D
+           └─1211772 /usr/local/keepalived-2.3.3/sbin/keepalived --dont-fork -D
+
+Apr 22 09:36:53 MHsql-db01B Keepalived_vrrp[1211772]: Assigned address 222.24.203.35 for interface enp4s1
+Apr 22 09:36:53 MHsql-db01B Keepalived_vrrp[1211772]: Registering gratuitous ARP shared channel
+Apr 22 09:36:53 MHsql-db01B Keepalived[1211770]: Startup complete
+Apr 22 09:36:53 MHsql-db01B Keepalived_vrrp[1211772]: (VI_1) removing VIPs.
+Apr 22 09:36:53 MHsql-db01B systemd[1]: Started LVS and VRRP High Availability Monitor.
+Apr 22 09:36:53 MHsql-db01B Keepalived_vrrp[1211772]: (VI_1) removing VIPs.
+Apr 22 09:36:53 MHsql-db01B Keepalived_vrrp[1211772]: (VI_1) Entering BACKUP STATE (init)
+Apr 22 09:36:53 MHsql-db01B Keepalived_vrrp[1211772]: VRRP sockpool: [ifindex(  2), family(IPv4), proto(112), fd(15,16) multicast, address(224.0.0.18)]
+Apr 22 09:36:53 MHsql-db01B Keepalived_vrrp[1211772]: (VI_1) master set to 222.24.203.31
+Apr 22 09:36:55 MHsql-db01B Keepalived_healthcheckers[1211771]: TCP connection to [222.24.203.35]:tcp:3306 success.
+
+```
+
+
+
+
 
 #### 5、查看vip是否启动
 
@@ -4806,25 +5953,176 @@ ip a
 ping xxx.xxx.xx.xx
 
 #如果此时ping不通第二个IP，那么可以关闭keepalived后，手动添加第二个IP，再ping测试
-ip addr add 192.168.1.100/24 dev eth0
+ip addr add 222.24.203.84/32 dev eth0
 ping 192.168.1.100
 
+#ip addr del 222.24.203.84/32 dev enp4s1
 ```
 
 发现vip在主库上：
 ```
-[root@mysql01 ~]# ip a
+[root@MHsql-db01 ~]# ip a
 1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN group default qlen 1000
     link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
     inet 127.0.0.1/8 scope host lo
        valid_lft forever preferred_lft forever
 2: eth0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc mq state UP group default qlen 1000
     link/ether fe:fc:fe:1f:c2:9a brd ff:ff:ff:ff:ff:ff
-    inet 222.204.70.110/25 brd 222.204.70.127 scope global noprefixroute eth0
+    inet  222.24.203.31/25 brd 222.204.70.127 scope global noprefixroute eth0
        valid_lft forever preferred_lft forever
     inet 222.204.70.112/32 scope global eth0
        valid_lft forever preferred_lft forever
 ```
+
+#报错处理
+
+#现象
+
+```bash
+ping vip时：
+ping: sendmsg: Operation not permitted
+```
+
+#原因
+
+```bash
+#这不是网络不通，而是操作系统内核拒绝发送 ICMP 包，因为该 VIP (222.24.203.83/32) 是通过 LVS DR 模式绑定的，而不是标准的接口绑定方式
+
+#在 Keepalived 中：
+
+#如果启用了 vrrp_strict：
+
+#非 MASTER 节点即使绑了 VIP，也不能发 ARP，也不能响应 ping 请求（会触发 kernel 层级 drop）。
+
+#本机也不能对自己绑定的 VIP 发起访问或 ping 请求。
+```
+
+#接近办法
+
+```bash
+#方法一：
+注释掉参数vrrp_strict，生产环境不建议
+
+#方法二：
+安装keepalive最新版
+```
+
+
+
+#logs
+
+```bash
+
+[root@MHsql-db01 ~]# systemctl status keepalived
+● keepalived.service - LVS and VRRP High Availability Monitor
+   Loaded: loaded (/usr/lib/systemd/system/keepalived.service; enabled; vendor preset: disabled)
+   Active: active (running) since Mon 2025-04-21 10:40:00 CST; 52s ago
+  Process: 2320497 ExecStart=/usr/sbin/keepalived $KEEPALIVED_OPTIONS (code=exited, status=0/SUCCESS)
+ Main PID: 2320499 (keepalived)
+    Tasks: 3
+   Memory: 1004.0K
+   CGroup: /system.slice/keepalived.service
+           ├─2320499 /usr/sbin/keepalived -D
+           ├─2320500 /usr/sbin/keepalived -D
+           └─2320501 /usr/sbin/keepalived -D
+
+Apr 21 10:40:04 MHsql-db01 Keepalived_vrrp[2320501]: Sending gratuitous ARP on enp4s1 for 222.24.203.83
+Apr 21 10:40:04 MHsql-db01 Keepalived_vrrp[2320501]: Sending gratuitous ARP on enp4s1 for 222.24.203.83
+Apr 21 10:40:04 MHsql-db01 Keepalived_vrrp[2320501]: Sending gratuitous ARP on enp4s1 for 222.24.203.83
+Apr 21 10:40:04 MHsql-db01 Keepalived_vrrp[2320501]: Sending gratuitous ARP on enp4s1 for 222.24.203.83
+Apr 21 10:40:09 MHsql-db01 Keepalived_vrrp[2320501]: Sending gratuitous ARP on enp4s1 for 222.24.203.83
+Apr 21 10:40:09 MHsql-db01 Keepalived_vrrp[2320501]: (VI_1) Sending/queueing gratuitous ARPs on enp4s1 for 222.24.203.83
+Apr 21 10:40:09 MHsql-db01 Keepalived_vrrp[2320501]: Sending gratuitous ARP on enp4s1 for 222.24.203.83
+Apr 21 10:40:09 MHsql-db01 Keepalived_vrrp[2320501]: Sending gratuitous ARP on enp4s1 for 222.24.203.83
+Apr 21 10:40:09 MHsql-db01 Keepalived_vrrp[2320501]: Sending gratuitous ARP on enp4s1 for 222.24.203.83
+Apr 21 10:40:09 MHsql-db01 Keepalived_vrrp[2320501]: Sending gratuitous ARP on enp4s1 for 222.24.203.83
+[root@MHsql-db01 ~]# ip a
+1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN group default qlen 1000
+    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
+    inet 127.0.0.1/8 scope host lo
+       valid_lft forever preferred_lft forever
+2: enp4s1: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc fq_codel state UP group default qlen 1000
+    link/ether 28:6e:d4:89:ab:99 brd ff:ff:ff:ff:ff:ff
+    inet 222.24.203.31/24 brd 222.24.203.255 scope global noprefixroute enp4s1
+       valid_lft forever preferred_lft forever
+    inet 222.24.203.83/32 scope global enp4s1
+       valid_lft forever preferred_lft forever
+[root@MHsql-db01 ~]# ping 222.24.203.83
+PING 222.24.203.83 (222.24.203.83) 56(84) bytes of data.
+ping: sendmsg: Operation not permitted
+ping: sendmsg: Operation not permitted
+^C
+--- 222.24.203.83 ping statistics ---
+2 packets transmitted, 0 received, 100% packet loss, time 1003ms
+
+
+[root@MHsql-db01B ~]# systemctl status keepalived
+● keepalived.service - LVS and VRRP High Availability Monitor
+   Loaded: loaded (/usr/lib/systemd/system/keepalived.service; enabled; vendor preset: disabled)
+   Active: active (running) since Mon 2025-04-21 10:40:18 CST; 14s ago
+  Process: 904047 ExecStart=/usr/sbin/keepalived $KEEPALIVED_OPTIONS (code=exited, status=0/SUCCESS)
+ Main PID: 904048 (keepalived)
+    Tasks: 3
+   Memory: 1.0M
+   CGroup: /system.slice/keepalived.service
+           ├─904048 /usr/sbin/keepalived -D
+           ├─904049 /usr/sbin/keepalived -D
+           └─904050 /usr/sbin/keepalived -D
+
+Apr 21 10:40:18 MHsql-db01B Keepalived_healthcheckers[904049]: Activating healthchecker for service [222.24.203.35]:tcp:3306 for VS [222.24.203.83]:tcp:33>
+Apr 21 10:40:18 MHsql-db01B Keepalived_vrrp[904050]: Opening file '/etc/keepalived/keepalived.conf'.
+Apr 21 10:40:18 MHsql-db01B Keepalived_vrrp[904050]: (VI_1) Strict mode does not support authentication. Ignoring.
+Apr 21 10:40:18 MHsql-db01B Keepalived_vrrp[904050]: Assigned address 222.24.203.35 for interface enp4s1
+Apr 21 10:40:18 MHsql-db01B Keepalived_vrrp[904050]: Registering gratuitous ARP shared channel
+Apr 21 10:40:18 MHsql-db01B Keepalived_vrrp[904050]: (VI_1) removing VIPs.
+Apr 21 10:40:18 MHsql-db01B Keepalived_vrrp[904050]: (VI_1) removing firewall drop rule
+Apr 21 10:40:18 MHsql-db01B Keepalived_vrrp[904050]: (VI_1) Entering BACKUP STATE (init)
+Apr 21 10:40:18 MHsql-db01B Keepalived_vrrp[904050]: VRRP sockpool: [ifindex(2), family(IPv4), proto(112), unicast(0), fd(13,14)]
+Apr 21 10:40:21 MHsql-db01B Keepalived_healthcheckers[904049]: TCP connection to [222.24.203.35]:tcp:3306 success.
+[root@MHsql-db01B ~]# ping 222.24.203.83
+PING 222.24.203.83 (222.24.203.83) 56(84) bytes of data.
+^C
+--- 222.24.203.83 ping statistics ---
+6 packets transmitted, 0 received, 100% packet loss, time 5108ms
+
+[root@MHsql-db01B ~]# ping 222.24.203.31
+PING 222.24.203.31 (222.24.203.31) 56(84) bytes of data.
+64 bytes from 222.24.203.31: icmp_seq=1 ttl=64 time=0.822 ms
+64 bytes from 222.24.203.31: icmp_seq=2 ttl=64 time=0.793 ms
+^C
+--- 222.24.203.31 ping statistics ---
+2 packets transmitted, 2 received, 0% packet loss, time 1027ms
+rtt min/avg/max/mdev = 0.793/0.807/0.822/0.014 ms
+[root@MHsql-db01B ~]# systemctl status keepalived
+● keepalived.service - LVS and VRRP High Availability Monitor
+   Loaded: loaded (/usr/lib/systemd/system/keepalived.service; enabled; vendor preset: disabled)
+   Active: active (running) since Mon 2025-04-21 10:40:18 CST; 3min 20s ago
+  Process: 904047 ExecStart=/usr/sbin/keepalived $KEEPALIVED_OPTIONS (code=exited, status=0/SUCCESS)
+ Main PID: 904048 (keepalived)
+    Tasks: 3
+   Memory: 1004.0K
+   CGroup: /system.slice/keepalived.service
+           ├─904048 /usr/sbin/keepalived -D
+           ├─904049 /usr/sbin/keepalived -D
+           └─904050 /usr/sbin/keepalived -D
+
+Apr 21 10:40:18 MHsql-db01B Keepalived_healthcheckers[904049]: Activating healthchecker for service [222.24.203.35]:tcp:3306 for VS [222.24.203.83]:tcp:33>
+Apr 21 10:40:18 MHsql-db01B Keepalived_vrrp[904050]: Opening file '/etc/keepalived/keepalived.conf'.
+Apr 21 10:40:18 MHsql-db01B Keepalived_vrrp[904050]: (VI_1) Strict mode does not support authentication. Ignoring.
+Apr 21 10:40:18 MHsql-db01B Keepalived_vrrp[904050]: Assigned address 222.24.203.35 for interface enp4s1
+Apr 21 10:40:18 MHsql-db01B Keepalived_vrrp[904050]: Registering gratuitous ARP shared channel
+Apr 21 10:40:18 MHsql-db01B Keepalived_vrrp[904050]: (VI_1) removing VIPs.
+Apr 21 10:40:18 MHsql-db01B Keepalived_vrrp[904050]: (VI_1) removing firewall drop rule
+Apr 21 10:40:18 MHsql-db01B Keepalived_vrrp[904050]: (VI_1) Entering BACKUP STATE (init)
+Apr 21 10:40:18 MHsql-db01B Keepalived_vrrp[904050]: VRRP sockpool: [ifindex(2), family(IPv4), proto(112), unicast(0), fd(13,14)]
+Apr 21 10:40:21 MHsql-db01B Keepalived_healthcheckers[904049]: TCP connection to [222.24.203.35]:tcp:3306 success.
+[root@MHsql-db01B ~]#
+
+```
+
+
+
+
 
 #### 6、主库关闭mysqld/keepalived测试
 
@@ -4836,6 +6134,12 @@ systemctl status keepalived
 
 ip a
 ```
+
+```sql
+SELECT @@hostname;
+```
+
+
 
 #发现vip漂移到了从库
 
@@ -4854,8 +6158,8 @@ systemctl status keepalived
 #测试条件
 
 ```
-222.204.70.110 mysql01
-222.204.70.111 mysql02
+ 222.24.203.31 MHsql-db01
+ 222.24.203.35 MHsql-db01B
 
 vip: 222.204.70.112
 ```
@@ -4890,7 +6194,9 @@ mysql> select * from nowdate;
 #执行脚本
 
 ```bash
-while true; do date;mysql -u testuser -pQwert123.. -h 222.204.70.112 -e 'use testdb;insert into nowdate values (null, now());'; sleep 1;done
+while true; do date;mysql -u testuser -pQwert123.. -h 10.40.10.141 -e 'use testdb;insert into nowdate values (null, now());'; sleep 1;done
+
+while true; do date;mysql -u testuser -pQwert123.. -h 10.40.10.141 -e 'SELECT @@hostname;'; sleep 1;done
 ```
 
 #此时主库关闭mysqld
@@ -4923,6 +6229,15 @@ ip addr
 ```
 
 #因为是双主，中间无缝切换
+
+```bash
+#如果执行systemctl stop mysqld，那么关闭数据库会有时间消耗
+#如果执行reboot服务器，那么间隔很短暂
+```
+
+
+
+
 
 
 #### 8、Mysql双主双活+keepalived高可用整体测试
@@ -4984,10 +6299,10 @@ select * from ceshi1;
 #此时可以查看master-1、master-2数据库，数据已同步
 
 ##### 5) 查看100服务器实际物理机ip
-#使用ip addr命令查看实际使用的物理机为222.204.70.110，所以master-1(222.204.70.110)服务器mysql为主数据库。
+#使用ip addr命令查看实际使用的物理机为 222.24.203.31，所以master-1( 222.24.203.31)服务器mysql为主数据库。
 
 ##### 6) 停止物理机mysql服务
-#此时手动将master-1服务器mysql停止，keepalived检测到222.204.70.110服务3306端口连接失败，会执行/etc/keepalived/shutdown.sh脚本，将222.204.70.110服务器keepalived应用结束
+#此时手动将master-1服务器mysql停止，keepalived检测到 222.24.203.31服务3306端口连接失败，会执行/etc/keepalived/shutdown.sh脚本，将 222.24.203.31服务器keepalived应用结束
 
 ```bash
 service mysql stop
@@ -4996,10 +6311,10 @@ Shutting down MySQL............. SUCCESS!
 
 
 ##### 7) 查看漂移ip执行情况
-#此时再连接222.204.70.111服务下，ip addr查看，发现已经实际将物理机由master-1(222.204.70.110)到master-2(222.204.70.111)服务器上
+#此时再连接 222.24.203.35服务下，ip addr查看，发现已经实际将物理机由master-1( 222.24.203.31)到master-2( 222.24.203.35)服务器上
 
 ##### 8) 在新的主服务器插入数据
-#再使用mysql连接工具连接222.204.70.111的mysql，插入一条数据，测试是否将数据存入master-2(222.204.70.111)服务器mysql中
+#再使用mysql连接工具连接 222.24.203.35的mysql，插入一条数据，测试是否将数据存入master-2( 222.24.203.35)服务器mysql中
 
 ```mysql
 insert into ceshi1 values(6,'李四','英语',94);
@@ -5011,7 +6326,7 @@ insert into ceshi1 values(6,'李四','英语',94);
 #查看master-2服务器mysql数据，数据已同步，说明keepalived搭建高可用成功，当master-1服务器mysql出现问题后keepalived自动漂移IP到实体机master-2服务器上，从而使master-2服务器mysql作为主数据库。
 
 ##### 10) 重启master-1服务，查看数据同步情况
-#此时再启动master-1(222.204.70.110)服务器mysql、keepalived应用
+#此时再启动master-1( 222.24.203.31)服务器mysql、keepalived应用
 
 ```bash
 systemctl start mysql
@@ -5043,6 +6358,150 @@ select count(1) from ceshi1;
 
 3、Slave节点服务器配置不要太差，否则更容易导致复制延迟，作为热备节点的slave服务器，硬件配置不能低于master节点；
 如果对延迟很敏感的话，可考虑使用MariaDB分支版本，利用多线程复制的方式可以很大降低复制延迟。
+```
+#主库重启后，追从库数据logs
+
+```bash
+*************************** 1. row ***************************
+             Replica_IO_State: Waiting for source to send event
+                  Source_Host: 222.24.203.35
+                  Source_User: repl
+                  Source_Port: 3306
+                Connect_Retry: 60
+              Source_Log_File: mysql-bin.000049
+          Read_Source_Log_Pos: 490306513
+               Relay_Log_File: relay-bin.000101
+                Relay_Log_Pos: 60777814
+        Relay_Source_Log_File: mysql-bin.000049
+           Replica_IO_Running: Yes
+          Replica_SQL_Running: Yes
+              Replicate_Do_DB:
+          Replicate_Ignore_DB:
+           Replicate_Do_Table:
+       Replicate_Ignore_Table:
+      Replicate_Wild_Do_Table:
+  Replicate_Wild_Ignore_Table:
+                   Last_Errno: 0
+                   Last_Error:
+                 Skip_Counter: 0
+          Exec_Source_Log_Pos: 356401275
+              Relay_Log_Space: 193642728
+              Until_Condition: None
+               Until_Log_File:
+                Until_Log_Pos: 0
+           Source_SSL_Allowed: No
+           Source_SSL_CA_File:
+           Source_SSL_CA_Path:
+              Source_SSL_Cert:
+            Source_SSL_Cipher:
+               Source_SSL_Key:
+        Seconds_Behind_Source: 343
+Source_SSL_Verify_Server_Cert: No
+                Last_IO_Errno: 0
+                Last_IO_Error:
+               Last_SQL_Errno: 0
+               Last_SQL_Error:
+  Replicate_Ignore_Server_Ids:
+             Source_Server_Id: 81
+                  Source_UUID: 69fc8d5a-1c39-11f0-88c3-286ed489b835
+             Source_Info_File: mysql.slave_master_info
+                    SQL_Delay: 0
+          SQL_Remaining_Delay: NULL
+    Replica_SQL_Running_State: Waiting for dependent transaction to commit
+           Source_Retry_Count: 86400
+                  Source_Bind:
+      Last_IO_Error_Timestamp:
+     Last_SQL_Error_Timestamp:
+               Source_SSL_Crl:
+           Source_SSL_Crlpath:
+           Retrieved_Gtid_Set: 69fc8d5a-1c39-11f0-88c3-286ed489b835:5329-199273
+            Executed_Gtid_Set: 69fc8d5a-1c39-11f0-88c3-286ed489b835:1-64138,
+6a48c612-1c39-11f0-b37f-286ed489ab99:1-427600
+                Auto_Position: 1
+         Replicate_Rewrite_DB:
+                 Channel_Name:
+           Source_TLS_Version:
+       Source_public_key_path:
+        Get_Source_public_key: 0
+            Network_Namespace:
+1 row in set (0.00 sec)
+
+ERROR:
+No query specified
+
+root@localhost:mysql.sock [(none)]>
+
+root@localhost:mysql.sock [(none)]> show replica status\G;
+*************************** 1. row ***************************
+             Replica_IO_State: Waiting for source to send event
+                  Source_Host: 222.24.203.35
+                  Source_User: repl
+                  Source_Port: 3306
+                Connect_Retry: 60
+              Source_Log_File: mysql-bin.000049
+          Read_Source_Log_Pos: 490342017
+               Relay_Log_File: relay-bin.000101
+                Relay_Log_Pos: 193642524
+        Relay_Source_Log_File: mysql-bin.000049
+           Replica_IO_Running: Yes
+          Replica_SQL_Running: Yes
+              Replicate_Do_DB:
+          Replicate_Ignore_DB:
+           Replicate_Do_Table:
+       Replicate_Ignore_Table:
+      Replicate_Wild_Do_Table:
+  Replicate_Wild_Ignore_Table:
+                   Last_Errno: 0
+                   Last_Error:
+                 Skip_Counter: 0
+          Exec_Source_Log_Pos: 490342017
+              Relay_Log_Space: 193642728
+              Until_Condition: None
+               Until_Log_File:
+                Until_Log_Pos: 0
+           Source_SSL_Allowed: No
+           Source_SSL_CA_File:
+           Source_SSL_CA_Path:
+              Source_SSL_Cert:
+            Source_SSL_Cipher:
+               Source_SSL_Key:
+        Seconds_Behind_Source: 0
+Source_SSL_Verify_Server_Cert: No
+                Last_IO_Errno: 0
+                Last_IO_Error:
+               Last_SQL_Errno: 0
+               Last_SQL_Error:
+  Replicate_Ignore_Server_Ids:
+             Source_Server_Id: 81
+                  Source_UUID: 69fc8d5a-1c39-11f0-88c3-286ed489b835
+             Source_Info_File: mysql.slave_master_info
+                    SQL_Delay: 0
+          SQL_Remaining_Delay: NULL
+    Replica_SQL_Running_State: Replica has read all relay log; waiting for more updates
+           Source_Retry_Count: 86400
+                  Source_Bind:
+      Last_IO_Error_Timestamp:
+     Last_SQL_Error_Timestamp:
+               Source_SSL_Crl:
+           Source_SSL_Crlpath:
+           Retrieved_Gtid_Set: 69fc8d5a-1c39-11f0-88c3-286ed489b835:5329-199273
+            Executed_Gtid_Set: 69fc8d5a-1c39-11f0-88c3-286ed489b835:1-199273,
+6a48c612-1c39-11f0-b37f-286ed489ab99:1-427652
+                Auto_Position: 1
+         Replicate_Rewrite_DB:
+                 Channel_Name:
+           Source_TLS_Version:
+       Source_public_key_path:
+        Get_Source_public_key: 0
+            Network_Namespace:
+1 row in set (0.00 sec)
+
+ERROR:
+No query specified
+
+root@localhost:mysql.sock [(none)]>
+
+
 ```
 
 
@@ -5157,6 +6616,7 @@ gzDumpFile="mysql137_${nowDate}.sql.tgz"
 cd $bakDir
 # 全量备份
 /usr/bin/mysqldump -u${username} -p${mypasswd} --quick --events  --all-databases  --source-data=2 --single-transaction --set-gtid-purged=OFF > $dumpFile
+
 # 打包
 /usr/bin/tar -zvcf $gzDumpFile $dumpFile
 /usr/bin/rm $dumpFile
@@ -5191,6 +6651,55 @@ EOF
 crontab -e
 
 10 1 * * * /usr/bin/bash -x /data/backup/mysqlbackup.sh >/dev/null 2>&1
+```
+
+
+
+#每个库一个文件的备份
+
+```bash
+#!/bin/bash
+# mysql 数据库差异化备份
+# 用户名和密码，注意实际情况！也可以在/etc/my.cnf中配置
+username="root"
+mypasswd="ABC123!@#"
+
+beginTime=`date +"%Y年%m月%d日 %H:%M:%S"`
+
+# 备份目录,注意实际环境目录
+bakDir=/data/backup
+# 日志文件
+logFile=/data/backup/bak.log
+# 备份文件开始
+
+nowDate=`date +%Y%m%d`
+#定义不需要备份的表
+ignore_table="--ignore-table=cas_server.TB_SSO_LOG_copy1 --ignore-table=cas_server.TB_SERVICE_ACCESS_LOG --ignore-table=cas_server.TB_SERVICE_ACCESS_LOG_08 --ignore-table=cas_server.TB_SSO_LOG --ignore-table=cas_server.TB_SSO_LOG_08 --ignore-table=cas_server.TB_AUTHENTICATION_LOG --ignore-table=cas_server.TB_AUTHENTICATION_LOG_08 --ignore-table=authx_log.TB_L_APPLY_CALL_LOG --ignore-table=authx_log.TB_L_APPLY_CALL_LOG_08 --ignore-table=authx_log.TB_L_SERVICE_ACCESS_LOG --ignore-table=authx_log.TB_L_SERVICE_ACCESS_LOG_08 --ignore-table=authx_log.TB_L_ONLINE_LOG --ignore-table=authx_log.TB_L_AUTHENTICATION_LOG --ignore-table=authx_log.TB_L_AUTHENTICATION_LOG_08 --ignore-table=authx_log.TB_L_ONLINE_LOG0819 --ignore-table=jobs_server.TB_JOB_TASK_RECORD_DETAIL"
+cd $bakDir
+for dbname in $(mysql -u ${username} -p${mypasswd} -e "show databases;" --skip-column-names| grep -v information_schema | grep -v performance_schema| grep -v sys)
+do
+dumpFile=$dbname-$nowDate".sql"
+echo 备份开始:$beginTime >> $logFile
+echo "Backing up database $dbname at $(date +%F_%H-%M) ...">> $logFile
+# 全量备份
+/usr/bin/mysqldump -u${username} -p${mypasswd} --quick --events --databases $dbname ${ignore_table} --source-data=2 --single-transaction --set-gtid-purged=OFF >${bakDir}/$dumpFile
+
+echo "Backed down database $dbname at $(date +%F_%H-%M) ...">> $logFile
+done
+
+gzDumpFile="databak_${nowDate}.sql.tgz"
+
+
+# 打包
+/usr/bin/tar -zvcf $gzDumpFile ${bakDir}/*.sql
+/usr/bin/rm ${bakDir}/*.sql
+
+endTime=`date +"%Y年%m月%d日 %H:%M:%S"`
+echo 打包结束:$endTime $gzDumpFile succ！ >> $logFile
+
+##删除过期备份
+find ${bakDir} -name 'databak_*.sql.tgz' -mtime +7 -exec rm {} \;
+
 ```
 
 
