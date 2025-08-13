@@ -1,9 +1,9 @@
-此文档提供安装elasticsearch8.13(最新版8.13.3)三节点集群模式的安装
+此文档提供安装elasticsearch7.7.1(最新版8.19/9.1.0)三节点集群模式的安装
 
 ****
 
 #安装开始前，请注意OS系统的优化、服务器内存大小、磁盘分区大小，es安装到最大分区里
-#20240507安装版本为8.13.3
+#20240715安装版本为7.7.1
 
 ## 服务器资源
 
@@ -12,9 +12,9 @@
 ```
 vm: 16核/32G 
 
-OS: oracle Linux 7.9(5.4.17-2011.6.2.el7uek.x86_64)
+OS: Kylin Linux Advanced Server V10 (SP2 / Sword)(4.19.90-25.48.v2101.ky10.x86_64)
 
-磁盘LVM管理，挂载第二块磁盘1T，/data为最大分区
+磁盘LVM管理，挂载第二块磁盘500G，/data为最大分区
 
 /opt/elasticsearch为程序目录
 /data/data为数据目录
@@ -25,15 +25,37 @@ OS: oracle Linux 7.9(5.4.17-2011.6.2.el7uek.x86_64)
 
 #最少三台
 
-| 序号 |    IP地址     |       主机名       |    角色     | 备注 |
-| :--: | :-----------: | :----------------: | :---------: | :--: |
-|  1   | 172.18.13.112 |   k8s-mysql-ole    | master,data |      |
-|  2   | 172.18.13.117 | k8s-mysql-ole-117  | master,data |      |
-|  3   | 172.18.13.120 | k8s-mysql-ole-test | master,data |      |
-|  4   |               |                    |   ingest    |      |
-|  5   |               |                    |   ingest    |      |
+| 序号 |    IP地址     | 主机名 |    角色     | 备注 |
+| :--: | :-----------: | :----: | :---------: | :--: |
+|  1   | 222.24.203.42 |  es01  | master,data |      |
+|  2   | 222.24.203.43 |  es02  | master,data |      |
+|  3   | 222.24.203.44 |  es03  | master,data |      |
+|  4   |               |        |   ingest    |      |
+|  5   |               |        |   ingest    |      |
 
 
+
+#官网
+
+```addr
+#elk
+https://www.elastic.co/
+
+#es download
+https://www.elastic.co/downloads/elasticsearch
+https://www.elastic.co/downloads/past-releases#elasticsearch
+
+#kibana download
+https://www.elastic.co/downloads/kibana
+https://www.elastic.co/downloads/past-releases#kibana
+
+#es deployment docs
+https://www.elastic.co/docs/deploy-manage/deploy/self-managed/install-elasticsearch-from-archive-on-linux-macos
+
+https://www.elastic.co/guide/en/elasticsearch/reference/8.19/targz.html
+
+https://www.elastic.co/guide/en/elasticsearch/reference/7.7/targz.html
+```
 
 
 
@@ -65,6 +87,42 @@ TCP retransmission timeout
 #### 0、修改源文件
 
 ```bash
+#Kylin v10 SP2
+cat >> /etc/yum.repos.d/kylin_x86_64.repo <<EOF
+###Kylin Linux Advanced Server 10 - os repo###
+
+[ks10-adv-os]
+name = Kylin Linux Advanced Server 10 - Os
+baseurl = http://update.cs2c.com.cn:8080/NS/V10/V10SP2/os/adv/lic/base/$basearch/
+gpgcheck = 1
+gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-kylin
+enabled = 1
+
+[ks10-adv-updates]
+name = Kylin Linux Advanced Server 10 - Updates
+baseurl = http://update.cs2c.com.cn:8080/NS/V10/V10SP2/os/adv/lic/updates/$basearch/
+gpgcheck = 1
+gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-kylin
+enabled = 1
+
+[ks10-adv-addons]
+name = Kylin Linux Advanced Server 10 - Addons
+baseurl = http://update.cs2c.com.cn:8080/NS/V10/V10SP2/os/adv/lic/addons/$basearch/
+gpgcheck = 1
+gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-kylin
+enabled = 0
+
+[centos-extras]
+name=centos-extras Stable
+baseurl=https://mirrors.aliyun.com/centos/7/extras/$basearch
+enabled=1
+gpgcheck=0
+EOF
+
+
+yum clean all && yum makecache all
+
+
 #oracle linux server直接使用自己的yum源，此处不做修改
 
 #centos
@@ -111,76 +169,102 @@ apt update
 
 ```bash
 cat >> /etc/hosts <<EOF
-172.18.13.112 k8s-mysql-ole
-172.18.13.117 k8s-mysql-ole-117
-172.18.13.120 k8s-mysql-ole-test
+222.24.203.42 es01
+222.24.203.43 es02
+222.24.203.44 es03
 EOF
 
-#k8s-mysql-ole
-hostnamectl set-hostname k8s-mysql-ole
-#k8s-mysql-ole-117
-hostnamectl set-hostname k8s-mysql-ole-117
-#k8s-mysql-ole-test
-hostnamectl set-hostname k8s-mysql-ole-test
+#es01
+hostnamectl set-hostname es01
+#es02
+hostnamectl set-hostname es02
+#es03
+hostnamectl set-hostname es03
 
 hostnamectl status
 
-ping k8s-mysql-ole  -c 3
-ping k8s-mysql-ole-117  -c 3
-ping k8s-mysql-ole-test -c 3
+ping es01  -c 3
+ping es02  -c 3
+ping es03  -c 3
 
 ```
 
 ```
-[root@localhost ~]# hostnamectl set-hostname k8s-mysql-ole
+[root@localhost ~]# hostnamectl set-hostname es01
 [root@localhost ~]# exit
 
-[root@k8s-mysql-ole ~]# hostnamectl status
-   Static hostname: k8s-mysql-ole
+[root@es01 ~]# hostnamectl status
+   Static hostname: es01
          Icon name: computer-vm
            Chassis: vm
-        Machine ID: 4e99db48ca56469d86d4043965953a54
-           Boot ID: d7b0f5da94ba4c43b9f3432a6c1258c1
+        Machine ID: 96673b7b63a1448eab69bc486cb9f432
+           Boot ID: eb508de5a690492da65a07ba229c639a
     Virtualization: kvm
-  Operating System: Oracle Linux Server 7.9
-       CPE OS Name: cpe:/o:oracle:linux:7:9:server
-            Kernel: Linux 5.4.17-2011.6.2.el7uek.x86_64
+  Operating System: Kylin Linux Advanced Server V10 (Sword)
+            Kernel: Linux 4.19.90-25.48.v2101.ky10.x86_64
       Architecture: x86-64
+[root@es01 ~]#
 
-[root@k8s-mysql-ole ~]# cat >> /etc/hosts <<EOF
-172.18.13.112 k8s-mysql-ole
-172.18.13.117 k8s-mysql-ole-117
-172.18.13.120 k8s-mysql-ole-test
+[root@es02 ~]# hostnamectl status
+   Static hostname: es02
+         Icon name: computer-vm
+           Chassis: vm
+        Machine ID: 96673b7b63a1448eab69bc486cb9f432
+           Boot ID: 12ce614b79414f0388094ccefbd0a36f
+    Virtualization: kvm
+  Operating System: Kylin Linux Advanced Server V10 (Sword)
+            Kernel: Linux 4.19.90-25.48.v2101.ky10.x86_64
+      Architecture: x86-64
+[root@es02 ~]#
+
+[root@es03 ~]# hostnamectl status
+   Static hostname: es03
+         Icon name: computer-vm
+           Chassis: vm
+        Machine ID: 96673b7b63a1448eab69bc486cb9f432
+           Boot ID: 69ab9179f1ff46d6ae2e939ade889b6a
+    Virtualization: kvm
+  Operating System: Kylin Linux Advanced Server V10 (Sword)
+            Kernel: Linux 4.19.90-25.48.v2101.ky10.x86_64
+      Architecture: x86-64
+[root@es03 ~]#
+
+
+
+[root@es01 ~]# cat >> /etc/hosts <<EOF
+222.24.203.42 es01
+222.24.203.43 es02
+222.24.203.44 es03
 EOF
 
-[root@k8s-mysql-ole ~]# cat /etc/hosts
+[root@es01 ~]# cat /etc/hosts
 127.0.0.1   localhost localhost.localdomain localhost4 localhost4.localdomain4
 ::1         localhost localhost.localdomain localhost6 localhost6.localdomain6
-172.18.13.112 k8s-mysql-ole
-172.18.13.117 k8s-mysql-ole-117
-172.18.13.120 k8s-mysql-ole-test
+222.24.203.42 es01
+222.24.203.43 es02
+222.24.203.44 es03
 
-[root@k8s-mysql-ole ~]# ping k8s-mysql-ole -c 1
-PING k8s-mysql-ole (172.18.13.112) 56(84) bytes of data.
-64 bytes from k8s-mysql-ole (172.18.13.112): icmp_seq=1 ttl=64 time=0.065 ms
+[root@es01 ~]# ping es01 -c 1
+PING es01 (222.24.203.42) 56(84) bytes of data.
+64 bytes from es01 (222.24.203.42): icmp_seq=1 ttl=64 time=0.065 ms
 
---- k8s-mysql-ole ping statistics ---
+--- es01 ping statistics ---
 1 packets transmitted, 1 received, 0% packet loss, time 0ms
 rtt min/avg/max/mdev = 0.065/0.065/0.065/0.000 ms
 
-[root@k8s-mysql-ole ~]# ping k8s-mysql-ole-117 -c 1
-PING k8s-mysql-ole-117 (172.18.13.117) 56(84) bytes of data.
-64 bytes from k8s-mysql-ole-117 (172.18.13.117): icmp_seq=1 ttl=64 time=0.619 ms
+[root@es01 ~]# ping es02 -c 1
+PING es02 (222.24.203.43) 56(84) bytes of data.
+64 bytes from es02 (222.24.203.43): icmp_seq=1 ttl=64 time=0.619 ms
 
---- k8s-mysql-ole-117 ping statistics ---
+--- es02 ping statistics ---
 1 packets transmitted, 1 received, 0% packet loss, time 0ms
 rtt min/avg/max/mdev = 0.619/0.619/0.619/0.000 ms
 
-[root@k8s-mysql-ole ~]# ping k8s-mysql-ole-test -c 1
-PING k8s-mysql-ole-test (172.18.13.120) 56(84) bytes of data.
-64 bytes from k8s-mysql-ole-117 (172.18.13.120): icmp_seq=1 ttl=64 time=0.619 ms
+[root@es01 ~]# ping es03 -c 1
+PING es03 (222.24.203.44) 56(84) bytes of data.
+64 bytes from es02 (222.24.203.44): icmp_seq=1 ttl=64 time=0.619 ms
 
---- k8s-mysql-ole-117 ping statistics ---
+--- es02 ping statistics ---
 1 packets transmitted, 1 received, 0% packet loss, time 0ms
 rtt min/avg/max/mdev = 0.619/0.619/0.619/0.000 ms
 
@@ -194,6 +278,8 @@ rtt min/avg/max/mdev = 0.619/0.619/0.619/0.000 ms
 #centos关闭防火墙
 systemctl stop firewalld
 systemctl disable firewalld
+
+systemctl status firewalld
 
 setenforce 0
 sudo sed -i 's/SELINUX=enforcing/SELINUX=disabled/g' /etc/selinux/config
@@ -231,7 +317,7 @@ cat /etc/fstab
 #es不能用root用户进行部署，得在每个机器上新建一个用户，部署的步骤都在这个新用户上进行
 
 ```bash
-useradd elasticsearch && echo es123\!\@\# |passwd --stdin elasticsearch
+useradd elasticsearch && echo Mysql\@20220317 |passwd --stdin elasticsearch
 ```
 
 #添加到sudo组中
@@ -248,7 +334,7 @@ elasticsearch ALL=(ALL) NOPASSWD:ALL
 #logs
 
 ```bash
-[root@k8s-mysql-ole-117 ~]# useradd elasticsearch && echo es123\!\@\# |passwd --stdin elasticsearch
+[root@es02 ~]# useradd elasticsearch && echo Mysql\@20220317 |passwd --stdin elasticsearch
 Changing password for user elasticsearch.
 passwd: all authentication tokens updated successfully.
 ```
@@ -259,6 +345,10 @@ passwd: all authentication tokens updated successfully.
 
 ```bash
 #安装
+#Kylin v10 SP2
+[root@es01 ~]# crontab -l
+0 */1 * * * /usr/sbin/ntpdate 222.24.211.121
+
 #centos7.9
 yum install -y ntp
 #ubuntu 22.04
@@ -326,6 +416,88 @@ cp /etc/sysctl.conf /etc/sysctl.conf.bak
 #优化
 
 ```bash
+#kylin
+
+echo "
+net.ipv4.tcp_retries2=5
+#net.bridge.bridge-nf-call-ip6tables=1
+#net.bridge.bridge-nf-call-iptables=1
+net.ipv4.ip_forward=1
+net.ipv4.conf.all.forwarding=1
+net.ipv4.neigh.default.gc_thresh1=4096
+net.ipv4.neigh.default.gc_thresh2=6144
+net.ipv4.neigh.default.gc_thresh3=8192
+net.ipv4.neigh.default.gc_interval=60
+net.ipv4.neigh.default.gc_stale_time=120
+
+# 参考 https://github.com/prometheus/node_exporter#disabled-by-default
+kernel.perf_event_paranoid=-1
+
+#sysctls for k8s node config
+net.ipv4.tcp_slow_start_after_idle=0
+net.core.rmem_max=16777216
+fs.inotify.max_user_watches=524288
+kernel.softlockup_all_cpu_backtrace=1
+
+kernel.softlockup_panic=0
+
+kernel.watchdog_thresh=30
+fs.file-max=2097152
+fs.inotify.max_user_instances=8192
+fs.inotify.max_queued_events=16384
+#vm.max_map_count=262144
+vm.max_map_count=655360
+#fs.may_detach_mounts=1
+net.core.netdev_max_backlog=16384
+net.ipv4.tcp_wmem=4096 12582912 16777216
+net.core.wmem_max=16777216
+net.core.somaxconn=32768
+net.ipv4.tcp_max_syn_backlog=8096
+net.ipv4.tcp_rmem=4096 12582912 16777216
+
+###如果学校开启IPv6，则必须为0
+net.ipv6.conf.all.disable_ipv6=1
+net.ipv6.conf.default.disable_ipv6=1
+net.ipv6.conf.lo.disable_ipv6=1
+
+#kernel.yama.ptrace_scope=0
+vm.swappiness=0
+
+# 可以控制core文件的文件名中是否添加pid作为扩展。
+kernel.core_uses_pid=1
+
+# Do not accept source routing
+net.ipv4.conf.default.accept_source_route=0
+net.ipv4.conf.all.accept_source_route=0
+
+# Promote secondary addresses when the primary address is removed
+net.ipv4.conf.default.promote_secondaries=1
+net.ipv4.conf.all.promote_secondaries=1
+
+# Enable hard and soft link protection
+fs.protected_hardlinks=1
+fs.protected_symlinks=1
+# 源路由验证
+# see details in https://help.aliyun.com/knowledge_detail/39428.html
+net.ipv4.conf.all.rp_filter=0
+net.ipv4.conf.default.rp_filter=0
+net.ipv4.conf.default.arp_announce = 2
+net.ipv4.conf.lo.arp_announce=2
+net.ipv4.conf.all.arp_announce=2
+# see details in https://help.aliyun.com/knowledge_detail/41334.html
+net.ipv4.tcp_max_tw_buckets=5000
+net.ipv4.tcp_syncookies=1
+net.ipv4.tcp_fin_timeout=30
+net.ipv4.tcp_synack_retries=2
+kernel.sysrq=1
+" >> /etc/sysctl.conf
+
+sysctl -p
+
+
+
+
+#centos7
 echo "
 net.ipv4.tcp_retries2=5
 
@@ -421,13 +593,13 @@ sysctl vm.swappiness
 #logs
 
 ```bash
-[root@k8s-mysql-ole ~]# sysctl net.ipv4.tcp_retries2
+[root@es01 ~]# sysctl net.ipv4.tcp_retries2
 net.ipv4.tcp_retries2 = 5
 
-[root@k8s-mysql-ole ~]# sysctl vm.max_map_count
+[root@es01 ~]# sysctl vm.max_map_count
 vm.max_map_count = 65530
 
-[root@k8s-mysql-ole ~]# sysctl vm.swappiness
+[root@es01 ~]# sysctl vm.swappiness
 vm.swappiness = 0
 ```
 
@@ -438,6 +610,25 @@ vm.swappiness = 0
 ##### 2）open-files
 
 ```bash
+#kylin
+cat >> /etc/security/limits.conf <<EOF
+
+*            soft    nofile          65536
+*            hard    nofile          65536
+*            soft    core            unlimited
+*            hard    core            unlimited
+*            soft    sigpending      90000
+*            hard    sigpending      90000
+*            soft    nproc           90000
+*            hard    nproc           90000
+*            soft    stack           90000
+*            hard    stack           90000
+*            soft    memlock         unlimited
+*            hard    memlock         unlimited
+
+EOF
+
+
 #centos7.9
 sudo sed -i 's/4096/90000/g' /etc/security/limits.d/20-nproc.conf
 
@@ -491,7 +682,7 @@ GET _nodes/stats/process?filter_path=**.max_file_descriptors
 
 
 
-### 二、安装es---centos7.9
+### 二、安装es---centos7.7
 
 #### 1、规划
 
@@ -500,9 +691,9 @@ GET _nodes/stats/process?filter_path=**.max_file_descriptors
 ```
 vm: 16核/32G 
 
-OS: oracle Linux 7.9(5.4.17-2011.6.2.el7uek.x86_64)
+OS: OS: Kylin Linux Advanced Server V10 (SP2 / Sword)(4.19.90-25.48.v2101.ky10.x86_64)
 
-磁盘LVM管理，挂载第二块磁盘1T，/data为最大分区
+磁盘LVM管理，挂载第二块磁盘500G，/为最大分区
 
 /opt/elasticsearch为程序目录
 /data/data为数据目录
@@ -520,13 +711,13 @@ OS: oracle Linux 7.9(5.4.17-2011.6.2.el7uek.x86_64)
 
 #最少三台，只允许一台掉线
 
-| 序号 |    IP地址     |       主机名       |    角色     | 备注 |
-| :--: | :-----------: | :----------------: | :---------: | :--: |
-|  1   | 172.18.13.112 |   k8s-mysql-ole    | master,data |      |
-|  2   | 172.18.13.117 | k8s-mysql-ole-117  | master,data |      |
-|  3   | 172.18.13.120 | k8s-mysql-ole-test | master,data |      |
-|  4   |               |                    |   ingest    |      |
-|  5   |               |                    |   ingest    |      |
+| 序号 |    IP地址     | 主机名 |    角色     | 备注 |
+| :--: | :-----------: | :----: | :---------: | :--: |
+|  1   | 222.24.203.42 |  es01  | master,data |      |
+|  2   | 222.24.203.43 |  es02  | master,data |      |
+|  3   | 222.24.203.44 |  es03  | master,data |      |
+|  4   |               |        |   ingest    |      |
+|  5   |               |        |   ingest    |      |
 
 
 
@@ -559,17 +750,45 @@ https://www.elastic.co/downloads/elasticsearch
 
 #根据服务器OS不同，下载相关压缩包，此处为linux X86_64
 
-#8.13.3
+#7.7.1
 su - elasticsearch
 
 cd /opt/soft
 
-wget https://artifacts.elastic.co/downloads/elasticsearch/elasticsearch-8.13.3-linux-x86_64.tar.gz
+wget https://artifacts.elastic.co/downloads/elasticsearch/elasticsearch-7.7.1-linux-x86_64.tar.gz
 
-tar -zxvf elasticsearch-8.13.3-linux-x86_64.tar.gz -C /opt/elasticsearch --strip-components=1
+tar -zxvf elasticsearch-7.7.1-linux-x86_64.tar.gz -C /opt/elasticsearch --strip-components=1
 ```
 
 #### 3、配置环境变量
+
+#卸载系统自带的openjdk
+
+```bash
+rpm -qa|grep java
+yum remove java*
+
+rpm -qa|grep java
+```
+
+#logs
+
+```bash
+[root@es02 ~]# rpm -qa|grep java
+javapackages-filesystem-5.3.0-2.ky10.noarch
+tzdata-java-2020a-8.p03.ky10.noarch
+java-1.8.0-openjdk-1.8.0.452.b09-1.p01.ky10.x86_64
+java-11-openjdk-11.0.27.6-1.p01.ky10.x86_64
+java-1.8.0-openjdk-headless-1.8.0.452.b09-1.p01.ky10.x86_64
+javapackages-tools-5.3.0-2.ky10.noarch
+java-11-openjdk-headless-11.0.27.6-1.p01.ky10.x86_64
+[root@es02 ~]# yum remove java*
+
+[root@es02 ~]# rpm -qa|grep java
+
+```
+
+
 
 #采用es内置的jdk
 
@@ -586,6 +805,15 @@ EOF
 source /etc/profile
 
 java -version
+
+
+[root@es02 ~]# which java
+/opt/elasticsearch/jdk/bin/java
+[root@es02 ~]# java -version
+openjdk version "14.0.1" 2020-04-14
+OpenJDK Runtime Environment AdoptOpenJDK (build 14.0.1+7)
+OpenJDK 64-Bit Server VM AdoptOpenJDK (build 14.0.1+7, mixed mode, sharing)
+[root@es02 ~]#
 ```
 
 
@@ -610,7 +838,7 @@ https://www.elastic.co/guide/en/elasticsearch/reference/current/settings.html
 
 #elasticsearch.yml
 ```yaml
-cluster.name: supwisdom
+cluster.name: nwpu-newes
 #根据每台节点进行修改
 node.name: node-1
 path.data: /data/data
@@ -620,9 +848,9 @@ bootstrap.memory_lock: true
 #network.host: 0.0.0.0
 #network.host: "_en0:ipv4_"
 #network.host: "_en0:ipv6_"
-network.host: 172.18.13.112
+network.host: 222.24.203.42
 http.port: 9200
-discovery.seed_hosts: ["k8s-mysql-ole", "k8s-mysql-ole-117", "k8s-mysql-ole-test"]
+discovery.seed_hosts: ["es01", "es02", "es03"]
 cluster.initial_master_nodes: ["node-1", "node-2", "node-3"]
 action.destructive_requires_name: true
 thread_pool.search.queue_size: 8000
@@ -658,7 +886,7 @@ thread_pool.get.queue_size: 5000
 thread_pool.write.queue_size: 20000
 
 # 用于 count/search/suggest 等操作的搜索线程池（queue_size默认为1000）
-thread_pool.search.queue_size: 5000
+#thread_pool.search.queue_size: 8000
 ```
 
 
@@ -672,6 +900,10 @@ The cluster shard limit defaults to 1000 shards per non-frozen data node for nor
 
 
 #JVM参数
+
+----------------------
+
+#13.3版本需要单独建文件
 
 #默认不修改
 
@@ -704,63 +936,221 @@ EOF
 
 
 
+--------------------------
+
+#7.7.1
+
+#直接修改jvm.options
+
+```bash
+[elasticsearch@es01 config]$ cat jvm.options|grep -v ^#|grep -v ^$
+-Xms15g
+-Xmx15g
+8-13:-XX:+UseConcMarkSweepGC
+8-13:-XX:CMSInitiatingOccupancyFraction=75
+8-13:-XX:+UseCMSInitiatingOccupancyOnly
+14-:-XX:+UseG1GC
+14-:-XX:G1ReservePercent=25
+14-:-XX:InitiatingHeapOccupancyPercent=30
+-Djava.io.tmpdir=${ES_TMPDIR}
+-XX:+HeapDumpOnOutOfMemoryError
+-XX:HeapDumpPath=/data/data/
+-XX:ErrorFile=logs/hs_err_pid%p.log
+8:-XX:+PrintGCDetails
+8:-XX:+PrintGCDateStamps
+8:-XX:+PrintTenuringDistribution
+8:-XX:+PrintGCApplicationStoppedTime
+8:-Xloggc:logs/gc.log
+8:-XX:+UseGCLogFileRotation
+8:-XX:NumberOfGCLogFiles=32
+8:-XX:GCLogFileSize=64m
+9-:-Xlog:gc*,gc+age=trace,safepoint:file=logs/gc.log:utctime,pid,tags:filecount=32,filesize=64m
+```
 
 
-##### 1) k8s-mysql-ole
+
+
+
+##### 1) es01
 
 #elasticsearch.yml
 
 ```yaml
-cluster.name: supwisdom
+cluster.name: nwpu-newes
 node.name: node-1
 path.data: /data/data
 path.logs: /data/log
 bootstrap.memory_lock: true
-network.host: 172.18.13.112
+network.host: 222.24.203.42
 http.port: 9200
-discovery.seed_hosts: ["k8s-mysql-ole", "k8s-mysql-ole-117", "k8s-mysql-ole-test"]
+discovery.seed_hosts: ["es01", "es02", "es03"]
 cluster.initial_master_nodes: ["node-1", "node-2", "node-3"]
 action.destructive_requires_name: true
 thread_pool.search.queue_size: 8000
+http.max_content_length: 2000mb
+script.max_size_in_bytes: 10000000
+script.max_compilations_rate: 60000/1m
+indices.memory.index_buffer_size: 15%
+indices.memory.min_index_buffer_size: 96mb
+thread_pool.get.queue_size: 5000
+thread_pool.write.queue_size: 20000
+```
+
+#最终配置文件
+
+#初始化后，需注释掉`cluster.initial_master_nodes: ["node-1", "node-2", "node-3"]`
+
+```yaml
+[root@es01 config]# cat elasticsearch.yml |grep -v ^#|grep -v ^$
+cluster.name: nwpu-newes
+node.name: node-1
+path.data: /data/data
+path.logs: /data/log
+bootstrap.memory_lock: true
+network.host: 222.24.203.42
+http.port: 9200
+discovery.seed_hosts: ["es01", "es02", "es03"]
+action.destructive_requires_name: true
+thread_pool.search.queue_size: 8000
+http.max_content_length: 2000mb
+script.max_size_in_bytes: 10000000
+script.max_compilations_rate: 60000/1m
+indices.memory.index_buffer_size: 15%
+indices.memory.min_index_buffer_size: 96mb
+thread_pool.get.queue_size: 5000
+thread_pool.write.queue_size: 20000
+path.repo: ["/snp"]
+xpack.security.enabled: true
+xpack.security.transport.ssl.enabled: true
+xpack.security.transport.ssl.verification_mode: certificate
+xpack.security.transport.ssl.client_authentication: required
+xpack.security.transport.ssl.keystore.path: elastic-certificates.p12
+xpack.security.transport.ssl.truststore.path: elastic-certificates.p12
+xpack.security.http.ssl:
+  enabled: true
+  keystore.path: http.p12
 ```
 
 
 
-##### 2) k8s-mysql-ole-117
+##### 2) es02
 
 #elasticsearch.yml
 ```yaml
-cluster.name: supwisdom
+cluster.name: nwpu-newes
 node.name: node-2
 path.data: /data/data
 path.logs: /data/log
 bootstrap.memory_lock: true
-network.host: 172.18.13.117
+network.host: 222.24.203.43
 http.port: 9200
-discovery.seed_hosts: ["k8s-mysql-ole", "k8s-mysql-ole-117", "k8s-mysql-ole-test"]
+discovery.seed_hosts: ["es01", "es02", "es03"]
 cluster.initial_master_nodes: ["node-1", "node-2", "node-3"]
 action.destructive_requires_name: true
 thread_pool.search.queue_size: 8000
+http.max_content_length: 2000mb
+script.max_size_in_bytes: 10000000
+script.max_compilations_rate: 60000/1m
+indices.memory.index_buffer_size: 15%
+indices.memory.min_index_buffer_size: 96mb
+thread_pool.get.queue_size: 5000
+thread_pool.write.queue_size: 20000
+```
+
+#最终配置文件
+
+#初始化后，需注释掉`cluster.initial_master_nodes: ["node-1", "node-2", "node-3"]`
+
+```yaml
+[root@es02 config]# cat elasticsearch.yml |grep -v ^#|grep -v ^$
+cluster.name: nwpu-newes
+node.name: node-2
+path.data: /data/data
+path.logs: /data/log
+bootstrap.memory_lock: true
+network.host: 222.24.203.43
+http.port: 9200
+discovery.seed_hosts: ["es01", "es02", "es03"]
+action.destructive_requires_name: true
+thread_pool.search.queue_size: 8000
+http.max_content_length: 2000mb
+script.max_size_in_bytes: 10000000
+script.max_compilations_rate: 60000/1m
+indices.memory.index_buffer_size: 15%
+indices.memory.min_index_buffer_size: 96mb
+thread_pool.get.queue_size: 5000
+thread_pool.write.queue_size: 20000
+path.repo: ["/snp"]
+xpack.security.enabled: true
+xpack.security.transport.ssl.enabled: true
+xpack.security.transport.ssl.verification_mode: certificate
+xpack.security.transport.ssl.client_authentication: required
+xpack.security.transport.ssl.keystore.path: elastic-certificates.p12
+xpack.security.transport.ssl.truststore.path: elastic-certificates.p12
+xpack.security.http.ssl:
+  enabled: true
+  keystore.path: http.p12
 ```
 
 
 
-##### 3) k8s-mysql-ole-test
+##### 3) es03
 
 #elasticsearch.yml
 ```yaml
-cluster.name: supwisdom
+cluster.name: nwpu-newes
 node.name: node-3
 path.data: /data/data
 path.logs: /data/log
 bootstrap.memory_lock: true
-network.host: 172.18.13.120
+network.host: 222.24.203.44
 http.port: 9200
-discovery.seed_hosts: ["k8s-mysql-ole", "k8s-mysql-ole-117", "k8s-mysql-ole-test"]
+discovery.seed_hosts: ["es01", "es02", "es03"]
 cluster.initial_master_nodes: ["node-1", "node-2", "node-3"]
 action.destructive_requires_name: true
 thread_pool.search.queue_size: 8000
+http.max_content_length: 2000mb
+script.max_size_in_bytes: 10000000
+script.max_compilations_rate: 60000/1m
+indices.memory.index_buffer_size: 15%
+indices.memory.min_index_buffer_size: 96mb
+thread_pool.get.queue_size: 5000
+thread_pool.write.queue_size: 20000
+```
 
+#最终配置文件
+
+#初始化后，需注释掉`cluster.initial_master_nodes: ["node-1", "node-2", "node-3"]`
+
+```yaml
+[root@es03 config]# cat elasticsearch.yml |grep -v ^#|grep -v ^$
+cluster.name: nwpu-newes
+node.name: node-3
+path.data: /data/data
+path.logs: /data/log
+bootstrap.memory_lock: true
+network.host: 222.24.203.44
+http.port: 9200
+discovery.seed_hosts: ["es01", "es02", "es03"]
+action.destructive_requires_name: true
+thread_pool.search.queue_size: 8000
+http.max_content_length: 2000mb
+script.max_size_in_bytes: 10000000
+script.max_compilations_rate: 60000/1m
+indices.memory.index_buffer_size: 15%
+indices.memory.min_index_buffer_size: 96mb
+thread_pool.get.queue_size: 5000
+thread_pool.write.queue_size: 20000
+path.repo: ["/snp"]
+xpack.security.enabled: true
+xpack.security.transport.ssl.enabled: true
+xpack.security.transport.ssl.verification_mode: certificate
+xpack.security.transport.ssl.client_authentication: required
+xpack.security.transport.ssl.keystore.path: elastic-certificates.p12
+xpack.security.transport.ssl.truststore.path: elastic-certificates.p12
+xpack.security.http.ssl:
+  enabled: true
+  keystore.path: http.p12
 ```
 
 
@@ -769,14 +1159,16 @@ thread_pool.search.queue_size: 8000
 
 ```bash
 #启动
+su - elasticsearch
 elasticsearch -d
-
-#开机自启
-systemctl start elasticsearch
-systemctl status elasticsearch
 
 #关闭
 ps -ef | grep elasticsearch|grep -vE "grep|controller" |awk '{print $2}'|xargs kill -9
+
+#开机自启
+su - root
+systemctl start elasticsearch
+systemctl status elasticsearch
 ```
 
 
@@ -785,7 +1177,7 @@ ps -ef | grep elasticsearch|grep -vE "grep|controller" |awk '{print $2}'|xargs k
 
 ```bash
 #重启前
-#curl -H "Content-Type: application/json" -XPUT 172.18.13.112:9200/_cluster/settings -d '{"transient":{"cluster.routing.allocation.disable_allocation":true}}'
+#curl -H "Content-Type: application/json" -XPUT 222.24.203.42:9200/_cluster/settings -d '{"transient":{"cluster.routing.allocation.disable_allocation":true}}'
 
 
 #重启后
@@ -797,27 +1189,27 @@ ps -ef | grep elasticsearch|grep -vE "grep|controller" |awk '{print $2}'|xargs k
 #### 6、访问
 
 ```bash
-http://172.18.13.112:9200/_nodes/stats
+http://222.24.203.42:9200/_nodes/stats
 
-http://172.18.13.117:9200/_nodes/stats
+http://222.24.203.43:9200/_nodes/stats
 
-http://172.18.13.120:9200/_nodes/stats
+http://222.24.203.44:9200/_nodes/stats
 ```
 
 #### 7、安全配置，开启xpack并配置
 
-#官网地址
+#官网地址https://www.elastic.co/guide/en/elasticsearch/reference/7.7/ssl-tls.html
 
-```html
-https://www.elastic.co/guide/en/elasticsearch/reference/8.13/manually-configure-security.html
-```
-
-##### 7.1、创建 SSL Elastic 证书
+##### 7.1、创建 SSL Elastic 证书---10年证书
 
 #默认生成证书位置在/opt/elasticsearch中
 
 ```bash
-[elasticsearch@k8s-mysql-ole ssl]$ elasticsearch-certutil ca
+[elasticsearch@es01 ~]$ elasticsearch-certutil --help
+
+[elasticsearch@es01 ~]$ elasticsearch-certutil ca --help
+
+[elasticsearch@es01 ~]$ elasticsearch-certutil ca --day 3650
 warning: ignoring JAVA_HOME=/opt/elasticsearch/jdk; using bundled JDK
 This tool assists you in the generation of X.509 certificates and certificate
 signing requests for use with SSL/TLS in the Elastic stack.
@@ -839,12 +1231,13 @@ be a zip file containing individual files for the CA certificate and private key
 Please enter the desired output file [elastic-stack-ca.p12]: 
 Enter password for elastic-stack-ca.p12 : 
 
-[elasticsearch@k8s-mysql-ole ssl]$ cd /opt/elasticsearch/
-[elasticsearch@k8s-mysql-ole elasticsearch]$ ls
-bin  config  elastic-stack-ca.p12  jdk  lib  LICENSE.txt  ll -rth  logs  modules  NOTICE.txt  plugins  README.asciidoc
+[elasticsearch@es01 ~]$ cd /opt/elasticsearch/
+[elasticsearch@es01 elasticsearch]$ ls
+bin  config  elastic-stack-ca.p12  jdk  lib  LICENSE.txt  logs  modules  NOTICE.txt  plugins  README.asciidoc
 
 
-[elasticsearch@k8s-mysql-ole elasticsearch]$ elasticsearch-certutil cert --ca elastic-stack-ca.p12 
+[elasticsearch@es01 elasticsearch]$ elasticsearch-certutil cert --ca elastic-stack-ca.p12 --days 3650
+
 warning: ignoring JAVA_HOME=/opt/elasticsearch/jdk; using bundled JDK
 This tool assists you in the generation of X.509 certificates and certificate
 signing requests for use with SSL/TLS in the Elastic stack.
@@ -891,7 +1284,7 @@ If you specify any of the following options:
 then the output will be be a zip file containing individual certificate/key files
 
 Enter password for CA (elastic-stack-ca.p12) : 
-Please enter the desired output file [elastic-certificates.p12]: elastic-certificates.p12
+Please enter the desired output file [elastic-certificates.p12]:
 Enter password for elastic-certificates.p12 : 
 
 Certificates written to /opt/elasticsearch/elastic-certificates.p12
@@ -907,7 +1300,7 @@ For client applications, you may only need to copy the CA certificate and
 configure the client to trust this certificate.
 
 
-[elasticsearch@k8s-mysql-ole elasticsearch]$ ls
+[elasticsearch@es01 elasticsearch]$ ls
 bin  config  elastic-certificates.p12  elastic-stack-ca.p12  jdk  lib  LICENSE.txt  ll -rth  logs  modules  NOTICE.txt  plugins  README.asciidoc
 
 ```
@@ -915,14 +1308,17 @@ bin  config  elastic-certificates.p12  elastic-stack-ca.p12  jdk  lib  LICENSE.t
 ##### 7.2、将 SSL 证书复制到所有节点
 
 ```bash
-  cd /opt/elasticsearch
+ cd /opt/elasticsearch
  #本机
  cp elastic-certificates.p12 config/
 
  #其它机器
- scp elastic-certificates.p12 172.18.13.117:/opt/elasticsearch/config/
+ scp elastic-certificates.p12 es02:/opt/elasticsearch/config/
  
- scp elastic-certificates.p12 172.18.13.120:/opt/elasticsearch/config/
+ scp elastic-certificates.p12 es03:/opt/elasticsearch/config/
+ 
+ #每台节点都确认下证书的时间
+ ll -rth /opt/elasticsearch/config/
 ```
 
 
@@ -964,7 +1360,7 @@ systemctl status elasticsearch
 #其中一台节点执行即可
 
 ```bash
-[elasticsearch@k8s-mysql-ole log]$ elasticsearch-setup-passwords auto
+[elasticsearch@es01 log]$ elasticsearch-setup-passwords auto
 warning: ignoring JAVA_HOME=/opt/elasticsearch/jdk; using bundled JDK
 ******************************************************************************
 Note: The 'elasticsearch-setup-passwords' tool has been deprecated. This       command will be removed in a future release.
@@ -976,26 +1372,22 @@ Please confirm that you would like to continue [y/N]y
 
 
 Changed password for user apm_system
-PASSWORD apm_system = OV0nf9EkNv6rWYgguTf7
-
-Changed password for user kibana_system
-PASSWORD kibana_system = A4uzNbulbspWXUdR2Sdd
+PASSWORD apm_system = 5Whmw8qyR0eWZTl5BG5L
 
 Changed password for user kibana
-PASSWORD kibana = A4uzNbulbspWXUdR2Sdd
+PASSWORD kibana = YNNy1i1y03a4TRqlH32w
 
 Changed password for user logstash_system
-PASSWORD logstash_system = ov0NI4rvOxIMVch6I3uF
+PASSWORD logstash_system = OfZ4emGDQj2tZjbuQbRl
 
 Changed password for user beats_system
-PASSWORD beats_system = O6CBZ2Xcmn1aHlIa0sgm
+PASSWORD beats_system = kUlAdVNIgztrK78JdbzP
 
 Changed password for user remote_monitoring_user
-PASSWORD remote_monitoring_user = dvN2f5g9vv3tVdv8MiJK
+PASSWORD remote_monitoring_user = h1tZbCdYyucV8Cy25QCB
 
 Changed password for user elastic
-PASSWORD elastic = PLq3dAEaTXI4pnQ27hWL
-
+PASSWORD elastic = XIlreSzGM51dH44yuxo1
 ```
 
 
@@ -1007,43 +1399,40 @@ PASSWORD elastic = PLq3dAEaTXI4pnQ27hWL
 ###### 7.6.1、网页访问
 
 ```
-http://172.18.13.112:9200/_ssl/certificates
+http://222.24.203.42:9200/_ssl/certificates
 ```
 
 ```yaml
-// http://172.18.13.112:9200/_ssl/certificates
+// http://222.24.203.42:9200/_ssl/certificates
 
 [
-  {
-    "path": "elastic-certificates.p12",
-    "format": "PKCS12",
-    "alias": "ca",
-    "subject_dn": "CN=Elastic Certificate Tool Autogenerated CA",
-    "serial_number": "7aa551cbb478e915c077f0d5e299cde174f347ed",
-    "has_private_key": false,
-    "expiry": "2027-07-19T03:19:19.000Z",
-    "issuer": "CN=Elastic Certificate Tool Autogenerated CA"
-  },
-  {
-    "path": "elastic-certificates.p12",
-    "format": "PKCS12",
-    "alias": "instance",
-    "subject_dn": "CN=Elastic Certificate Tool Autogenerated CA",
-    "serial_number": "7aa551cbb478e915c077f0d5e299cde174f347ed",
-    "has_private_key": false,
-    "expiry": "2027-07-19T03:19:19.000Z",
-    "issuer": "CN=Elastic Certificate Tool Autogenerated CA"
-  },
-  {
-    "path": "elastic-certificates.p12",
-    "format": "PKCS12",
-    "alias": "instance",
-    "subject_dn": "CN=instance",
-    "serial_number": "9ae4dc15783522ef5bd2977a211911410f5dfeb5",
-    "has_private_key": true,
-    "expiry": "2027-07-19T03:22:41.000Z",
-    "issuer": "CN=Elastic Certificate Tool Autogenerated CA"
-  }
+   {
+      "alias": "instance",
+      "expiry": "2035-08-04T03:34:58.000Z",
+      "format": "PKCS12",
+      "has_private_key": true,
+      "path": "elastic-certificates.p12",
+      "serial_number": "38c3a219bf66fed6f4420f1b6a826585d6ee75e8",
+      "subject_dn": "CN=instance"
+   },
+   {
+      "alias": "instance",
+      "expiry": "2035-08-04T03:27:12.000Z",
+      "format": "PKCS12",
+      "has_private_key": false,
+      "path": "elastic-certificates.p12",
+      "serial_number": "43f433b5bb3258c4bcce2f45b31de8b28164808e",
+      "subject_dn": "CN=Elastic Certificate Tool Autogenerated CA"
+   },
+   {
+      "alias": "ca",
+      "expiry": "2035-08-04T03:27:12.000Z",
+      "format": "PKCS12",
+      "has_private_key": false,
+      "path": "elastic-certificates.p12",
+      "serial_number": "43f433b5bb3258c4bcce2f45b31de8b28164808e",
+      "subject_dn": "CN=Elastic Certificate Tool Autogenerated CA"
+   }
 ]
 ```
 
@@ -1052,43 +1441,39 @@ http://172.18.13.112:9200/_ssl/certificates
 ###### 7.6.2、命令行访问
 
 ```bash
-#curl -u elastic:PLq3dAEaTXI4pnQ27hWL  http://172.18.13.112:9200/_ssl/certificates
+#curl -u elastic:XIlreSzGM51dH44yuxo1  http://222.24.203.42:9200/_ssl/certificates
 #yum install -y jq
 
-[root@k8s-mysql-ole-test home]# curl -s -u elastic:PLq3dAEaTXI4pnQ27hWL  http://172.18.13.112:9200/_ssl/certificates | jq '.'
+[root@es01-test home]# curl -s -u elastic:PLq3dAEaTXI4pnQ27hWL  http://222.24.203.42:9200/_ssl/certificates | jq '.'
 [
-  {
-    "path": "elastic-certificates.p12",
-    "format": "PKCS12",
-    "alias": "ca",
-    "subject_dn": "CN=Elastic Certificate Tool Autogenerated CA",
-    "serial_number": "7aa551cbb478e915c077f0d5e299cde174f347ed",
-    "has_private_key": false,
-    "expiry": "2027-07-19T03:19:19.000Z",
-    "issuer": "CN=Elastic Certificate Tool Autogenerated CA"
-  },
-  {
-    "path": "elastic-certificates.p12",
-    "format": "PKCS12",
-    "alias": "instance",
-    "subject_dn": "CN=Elastic Certificate Tool Autogenerated CA",
-    "serial_number": "7aa551cbb478e915c077f0d5e299cde174f347ed",
-    "has_private_key": false,
-    "expiry": "2027-07-19T03:19:19.000Z",
-    "issuer": "CN=Elastic Certificate Tool Autogenerated CA"
-  },
   {
     "path": "elastic-certificates.p12",
     "format": "PKCS12",
     "alias": "instance",
     "subject_dn": "CN=instance",
-    "serial_number": "9ae4dc15783522ef5bd2977a211911410f5dfeb5",
+    "serial_number": "38c3a219bf66fed6f4420f1b6a826585d6ee75e8",
     "has_private_key": true,
-    "expiry": "2027-07-19T03:22:41.000Z",
-    "issuer": "CN=Elastic Certificate Tool Autogenerated CA"
+    "expiry": "2035-08-04T03:34:58.000Z"
+  },
+  {
+    "path": "elastic-certificates.p12",
+    "format": "PKCS12",
+    "alias": "instance",
+    "subject_dn": "CN=Elastic Certificate Tool Autogenerated CA",
+    "serial_number": "43f433b5bb3258c4bcce2f45b31de8b28164808e",
+    "has_private_key": false,
+    "expiry": "2035-08-04T03:27:12.000Z"
+  },
+  {
+    "path": "elastic-certificates.p12",
+    "format": "PKCS12",
+    "alias": "ca",
+    "subject_dn": "CN=Elastic Certificate Tool Autogenerated CA",
+    "serial_number": "43f433b5bb3258c4bcce2f45b31de8b28164808e",
+    "has_private_key": false,
+    "expiry": "2035-08-04T03:27:12.000Z"
   }
 ]
-
 ```
 
 
@@ -1124,7 +1509,7 @@ systemctl restart kibana
 
 
 
-##### 7.7、更换为10年证书
+##### 7.7、证书过期后，再次更换为10年证书
 
 #先mv下以前生成的证书
 
@@ -1132,17 +1517,17 @@ systemctl restart kibana
 su - elasticsearch
 cd /opt/elasticsearch
 
-[elasticsearch@k8s-mysql-ole elasticsearch]$ ls
+[elasticsearch@es01 elasticsearch]$ ls
 bin  config  elastic-certificates.p12  elastic-stack-ca.p12  jdk  lib  LICENSE.txt  ll -rth  logs  modules  NOTICE.txt  plugins  README.asciidoc
-[elasticsearch@k8s-mysql-ole elasticsearch]$ mv elastic-certificates.p12 elastic-certificates.p12.old
-[elasticsearch@k8s-mysql-ole elasticsearch]$ mv elastic-stack-ca.p12 elastic-stack-ca.p12.old
-[elasticsearch@k8s-mysql-ole elasticsearch]$ 
+[elasticsearch@es01 elasticsearch]$ mv elastic-certificates.p12 elastic-certificates.p12.old
+[elasticsearch@es01 elasticsearch]$ mv elastic-stack-ca.p12 elastic-stack-ca.p12.old
+[elasticsearch@es01 elasticsearch]$ 
 ```
 
 #生成新的证书
 
 ```bash
-[elasticsearch@k8s-mysql-ole elasticsearch]$ elasticsearch-certutil ca --day 3650
+[elasticsearch@es01 elasticsearch]$ elasticsearch-certutil ca --day 3650
 warning: ignoring JAVA_HOME=/opt/elasticsearch/jdk; using bundled JDK
 This tool assists you in the generation of X.509 certificates and certificate
 signing requests for use with SSL/TLS in the Elastic stack.
@@ -1163,13 +1548,13 @@ be a zip file containing individual files for the CA certificate and private key
 
 Please enter the desired output file [elastic-stack-ca.p12]: 
 Enter password for elastic-stack-ca.p12 : 
-[elasticsearch@k8s-mysql-ole elasticsearch]$ ls
+[elasticsearch@es01 elasticsearch]$ ls
 bin     elastic-certificates.p12.old  elastic-stack-ca.p12.old  lib          ll -rth  modules     plugins
 config  elastic-stack-ca.p12          jdk                       LICENSE.txt  logs     NOTICE.txt  README.asciidoc
-[elasticsearch@k8s-mysql-ole elasticsearch]$ 
+[elasticsearch@es01 elasticsearch]$ 
 
 
-[elasticsearch@k8s-mysql-ole elasticsearch]$ elasticsearch-certutil cert --ca elastic-stack-ca.p12 --days 3650
+[elasticsearch@es01 elasticsearch]$ elasticsearch-certutil cert --ca elastic-stack-ca.p12 --days 3650
 warning: ignoring JAVA_HOME=/opt/elasticsearch/jdk; using bundled JDK
 This tool assists you in the generation of X.509 certificates and certificate
 signing requests for use with SSL/TLS in the Elastic stack.
@@ -1230,7 +1615,7 @@ and then follow the SSL configuration instructions in the product guide.
 
 For client applications, you may only need to copy the CA certificate and
 configure the client to trust this certificate.
-[elasticsearch@k8s-mysql-ole elasticsearch]$ ls
+[elasticsearch@es01 elasticsearch]$ ls
 bin     elastic-certificates.p12      elastic-stack-ca.p12      jdk  LICENSE.txt  logs     NOTICE.txt  README.asciidoc
 config  elastic-certificates.p12.old  elastic-stack-ca.p12.old  lib  ll -rth      modules  plugins
 
@@ -1241,9 +1626,9 @@ config  elastic-certificates.p12.old  elastic-stack-ca.p12.old  lib  ll -rth    
 ```bash
 cp elastic-certificates.p12 /opt/elasticsearch/config/
 
-scp elastic-certificates.p12 172.18.13.117:/opt/elasticsearch/config/
+scp elastic-certificates.p12 es02:/opt/elasticsearch/config/
  
-scp elastic-certificates.p12 172.18.13.120:/opt/elasticsearch/config/
+scp elastic-certificates.p12 es03:/opt/elasticsearch/config/
  
 #每台节点都确认下证书的时间
 ll -rth /opt/elasticsearch/config/
@@ -1252,7 +1637,7 @@ ll -rth /opt/elasticsearch/config/
 #不需要重启es，新证书立即生效
 
 ```bash
-# curl -s -u elastic:PLq3dAEaTXI4pnQ27hWL  http://172.18.13.112:9200/_ssl/certificates | jq '.'
+# curl -s -u elastic:PLq3dAEaTXI4pnQ27hWL  http://222.24.203.42:9200/_ssl/certificates | jq '.'
 [
   {
     "path": "elastic-certificates.p12",
@@ -1313,13 +1698,13 @@ What filename should be used for the output zip file? ：输出的压缩文件�
 #logs
 
 ```bash
-[elasticsearch@k8s-mysql-ole ~]$ cd /opt/elasticsearch/
-[elasticsearch@k8s-mysql-ole elasticsearch]$ ls
+[elasticsearch@es01 ~]$ cd /opt/elasticsearch/
+[elasticsearch@es01 elasticsearch]$ ls
 bin     elastic-certificates.p12      elastic-stack-ca.p12      jdk  LICENSE.txt  logs     NOTICE.txt  README.asciidoc
 config  elastic-certificates.p12.old  elastic-stack-ca.p12.old  lib  ll -rth      modules  plugins
 
 
-[elasticsearch@k8s-mysql-ole elasticsearch]$ elasticsearch-certutil --help
+[elasticsearch@es01 elasticsearch]$ elasticsearch-certutil --help
 warning: ignoring JAVA_HOME=/opt/elasticsearch/jdk; using bundled JDK
 Simplifies certificate creation for use with the Elastic Stack
 
@@ -1341,7 +1726,7 @@ Option             Description
 -v, --verbose      Show verbose output
 
 
-[elasticsearch@k8s-mysql-ole elasticsearch]$ elasticsearch-certutil http
+[elasticsearch@es01 elasticsearch]$ elasticsearch-certutil http
 warning: ignoring JAVA_HOME=/opt/elasticsearch/jdk; using bundled JDK
 
 ## Elasticsearch HTTP Certificate Utility
@@ -1502,27 +1887,25 @@ What filename should be used for the output zip file? [/opt/elasticsearch/elasti
 Zip file written to /opt/elasticsearch/elasticsearch-ssl-http.zip
 
 
-[elasticsearch@k8s-mysql-ole elasticsearch]$ ll -rth
-total 2.3M
--rw-r--r--  1 elasticsearch elasticsearch 8.9K Apr 30 06:04 README.asciidoc
--rw-r--r--  1 elasticsearch elasticsearch 3.8K Apr 30 06:04 LICENSE.txt
--rw-r--r--  1 elasticsearch elasticsearch 2.2M Apr 30 06:06 NOTICE.txt
-drwxr-xr-x  5 elasticsearch elasticsearch 4.0K Apr 30 06:11 lib
-drwxr-xr-x  8 elasticsearch elasticsearch   96 Apr 30 06:11 jdk
-drwxr-xr-x  2 elasticsearch elasticsearch 4.0K Apr 30 06:11 bin
-drwxr-xr-x 81 elasticsearch elasticsearch 4.0K Apr 30 06:12 modules
-drwxr-xr-x  3 elasticsearch elasticsearch   16 May 11 17:16 plugins
--rw-rw-r--  1 elasticsearch elasticsearch    0 Jul 19 11:18 ll -rth
--rw-------  1 elasticsearch elasticsearch 2.7K Jul 19 11:19 elastic-stack-ca.p12.old
--rw-------  1 elasticsearch elasticsearch 3.6K Jul 19 11:22 elastic-certificates.p12.old
--rw-------  1 elasticsearch elasticsearch 2.7K Jul 19 12:41 elastic-stack-ca.p12
--rw-------  1 elasticsearch elasticsearch 3.6K Jul 19 12:42 elastic-certificates.p12
-drwxr-xr-x  3 elasticsearch elasticsearch 4.0K Jul 19 18:25 config
-drwxr-xr-x  2 elasticsearch elasticsearch 4.0K Jul 19 18:25 logs
--rw-------  1 elasticsearch elasticsearch 7.3K Jul 19 19:03 elasticsearch-ssl-http.zi
+[elasticsearch@es01 elasticsearch]$ ls -lrth
+total 576K
+-rw-r--r--  1 elasticsearch elasticsearch 8.0K May 29  2020 README.asciidoc
+-rw-r--r--  1 elasticsearch elasticsearch  14K May 29  2020 LICENSE.txt
+drwxr-xr-x  2 elasticsearch elasticsearch    6 May 29  2020 plugins
+-rw-r--r--  1 elasticsearch elasticsearch 523K May 29  2020 NOTICE.txt
+drwxr-xr-x  3 elasticsearch elasticsearch 4.0K May 29  2020 lib
+drwxr-xr-x  2 elasticsearch elasticsearch 4.0K May 29  2020 bin
+drwxr-xr-x  9 elasticsearch elasticsearch  107 May 29  2020 jdk
+drwxr-xr-x 45 elasticsearch elasticsearch 4.0K May 29  2020 modules
+-rw-------  1 elasticsearch elasticsearch 2.5K Aug  6 11:28 elastic-stack-ca.p12
+-rw-------  1 elasticsearch elasticsearch 3.4K Aug  6 11:35 elastic-certificates.p12
+drwxr-xr-x  3 elasticsearch elasticsearch  231 Aug  6 14:35 config
+drwxr-xr-x  2 elasticsearch elasticsearch  105 Aug  6 14:43 logs
+-rw-------  1 elasticsearch elasticsearch 7.2K Aug  6 15:14 elasticsearch-ssl-http.zip
+[elasticsearch@es01 elasticsearch]$
 
 
-[elasticsearch@k8s-mysql-ole elasticsearch]$ unzip elasticsearch-ssl-http.zip 
+[elasticsearch@es01 elasticsearch]$ unzip elasticsearch-ssl-http.zip 
 Archive:  elasticsearch-ssl-http.zip
    creating: elasticsearch/
   inflating: elasticsearch/README.txt  
@@ -1534,29 +1917,29 @@ Archive:  elasticsearch-ssl-http.zip
   inflating: kibana/sample-kibana.yml  
 
 
-[elasticsearch@k8s-mysql-ole elasticsearch]$ ll elasticsearch
+[elasticsearch@es01 elasticsearch]$ ll elasticsearch
 total 12
--rw-rw-r-- 1 elasticsearch elasticsearch 3604 Jul 19 19:03 http.p12
--rw-rw-r-- 1 elasticsearch elasticsearch 1098 Jul 19 19:03 README.txt
--rw-rw-r-- 1 elasticsearch elasticsearch  665 Jul 19 19:03 sample-elasticsearch.yml
-[elasticsearch@k8s-mysql-ole elasticsearch]$ ll kibana/
+-rw-r--r-- 1 elasticsearch elasticsearch 3435 Aug  6 15:14 http.p12
+-rw-r--r-- 1 elasticsearch elasticsearch 1098 Aug  6 15:14 README.txt
+-rw-r--r-- 1 elasticsearch elasticsearch  664 Aug  6 15:14 sample-elasticsearch.yml
+[elasticsearch@es01 elasticsearch]$ ll kibana/
 total 12
--rw-rw-r-- 1 elasticsearch elasticsearch 1200 Jul 19 19:03 elasticsearch-ca.pem
--rw-rw-r-- 1 elasticsearch elasticsearch 1306 Jul 19 19:03 README.txt
--rw-rw-r-- 1 elasticsearch elasticsearch 1057 Jul 19 19:03 sample-kibana.yml
-[elasticsearch@k8s-mysql-ole elasticsearch]$ 
+-rw-r--r-- 1 elasticsearch elasticsearch 1200 Aug  6 15:14 elasticsearch-ca.pem
+-rw-r--r-- 1 elasticsearch elasticsearch 1306 Aug  6 15:14 README.txt
+-rw-r--r-- 1 elasticsearch elasticsearch 1056 Aug  6 15:14 sample-kibana.yml
+[elasticsearch@es01 elasticsearch]$
 
 
-[elasticsearch@k8s-mysql-ole elasticsearch]$ cp elasticsearch/http.p12 /opt/elasticsearch/config/
+[elasticsearch@es01 elasticsearch]$ cp elasticsearch/http.p12 /opt/elasticsearch/config/
 
-[elasticsearch@k8s-mysql-ole elasticsearch]$ scp elasticsearch/http.p12 172.18.13.117:/opt/elasticsearch/config/
-elasticsearch@172.18.13.117's password: 
+[elasticsearch@es01 elasticsearch]$ scp elasticsearch/http.p12 es02:/opt/elasticsearch/config/
+elasticsearch@es02's password: 
 http.p12                                                                                                                   100% 3604     1.4MB/s   00:00  
 
-[elasticsearch@k8s-mysql-ole elasticsearch]$ scp elasticsearch/http.p12 172.18.13.120:/opt/elasticsearch/config/
-elasticsearch@172.18.13.120's password: 
+[elasticsearch@es01 elasticsearch]$ scp elasticsearch/http.p12 es03:/opt/elasticsearch/config/
+elasticsearch@es03's password: 
 http.p12                                                                                                                   100% 3604   948.2KB/s   00:00    
-[elasticsearch@k8s-mysql-ole elasticsearch]$ 
+[elasticsearch@es01 elasticsearch]$ 
 
 
 ```
@@ -1591,83 +1974,90 @@ systemctl status elasticsearch
 #通过命令行
 
 ```bash
-[root@k8s-mysql-ole-test ~]# curl -s -k -u elastic:PLq3dAEaTXI4pnQ27hWL  https://172.18.13.112:9200/_ssl/certificates|jq '.'
+[root@es01 ~]# curl -s -k -u elastic:XIlreSzGM51dH44yuxo1  https://222.24.203.42:9200/_ssl/certificates|jq '.'
 [
-  {
-    "path": "elastic-certificates.p12",
-    "format": "PKCS12",
-    "alias": "ca",
-    "subject_dn": "CN=Elastic Certificate Tool Autogenerated CA",
-    "serial_number": "9c43f6920f4739032c758d3bb2a3c9ab848edb7c",
-    "has_private_key": false,
-    "expiry": "2034-07-17T04:41:42.000Z",
-    "issuer": "CN=Elastic Certificate Tool Autogenerated CA"
-  },
-  {
-    "path": "elastic-certificates.p12",
-    "format": "PKCS12",
-    "alias": "instance",
-    "subject_dn": "CN=Elastic Certificate Tool Autogenerated CA",
-    "serial_number": "9c43f6920f4739032c758d3bb2a3c9ab848edb7c",
-    "has_private_key": false,
-    "expiry": "2034-07-17T04:41:42.000Z",
-    "issuer": "CN=Elastic Certificate Tool Autogenerated CA"
-  },
   {
     "path": "elastic-certificates.p12",
     "format": "PKCS12",
     "alias": "instance",
     "subject_dn": "CN=instance",
-    "serial_number": "9f66544d2c4adf5125a3c351dca471273b026cee",
+    "serial_number": "38c3a219bf66fed6f4420f1b6a826585d6ee75e8",
     "has_private_key": true,
-    "expiry": "2034-07-17T04:42:38.000Z",
-    "issuer": "CN=Elastic Certificate Tool Autogenerated CA"
-  },
-  {
-    "path": "http.p12",
-    "format": "PKCS12",
-    "alias": "ca",
-    "subject_dn": "CN=Elastic Certificate Tool Autogenerated CA",
-    "serial_number": "9c43f6920f4739032c758d3bb2a3c9ab848edb7c",
-    "has_private_key": false,
-    "expiry": "2034-07-17T04:41:42.000Z",
-    "issuer": "CN=Elastic Certificate Tool Autogenerated CA"
-  },
-  {
-    "path": "http.p12",
-    "format": "PKCS12",
-    "alias": "http",
-    "subject_dn": "CN=Elastic Certificate Tool Autogenerated CA",
-    "serial_number": "9c43f6920f4739032c758d3bb2a3c9ab848edb7c",
-    "has_private_key": false,
-    "expiry": "2034-07-17T04:41:42.000Z",
-    "issuer": "CN=Elastic Certificate Tool Autogenerated CA"
+    "expiry": "2035-08-04T03:34:58.000Z"
   },
   {
     "path": "http.p12",
     "format": "PKCS12",
     "alias": "http",
     "subject_dn": "CN=elasticsearch",
-    "serial_number": "fd6cfae2a0b9ed63a24f79768df433a9924abe31",
+    "serial_number": "7326c6fbafb53dade40e489a2e0d3263534d3ae2",
     "has_private_key": true,
-    "expiry": "2029-07-19T11:03:26.000Z",
-    "issuer": "CN=Elastic Certificate Tool Autogenerated CA"
+    "expiry": "2030-08-06T07:14:43.000Z"
+  },
+  {
+    "path": "elastic-certificates.p12",
+    "format": "PKCS12",
+    "alias": "instance",
+    "subject_dn": "CN=Elastic Certificate Tool Autogenerated CA",
+    "serial_number": "43f433b5bb3258c4bcce2f45b31de8b28164808e",
+    "has_private_key": false,
+    "expiry": "2035-08-04T03:27:12.000Z"
+  },
+  {
+    "path": "elastic-certificates.p12",
+    "format": "PKCS12",
+    "alias": "ca",
+    "subject_dn": "CN=Elastic Certificate Tool Autogenerated CA",
+    "serial_number": "43f433b5bb3258c4bcce2f45b31de8b28164808e",
+    "has_private_key": false,
+    "expiry": "2035-08-04T03:27:12.000Z"
+  },
+  {
+    "path": "http.p12",
+    "format": "PKCS12",
+    "alias": "http",
+    "subject_dn": "CN=Elastic Certificate Tool Autogenerated CA",
+    "serial_number": "43f433b5bb3258c4bcce2f45b31de8b28164808e",
+    "has_private_key": false,
+    "expiry": "2035-08-04T03:27:12.000Z"
   }
 ]
-
 ```
+
+
+
+#证书解释
+
+```bash
+#elastic-certificates.p12 - alias: instance
+用途：通常用于节点间（Transport Layer）通信加密和身份认证
+
+#http.p12 - alias: http
+用途：用于 HTTP 层（即对外 HTTPS 访问），加密客户端与集群之间的通信
+
+#elastic-certificates.p12 - alias: instance（CA证书）
+用途：这是 CA（证书颁发机构）证书，用于签发上述节点证书
+
+#elastic-certificates.p12 - alias: ca
+用途：同上，也是 CA 证书，只是别名不同
+
+#http.p12 - alias: http（CA证书）
+用途：同样是 CA 证书，存储在 http.p12 文件中，供 HTTP 层使用
+```
+
+
 
 ###### 7.8.5、配置kibana
 
 #将上面生成的kibana/elasticsearch-ca.pem证书拷贝到kibana的配置目录下
 
 ```bash
-[elasticsearch@k8s-mysql-ole elasticsearch]$ ll kibana
+[elasticsearch@es01 elasticsearch]$ ll kibana
 total 12
 -rw-rw-r-- 1 elasticsearch elasticsearch 1200 Jul 19 19:03 elasticsearch-ca.pem
 -rw-rw-r-- 1 elasticsearch elasticsearch 1306 Jul 19 19:03 README.txt
 -rw-rw-r-- 1 elasticsearch elasticsearch 1057 Jul 19 19:03 sample-kibana.yml
-[elasticsearch@k8s-mysql-ole elasticsearch]$ cp kibana/elasticsearch-ca.pem /opt/kibana/config/
+[elasticsearch@es01 elasticsearch]$ cp kibana/elasticsearch-ca.pem /opt/kibana/config/
 ```
 
 
@@ -1675,7 +2065,7 @@ total 12
 #修改kibana配置文件
 
 ```bash
-[elasticsearch@k8s-mysql-ole elasticsearch]$ vi /opt/kibana/config/kibana.yml
+[elasticsearch@es01 elasticsearch]$ vi /opt/kibana/config/kibana.yml
 #增加
 elasticsearch.ssl.certificateAuthorities: /opt/kibana/config/elasticsearch-ca.pem
 elasticsearch.ssl.verificationMode: certificate
@@ -1695,8 +2085,8 @@ systemctl restart kibana
 #logs
 
 ```bash
-[root@k8s-mysql-ole log]# systemctl restart kibana
-[root@k8s-mysql-ole log]# systemctl status kibana
+[root@es01 log]# systemctl restart kibana
+[root@es01 log]# systemctl status kibana
 ● kibana.service - kibana
    Loaded: loaded (/usr/lib/systemd/system/kibana.service; enabled; vendor preset: disabled)
    Active: active (running) since Fri 2024-07-19 19:19:21 CST; 6s ago
@@ -1704,10 +2094,10 @@ systemctl restart kibana
    CGroup: /system.slice/kibana.service
            └─27586 /opt/kibana/bin/../node/bin/node /opt/kibana/bin/../src/cli/dist
 
-Jul 19 19:19:21 k8s-mysql-ole systemd[1]: Started kibana.
-Jul 19 19:19:22 k8s-mysql-ole kibana[27586]: Kibana is currently running with legacy OpenSSL providers enabled! For details and instructions on h...-provider
-Jul 19 19:19:23 k8s-mysql-ole kibana[27586]: {"log.level":"info","@timestamp":"2024-07-19T11:19:23.123Z","log.logger":"elastic-apm-node","ecs.ver...,"timezon
-Jul 19 19:19:23 k8s-mysql-ole kibana[27586]: Native global console methods have been overridden in production environment.
+Jul 19 19:19:21 es01 systemd[1]: Started kibana.
+Jul 19 19:19:22 es01 kibana[27586]: Kibana is currently running with legacy OpenSSL providers enabled! For details and instructions on h...-provider
+Jul 19 19:19:23 es01 kibana[27586]: {"log.level":"info","@timestamp":"2024-07-19T11:19:23.123Z","log.logger":"elastic-apm-node","ecs.ver...,"timezon
+Jul 19 19:19:23 es01 kibana[27586]: Native global console methods have been overridden in production environment.
 Hint: Some lines were ellipsized, use -l to show in full.
 
 ```
@@ -1718,14 +2108,13 @@ Hint: Some lines were ellipsized, use -l to show in full.
 
 
 
-
-
 ### 三、安装kibana
 
 #官网
 
 ```
-https://www.elastic.co/guide/en/kibana/8.13/get-started.html
+#https://www.elastic.co/guide/en/kibana/8.13/get-started.html
+https://www.elastic.co/guide/en/kibana/7.17/get-started.html
 ```
 
 
@@ -1746,13 +2135,17 @@ chown -R elasticsearch:elasticsearch /opt/kibana
 
 #仅node-1节点安装即可
 
-```bas
+```bash
 su - elasticsearch
 cd /opt/soft
 
-wget https://artifacts.elastic.co/downloads/kibana/kibana-8.13.3-linux-x86_64.tar.gz
+#wget https://artifacts.elastic.co/downloads/kibana/kibana-8.13.3-linux-x86_64.tar.gz
+wget https://artifacts.elastic.co/downloads/kibana/kibana-7.7.1-linux-x86_64.tar.gz
 
-tar -zxvf kibana-8.13.3-linux-x86_64.tar.gz -C  /opt/kibana --strip-components=1
+tar -zxvf kibana-7.7.1-linux-x86_64.tar.gz -C  /opt/kibana --strip-components=1
+
+#将es http ssl证书拷贝过来
+cp /opt/elasticsearch/kibana/elasticsearch-ca.pem /opt/kibana/config/
 ```
 
 
@@ -1763,13 +2156,15 @@ tar -zxvf kibana-8.13.3-linux-x86_64.tar.gz -C  /opt/kibana --strip-components=1
 
 ```yaml
 #kibana绑定的IP地址
-server.host: "172.18.13.112"
+server.host: "222.24.203.42"
 
 #访问URL
-server.publicBaseUrl: "http://172.18.13.112:5601"
+#8.13版本参数，7.7.1没有该项参数
+#server.publicBaseUrl: "http://222.24.203.42:5601"
 
 #添加一个elasticsearch节点的IP即可
-elasticsearch.hosts: ["http://172.18.13.112:9200"]
+#elasticsearch.hosts: ["http://222.24.203.42:9200"]
+elasticsearch.hosts: ["http://222.24.203.42:9200","http://222.24.203.43:9200","http://222.24.203.44:9200"]
 
 #es超时设置Client request timeout
 elasticsearch.requestTimeout: 3000000
@@ -1780,6 +2175,8 @@ elasticsearch.requestTimeout: 3000000
 i18n.locale: "zh-CN"
 
 #log
+-----------
+#8.13
 logging.appenders.default:
   type: rolling-file
   fileName: /data/log/kibana.log
@@ -1791,7 +2188,87 @@ logging.appenders.default:
     max: 10
   layout:
     type: json
+-----------------
+
+#7.7.1
+#logging.dest: stdout
+logging.dest: /data/log/kibana.log
+
+-----------
+logging:
+  appenders:
+    file:
+      type: file
+      fileName: /data/log/kibana.log
+      layout:
+        type: pattern
+  root:
+    appenders: [default, file]
+
+---------
+logging:
+  appenders:
+    console:
+      type: console
+      layout:
+        type: pattern
+        highlight: true
+    file:
+      type: file
+      fileName: /data/log/kibana.log
+    custom:
+      type: console
+      layout:
+        type: pattern
+        pattern: "[%date][%level] %message"
+    json-file-appender:
+      type: file
+      fileName: /data/log/kibana-json.log
+      layout:
+        type: json
+
+  root:
+    appenders: [default, console, file]
+    level: error
+
+  loggers:
+    - name: plugins
+      appenders: [custom]
+      level: warn
+    - name: plugins.myPlugin
+      level: info
+    - name: server
+      level: fatal
+    - name: optimize
+      appenders: [console]
+    - name: telemetry
+      appenders: [json-file-appender]
+      level: all
+    - name: metrics.ops
+      appenders: [console]
+      level: debug
 ```
+
+
+
+#最终配置
+
+#es 已经开启 xpack和http ssl
+
+```bash
+[elasticsearch@es01 ~]$ /opt/kibana/config/kibana.yml |grep -v ^#|grep -v ^$
+server.host: "222.24.203.42"
+elasticsearch.hosts: ["https://222.24.203.42:9200","https://222.24.203.43:9200","https://222.24.203.44:9200"]
+elasticsearch.ssl.certificateAuthorities: /opt/kibana/config/elasticsearch-ca.pem
+elasticsearch.ssl.verificationMode: certificate
+elasticsearch.requestTimeout: 3000000
+logging.dest: /data/log/kibana.log
+i18n.locale: "zh-CN"
+elasticsearch.username: "kibana"
+elasticsearch.password: "YNNy1i1y03a4TRqlH32w"
+```
+
+
 
 
 
@@ -1806,6 +2283,12 @@ nohup /opt/kibana/bin/kibana > /data/log/kibana.log 2>&1 &
 
 #关闭
 ps -ef | grep kibana|grep -v grep |awk '{print $2}'|xargs kill -9
+
+#自动启动
+su - root
+
+systemctl restart kibana
+systemctl status kibana
 ```
 
 
@@ -1813,10 +2296,12 @@ ps -ef | grep kibana|grep -v grep |awk '{print $2}'|xargs kill -9
 #### 5、访问
 
 ```html
-http://172.18.13.112:5601/
+http://222.24.203.42:5601/
 ```
 
+#使用elastic:XIlreSzGM51dH44yuxo1登录访问
 
+#不能使用kibana用户登录访问，否则403forbiden
 
 
 
@@ -1839,23 +2324,107 @@ https://release.infinilabs.com/
 #每台es节点都要安装
 
 ```bash
+su - elasticsearch
+
 cd /opt/elasticsearch/plugins
 mkdir ik
 
 cd ik
 
-wget https://release.infinilabs.com/analysis-ik/stable/elasticsearch-analysis-ik-8.13.3.zip
+#8.13.3
+#wget https://release.infinilabs.com/analysis-ik/stable/elasticsearch-analysis-ik-8.13.3.zip
+#unzip elasticsearch-analysis-ik-8.13.3.zip
+#vi plugin-descriptor.properties
+#仅修改java版本
+#java.version=21.0.2
 
-unzip elasticsearch-analysis-ik-8.13.3.zip
+#7.7.1
+wget https://release.infinilabs.com/analysis-ik/stable/elasticsearch-analysis-ik-7.7.1.zip
+
+unzip elasticsearch-analysis-ik-7.7.1.zip
+
+which java
+java -version
 
 vi plugin-descriptor.properties
 #仅修改java版本
-java.version=21.0.2
+#7.7.1版本仅指定java主版本，不能指定为14.0.1，否则es无法正常启动
+#java.lang.IllegalStateException: analysis-ik requires Java 14.0.1:, your system: 14
+java.version=14
+```
+
+#logs
+
+```bash
+[elasticsearch@es02 ik]$ which java
+/opt/elasticsearch/jdk/bin/java
+
+[elasticsearch@es02 ik]$ java -version
+openjdk version "14.0.1" 2020-04-14
+OpenJDK Runtime Environment AdoptOpenJDK (build 14.0.1+7)
+OpenJDK 64-Bit Server VM AdoptOpenJDK (build 14.0.1+7, mixed mode, sharing)
 ```
 
 
 
 #### 2、重启es
+
+```bash
+su - root
+
+systemctl restart elasticsearch
+
+systemctl status elasticsearch
+```
+
+#如果指定错java版本，会导致es无法正常启动
+
+```logs
+[2025-08-06T15:55:59,063][ERROR][o.e.b.Bootstrap          ] [node-1] Exception
+java.lang.IllegalStateException: analysis-ik requires Java 14.0.1:, your system: 14
+        at org.elasticsearch.bootstrap.JarHell.checkJavaVersion(JarHell.java:256) ~[elasticsearch-core-7.7.1.jar:7.7.1]
+        at org.elasticsearch.plugins.PluginsService.verifyCompatibility(PluginsService.java:348) ~[elasticsearch-7.7.1.jar:7.7.1]
+        at org.elasticsearch.plugins.PluginsService.loadBundle(PluginsService.java:531) ~[elasticsearch-7.7.1.jar:7.7.1]
+        at org.elasticsearch.plugins.PluginsService.loadBundles(PluginsService.java:471) ~[elasticsearch-7.7.1.jar:7.7.1]
+        at org.elasticsearch.plugins.PluginsService.<init>(PluginsService.java:163) ~[elasticsearch-7.7.1.jar:7.7.1]
+        at org.elasticsearch.node.Node.<init>(Node.java:321) ~[elasticsearch-7.7.1.jar:7.7.1]
+        at org.elasticsearch.node.Node.<init>(Node.java:264) ~[elasticsearch-7.7.1.jar:7.7.1]
+        at org.elasticsearch.bootstrap.Bootstrap$5.<init>(Bootstrap.java:227) ~[elasticsearch-7.7.1.jar:7.7.1]
+        at org.elasticsearch.bootstrap.Bootstrap.setup(Bootstrap.java:227) ~[elasticsearch-7.7.1.jar:7.7.1]
+        at org.elasticsearch.bootstrap.Bootstrap.init(Bootstrap.java:393) [elasticsearch-7.7.1.jar:7.7.1]
+        at org.elasticsearch.bootstrap.Elasticsearch.init(Elasticsearch.java:170) [elasticsearch-7.7.1.jar:7.7.1]
+        at org.elasticsearch.bootstrap.Elasticsearch.execute(Elasticsearch.java:161) [elasticsearch-7.7.1.jar:7.7.1]
+        at org.elasticsearch.cli.EnvironmentAwareCommand.execute(EnvironmentAwareCommand.java:86) [elasticsearch-7.7.1.jar:7.7.1]
+        at org.elasticsearch.cli.Command.mainWithoutErrorHandling(Command.java:127) [elasticsearch-cli-7.7.1.jar:7.7.1]
+        at org.elasticsearch.cli.Command.main(Command.java:90) [elasticsearch-cli-7.7.1.jar:7.7.1]
+        at org.elasticsearch.bootstrap.Elasticsearch.main(Elasticsearch.java:126) [elasticsearch-7.7.1.jar:7.7.1]
+        at org.elasticsearch.bootstrap.Elasticsearch.main(Elasticsearch.java:92) [elasticsearch-7.7.1.jar:7.7.1]
+[2025-08-06T15:55:59,068][ERROR][o.e.b.ElasticsearchUncaughtExceptionHandler] [node-1] uncaught exception in thread [main]
+org.elasticsearch.bootstrap.StartupException: java.lang.IllegalStateException: analysis-ik requires Java 14.0.1:, your system: 14
+        at org.elasticsearch.bootstrap.Elasticsearch.init(Elasticsearch.java:174) ~[elasticsearch-7.7.1.jar:7.7.1]
+        at org.elasticsearch.bootstrap.Elasticsearch.execute(Elasticsearch.java:161) ~[elasticsearch-7.7.1.jar:7.7.1]
+        at org.elasticsearch.cli.EnvironmentAwareCommand.execute(EnvironmentAwareCommand.java:86) ~[elasticsearch-7.7.1.jar:7.7.1]
+        at org.elasticsearch.cli.Command.mainWithoutErrorHandling(Command.java:127) ~[elasticsearch-cli-7.7.1.jar:7.7.1]
+        at org.elasticsearch.cli.Command.main(Command.java:90) ~[elasticsearch-cli-7.7.1.jar:7.7.1]
+        at org.elasticsearch.bootstrap.Elasticsearch.main(Elasticsearch.java:126) ~[elasticsearch-7.7.1.jar:7.7.1]
+        at org.elasticsearch.bootstrap.Elasticsearch.main(Elasticsearch.java:92) ~[elasticsearch-7.7.1.jar:7.7.1]
+Caused by: java.lang.IllegalStateException: analysis-ik requires Java 14.0.1:, your system: 14
+        at org.elasticsearch.bootstrap.JarHell.checkJavaVersion(JarHell.java:256) ~[elasticsearch-core-7.7.1.jar:7.7.1]
+        at org.elasticsearch.plugins.PluginsService.verifyCompatibility(PluginsService.java:348) ~[elasticsearch-7.7.1.jar:7.7.1]
+        at org.elasticsearch.plugins.PluginsService.loadBundle(PluginsService.java:531) ~[elasticsearch-7.7.1.jar:7.7.1]
+        at org.elasticsearch.plugins.PluginsService.loadBundles(PluginsService.java:471) ~[elasticsearch-7.7.1.jar:7.7.1]
+        at org.elasticsearch.plugins.PluginsService.<init>(PluginsService.java:163) ~[elasticsearch-7.7.1.jar:7.7.1]
+        at org.elasticsearch.node.Node.<init>(Node.java:321) ~[elasticsearch-7.7.1.jar:7.7.1]
+        at org.elasticsearch.node.Node.<init>(Node.java:264) ~[elasticsearch-7.7.1.jar:7.7.1]
+        at org.elasticsearch.bootstrap.Bootstrap$5.<init>(Bootstrap.java:227) ~[elasticsearch-7.7.1.jar:7.7.1]
+        at org.elasticsearch.bootstrap.Bootstrap.setup(Bootstrap.java:227) ~[elasticsearch-7.7.1.jar:7.7.1]
+        at org.elasticsearch.bootstrap.Bootstrap.init(Bootstrap.java:393) ~[elasticsearch-7.7.1.jar:7.7.1]
+        at org.elasticsearch.bootstrap.Elasticsearch.init(Elasticsearch.java:170) ~[elasticsearch-7.7.1.jar:7.7.1]
+        ... 6 more
+
+```
+
+
 
 #### 3、测试
 
@@ -1887,13 +2456,13 @@ GET /_analyze
 ###### 3.1.1.create a index
 
 ```bash
-curl -XPUT http://172.18.13.112:9200/index
+curl -XPUT http://222.24.203.42:9200/index
 ```
 
 ###### 3.1.2.create a mapping
 
 ```bash
-curl -XPOST http://172.18.13.112:9200/index/_mapping -H 'Content-Type:application/json' -d'
+curl -XPOST http://222.24.203.42:9200/index/_mapping -H 'Content-Type:application/json' -d'
 {
         "properties": {
             "content": {
@@ -1909,25 +2478,25 @@ curl -XPOST http://172.18.13.112:9200/index/_mapping -H 'Content-Type:applicatio
 ###### 3.1.3.index some docs
 
 ```bash
-curl -XPOST http://172.18.13.112:9200/index/_create/1 -H 'Content-Type:application/json' -d'
+curl -XPOST http://222.24.203.42:9200/index/_create/1 -H 'Content-Type:application/json' -d'
 {"content":"美国留给伊拉克的是个烂摊子吗"}
 '
 ```
 
 ```bash
-curl -XPOST http://172.18.13.112:9200/index/_create/2 -H 'Content-Type:application/json' -d'
+curl -XPOST http://222.24.203.42:9200/index/_create/2 -H 'Content-Type:application/json' -d'
 {"content":"公安部：各地校车将享最高路权"}
 '
 ```
 
 ```bash
-curl -XPOST http://172.18.13.112:9200/index/_create/3 -H 'Content-Type:application/json' -d'
+curl -XPOST http://222.24.203.42:9200/index/_create/3 -H 'Content-Type:application/json' -d'
 {"content":"中韩渔警冲突调查：韩警平均每天扣1艘中国渔船"}
 '
 ```
 
 ```bash
-curl -XPOST http://172.18.13.112:9200/index/_create/4 -H 'Content-Type:application/json' -d'
+curl -XPOST http://222.24.203.42:9200/index/_create/4 -H 'Content-Type:application/json' -d'
 {"content":"中国驻洛杉矶领事馆遭亚裔男子枪击 嫌犯已自首"}
 '
 ```
@@ -1935,7 +2504,7 @@ curl -XPOST http://172.18.13.112:9200/index/_create/4 -H 'Content-Type:applicati
 ###### 3.1.4.query with highlighting
 
 ```bash
-curl -XPOST http://172.18.13.112:9200/index/_search  -H 'Content-Type:application/json' -d'
+curl -XPOST http://222.24.203.42:9200/index/_search  -H 'Content-Type:application/json' -d'
 {
     "query" : { "match" : { "content" : "中国" }},
     "highlight" : {
@@ -2224,16 +2793,16 @@ showmount -e
 #uid/gid不同时，快照存储库验证失败
 
 ```bash
-[elasticsearch@escluster01 log]$ id elasticsearch
+[elasticsearch@es01 log]$ id elasticsearch
 uid=1001(elasticsearch) gid=1001(elasticsearch) groups=1001(elasticsearch)
 
-[elasticsearch@escluster02 log]$ id elasticsearch
+[elasticsearch@es02 log]$ id elasticsearch
 uid=1001(elasticsearch) gid=1001(elasticsearch) groups=1001(elasticsearch)
 
-#escluster03 uid/gid被oracle用户占用
-[elasticsearch@escluster03 log]$ id elasticsearch
+#es03 uid/gid被oracle用户占用
+[elasticsearch@es03 log]$ id elasticsearch
 uid=1002(elasticsearch) gid=1003(elasticsearch) groups=1003(elasticsearch)
-[elasticsearch@escluster03 log]$ id 1001
+[elasticsearch@es03 log]$ id 1001
 uid=1001(oracle) gid=1002(oinstall) groups=1002(oinstall),1001(dba)
 
 #此时快照存储库验证报错
@@ -2242,11 +2811,11 @@ uid=1001(oracle) gid=1002(oinstall) groups=1002(oinstall),1001(dba)
     "root_cause": [
       {
         "type": "repository_verification_exception",
-        "reason": "[es-snp] [[a1DK8XclQean8VwNoXzK3w, 'RemoteTransportException[[node-3][10.40.10.126:9300][internal:admin/repository/verify]]; nested: RepositoryVerificationException[[es-snp] store location [/snp] is not accessible on the node [{node-3}{a1DK8XclQean8VwNoXzK3w}{Eb4f6ayoQmKiR_KZmNwMLw}{10.40.10.126}{10.40.10.126:9300}{dilmrt}{ml.machine_memory=33697431552, xpack.installed=true, transform.node=true, ml.max_open_jobs=20}]]; nested: AccessDeniedException[/snp/tests-rdy0HhrJSxKNL23xkkeSYQ/data-a1DK8XclQean8VwNoXzK3w.dat];']]"
+        "reason": "[es-snp] [[a1DK8XclQean8VwNoXzK3w, 'RemoteTransportException[[node-3][222.24.203.44:9300][internal:admin/repository/verify]]; nested: RepositoryVerificationException[[es-snp] store location [/snp] is not accessible on the node [{node-3}{a1DK8XclQean8VwNoXzK3w}{Eb4f6ayoQmKiR_KZmNwMLw}{222.24.203.44}{222.24.203.44:9300}{dilmrt}{ml.machine_memory=33697431552, xpack.installed=true, transform.node=true, ml.max_open_jobs=20}]]; nested: AccessDeniedException[/snp/tests-rdy0HhrJSxKNL23xkkeSYQ/data-a1DK8XclQean8VwNoXzK3w.dat];']]"
       }
     ],
     "type": "repository_verification_exception",
-    "reason": "[es-snp] [[a1DK8XclQean8VwNoXzK3w, 'RemoteTransportException[[node-3][10.40.10.126:9300][internal:admin/repository/verify]]; nested: RepositoryVerificationException[[es-snp] store location [/snp] is not accessible on the node [{node-3}{a1DK8XclQean8VwNoXzK3w}{Eb4f6ayoQmKiR_KZmNwMLw}{10.40.10.126}{10.40.10.126:9300}{dilmrt}{ml.machine_memory=33697431552, xpack.installed=true, transform.node=true, ml.max_open_jobs=20}]]; nested: AccessDeniedException[/snp/tests-rdy0HhrJSxKNL23xkkeSYQ/data-a1DK8XclQean8VwNoXzK3w.dat];']]"
+    "reason": "[es-snp] [[a1DK8XclQean8VwNoXzK3w, 'RemoteTransportException[[node-3][222.24.203.44:9300][internal:admin/repository/verify]]; nested: RepositoryVerificationException[[es-snp] store location [/snp] is not accessible on the node [{node-3}{a1DK8XclQean8VwNoXzK3w}{Eb4f6ayoQmKiR_KZmNwMLw}{222.24.203.44}{222.24.203.44:9300}{dilmrt}{ml.machine_memory=33697431552, xpack.installed=true, transform.node=true, ml.max_open_jobs=20}]]; nested: AccessDeniedException[/snp/tests-rdy0HhrJSxKNL23xkkeSYQ/data-a1DK8XclQean8VwNoXzK3w.dat];']]"
   },
   "status": 500
 }
@@ -2255,7 +2824,7 @@ uid=1001(oracle) gid=1002(oinstall) groups=1002(oinstall),1001(dba)
 #es报错日志
 
 [2024-07-17T15:24:34,857][WARN ][r.suppressed             ] [node-2] path: /_snapshot/es-snp/_verify, params: {repository=es-snp}
-org.elasticsearch.repositories.RepositoryVerificationException: [es-snp] [[a1DK8XclQean8VwNoXzK3w, 'RemoteTransportException[[node-3][10.40.10.126:9300][internal:admin/repository/verify]]; nested: RepositoryVerificationException[[es-snp] store location [/snp] is not accessible on the node [{node-3}{a1DK8XclQean8VwNoXzK3w}{Eb4f6ayoQmKiR_KZmNwMLw}{10.40.10.126}{10.40.10.126:9300}{dilmrt}{ml.machine_memory=33697431552, xpack.installed=true, transform.node=true, ml.max_open_jobs=20}]]; nested: AccessDeniedException[/snp/tests-rdy0HhrJSxKNL23xkkeSYQ/data-a1DK8XclQean8VwNoXzK3w.dat];']]
+org.elasticsearch.repositories.RepositoryVerificationException: [es-snp] [[a1DK8XclQean8VwNoXzK3w, 'RemoteTransportException[[node-3][222.24.203.44:9300][internal:admin/repository/verify]]; nested: RepositoryVerificationException[[es-snp] store location [/snp] is not accessible on the node [{node-3}{a1DK8XclQean8VwNoXzK3w}{Eb4f6ayoQmKiR_KZmNwMLw}{222.24.203.44}{222.24.203.44:9300}{dilmrt}{ml.machine_memory=33697431552, xpack.installed=true, transform.node=true, ml.max_open_jobs=20}]]; nested: AccessDeniedException[/snp/tests-rdy0HhrJSxKNL23xkkeSYQ/data-a1DK8XclQean8VwNoXzK3w.dat];']]
         at org.elasticsearch.repositories.VerifyNodeRepositoryAction.finishVerification(VerifyNodeRepositoryAction.java:118) [elasticsearch-7.7.1.jar:7.7.1]
         at org.elasticsearch.repositories.VerifyNodeRepositoryAction.access$000(VerifyNodeRepositoryAction.java:49) [elasticsearch-7.7.1.jar:7.7.1]
         at org.elasticsearch.repositories.VerifyNodeRepositoryAction$1.handleResponse(VerifyNodeRepositoryAction.java:99) [elasticsearch-7.7.1.jar:7.7.1]
@@ -2296,7 +2865,7 @@ org.elasticsearch.repositories.RepositoryVerificationException: [es-snp] [[a1DK8
 
 
 [2024-07-17T15:24:31,119][WARN ][o.e.r.VerifyNodeRepositoryAction] [node-3] [es-snp] failed to verify repository
-org.elasticsearch.repositories.RepositoryVerificationException: [es-snp] store location [/snp] is not accessible on the node [{node-3}{a1DK8XclQean8VwNoXzK3w}{Eb4f6ayoQmKiR_KZmNwMLw}{10.40.10.126}{10.40.10.126:9300}{dilmrt}{ml.machine_memory=33697431552, xpack.installed=true, transform.node=true, ml.max_open_jobs=20}]
+org.elasticsearch.repositories.RepositoryVerificationException: [es-snp] store location [/snp] is not accessible on the node [{node-3}{a1DK8XclQean8VwNoXzK3w}{Eb4f6ayoQmKiR_KZmNwMLw}{222.24.203.44}{222.24.203.44:9300}{dilmrt}{ml.machine_memory=33697431552, xpack.installed=true, transform.node=true, ml.max_open_jobs=20}]
         at org.elasticsearch.repositories.blobstore.BlobStoreRepository.verify(BlobStoreRepository.java:1893) ~[elasticsearch-7.7.1.jar:7.7.1]
         at org.elasticsearch.repositories.VerifyNodeRepositoryAction.doVerify(VerifyNodeRepositoryAction.java:126) ~[elasticsearch-7.7.1.jar:7.7.1]
         at org.elasticsearch.repositories.VerifyNodeRepositoryAction.access$400(VerifyNodeRepositoryAction.java:49) ~[elasticsearch-7.7.1.jar:7.7.1]
@@ -2336,38 +2905,38 @@ Caused by: java.nio.file.AccessDeniedException: /snp/tests-rdy0HhrJSxKNL23xkkeSY
 #修改过程
 
 ```bash
-#escluster03 uid/gid被oracle用户占用
-[elasticsearch@escluster03 log]$ id elasticsearch
+#es03 uid/gid被oracle用户占用
+[elasticsearch@es03 log]$ id elasticsearch
 uid=1002(elasticsearch) gid=1003(elasticsearch) groups=1003(elasticsearch)
-[elasticsearch@escluster03 log]$ id 1001
+[elasticsearch@es03 log]$ id 1001
 uid=1001(oracle) gid=1002(oinstall) groups=1002(oinstall),1001(dba)
 
-[elasticsearch@escluster03 log]$ su - root
+[elasticsearch@es03 log]$ su - root
 
-[root@escluster03 ~]# userdel -rf oracle
-[root@escluster03 ~]# groupdel dba
-[root@escluster03 ~]# groupdel oinstall
+[root@es03 ~]# userdel -rf oracle
+[root@es03 ~]# groupdel dba
+[root@es03 ~]# groupdel oinstall
 
 
-[root@escluster03 ~]# getent passwd | awk -F: '{print $3}' | sort -n | grep 1001
-[root@escluster03 ~]# getent group | awk -F: '{print $3}' | sort -n | grep 1001
+[root@es03 ~]# getent passwd | awk -F: '{print $3}' | sort -n | grep 1001
+[root@es03 ~]# getent group | awk -F: '{print $3}' | sort -n | grep 1001
 
-[root@escluster03 ~]# getent group | awk -F: '{print $3}' | sort -n | grep 1003
+[root@es03 ~]# getent group | awk -F: '{print $3}' | sort -n | grep 1003
 1003
-[root@escluster03 ~]# getent passwd | awk -F: '{print $3}' | sort -n | grep 1002
+[root@es03 ~]# getent passwd | awk -F: '{print $3}' | sort -n | grep 1002
 1002
-[root@escluster03 ~]# systemctl stop elasticsearch.service
+[root@es03 ~]# systemctl stop elasticsearch.service
 
-[root@escluster03 home]# userdel -rf elasticsearch
+[root@es03 home]# userdel -rf elasticsearch
 
-[root@escluster03 home]# getent group | awk -F: '{print $3}' | sort -n | grep 1003
-[root@escluster03 ~]# getent passwd | awk -F: '{print $3}' | sort -n | grep 1002
+[root@es03 home]# getent group | awk -F: '{print $3}' | sort -n | grep 1003
+[root@es03 ~]# getent passwd | awk -F: '{print $3}' | sort -n | grep 1002
 
-[root@escluster03 home]#  groupadd -g 1001 elasticsearch
-[root@escluster03 home]#  useradd -u 1001 -g 1001 elasticsearch
+[root@es03 home]#  groupadd -g 1001 elasticsearch
+[root@es03 home]#  useradd -u 1001 -g 1001 elasticsearch
 
 
-[root@escluster03 home]# passwd elasticsearch
+[root@es03 home]# passwd elasticsearch
 Changing password for user elasticsearch.
 New password:
 Retype new password:
@@ -2387,8 +2956,8 @@ chown -R elasticsearch:elasticsearch /data/log
 #chown -R elasticsearch:elasticsearch /opt/kibana
 
 #启动es服务
-[root@escluster03 opt]# systemctl start elasticsearch
-[root@escluster03 opt]# systemctl status elasticsearch
+[root@es03 opt]# systemctl start elasticsearch
+[root@es03 opt]# systemctl status elasticsearch
 ● elasticsearch.service - elasticsearch
    Loaded: loaded (/usr/lib/systemd/system/elasticsearch.service; enabled; vendor preset: disabled)
    Active: active (running) since Wed 2024-07-17 16:24:10 CST; 3s ago
@@ -2397,8 +2966,8 @@ chown -R elasticsearch:elasticsearch /data/log
    CGroup: /system.slice/elasticsearch.service
            └─39879 /opt/elasticsearch/jdk/bin/java -Xshare:auto -Des.networkaddress.cache.ttl=60 -Des.networkaddress.cache.negative.ttl=10 -XX:+AlwaysPreTouch -Xss1m -Djava.awt.headless=true -Dfil...
 
-Jul 17 16:24:10 escluster03 systemd[1]: Started elasticsearch.
-[root@escluster03 opt]# systemctl status elasticsearch
+Jul 17 16:24:10 es03 systemd[1]: Started elasticsearch.
+[root@es03 opt]# systemctl status elasticsearch
 ● elasticsearch.service - elasticsearch
    Loaded: loaded (/usr/lib/systemd/system/elasticsearch.service; enabled; vendor preset: disabled)
    Active: active (running) since Wed 2024-07-17 16:24:10 CST; 4s ago
@@ -2408,15 +2977,19 @@ Jul 17 16:24:10 escluster03 systemd[1]: Started elasticsearch.
            ├─39879 /opt/elasticsearch/jdk/bin/java -Xshare:auto -Des.networkaddress.cache.ttl=60 -Des.networkaddress.cache.negative.ttl=10 -XX:+AlwaysPreTouch -Xss1m -Djava.awt.headless=true -Dfil...
            └─40143 /opt/elasticsearch/modules/x-pack-ml/platform/linux-x86_64/bin/controller
 
-Jul 17 16:24:10 escluster03 systemd[1]: Started elasticsearch.
-Jul 17 16:24:13 escluster03 elasticsearch[39879]: [2024-07-17T16:24:13,865][INFO ][o.e.e.NodeEnvironment    ] [node-3] using [1] data paths, mounts [[/ (rootfs)]], net usable_space [42...pes [rootfs]
-Jul 17 16:24:13 escluster03 elasticsearch[39879]: [2024-07-17T16:24:13,868][INFO ][o.e.e.NodeEnvironment    ] [node-3] heap size [15gb], compressed ordinary object pointers [true]
-Jul 17 16:24:13 escluster03 elasticsearch[39879]: [2024-07-17T16:24:13,995][INFO ][o.e.n.Node               ] [node-3] node name [node-3], node ID [a1DK8XclQean8VwNoXzK3w], cluster name [nwpu-es]
-Jul 17 16:24:13 escluster03 elasticsearch[39879]: [2024-07-17T16:24:13,998][INFO ][o.e.n.Node               ] [node-3] version[7.7.1], pid[39879], build[default/tar/ad56dce891c901a492b....1/14.0.1+7]
-Jul 17 16:24:13 escluster03 elasticsearch[39879]: [2024-07-17T16:24:13,998][INFO ][o.e.n.Node               ] [node-3] JVM home [/opt/elasticsearch/jdk]
-Jul 17 16:24:13 escluster03 elasticsearch[39879]: [2024-07-17T16:24:13,999][INFO ][o.e.n.Node               ] [node-3] JVM arguments [-Xshare:auto, -Des.networkaddress.cache.ttl=60, -D...tackTraceInF
+Jul 17 16:24:10 es03 systemd[1]: Started elasticsearch.
+Jul 17 16:24:13 es03 elasticsearch[39879]: [2024-07-17T16:24:13,865][INFO ][o.e.e.NodeEnvironment    ] [node-3] using [1] data paths, mounts [[/ (rootfs)]], net usable_space [42...pes [rootfs]
+Jul 17 16:24:13 es03 elasticsearch[39879]: [2024-07-17T16:24:13,868][INFO ][o.e.e.NodeEnvironment    ] [node-3] heap size [15gb], compressed ordinary object pointers [true]
+Jul 17 16:24:13 es03 elasticsearch[39879]: [2024-07-17T16:24:13,995][INFO ][o.e.n.Node               ] [node-3] node name [node-3], node ID [a1DK8XclQean8VwNoXzK3w], cluster name [nwpu-newes]
+Jul 17 16:24:13 es03 elasticsearch[39879]: [2024-07-17T16:24:13,998][INFO ][o.e.n.Node               ] [node-3] version[7.7.1], pid[39879], build[default/tar/ad56dce891c901a492b....1/14.0.1+7]
+Jul 17 16:24:13 es03 elasticsearch[39879]: [2024-07-17T16:24:13,998][INFO ][o.e.n.Node               ] [node-3] JVM home [/opt/elasticsearch/jdk]
+Jul 17 16:24:13 es03 elasticsearch[39879]: [2024-07-17T16:24:13,999][INFO ][o.e.n.Node               ] [node-3] JVM arguments [-Xshare:auto, -Des.networkaddress.cache.ttl=60, -D...tackTraceInF
 Hint: Some lines were ellipsized, use -l to show in full.
 ```
+
+
+
+
 
 #### 2、每台es节点创建备份目录，并mount共享目录
 
@@ -2428,10 +3001,10 @@ chmod -R 777 /snp
 
 yum install -y nfs-utils
 
-mount -t nfs 192.168.1.227:/es /snp
+mount -t nfs 10.40.2.72:/CM_VFS1/CM_VFS1/Ecampus_NAS/Ecampus_NAS/es-snp /snp
 
 cat >> /etc/fstab <<EOF
-192.168.1.227:/es      /snp      nfs  defaults,_netdev  0 0
+10.40.2.72:/CM_VFS1/CM_VFS1/Ecampus_NAS/Ecampus_NAS/es-snp      /snp      nfs  defaults,_netdev  0 0
 EOF
 
 ```
@@ -2446,6 +3019,9 @@ su - elasticsearch
 cat >> /opt/elasticsearch/config/elasticsearch.yml <<EOF
 path.repo: ["/snp"]
 EOF
+
+su - root
+systemctl restart elasticsearch
 ```
 
 
@@ -2474,7 +3050,7 @@ PUT /_snapshot/my_backup
 
 #或者
 
-curl -XPUT 172.18.13.112:9200/_snapshot/my_backup -d 
+curl -XPUT 222.24.203.42:9200/_snapshot/my_backup -d 
 '{
   "type": "fs",
   "settings": {
@@ -2486,7 +3062,7 @@ curl -XPUT 172.18.13.112:9200/_snapshot/my_backup -d
 #查看存储库
 #GET /_snapshot/my_backup
 
-curl -XGET 172.18.13.112:9200/_snapshot/my_backup
+curl -XGET 222.24.203.42:9200/_snapshot/my_backup
 
 /*
 {
@@ -2501,15 +3077,18 @@ curl -XGET 172.18.13.112:9200/_snapshot/my_backup
 
 
 
-curl -XGET http://172.18.13.112:9200/_cat/snapshots?v
+curl -XGET http://222.24.203.42:9200/_cat/snapshots?v
 
 #
 id                                           repository  status start_epoch start_time end_epoch  end_time duration indices successful_shards failed_shards total_shards
 daily-snap-2024.05.11-pfsf0g5er7ophfuigczrqw es-nfs     SUCCESS 1715411551  07:12:31   1715411552 07:12:32       1s      34                34             0           34
 
 
-curl -XGET http://172.18.13.120:9200/_snapshot/es-nfs/daily-snap-2024.05.11-pfsf0g5er7ophfuigczrqw/_status
+curl -XGET http://222.24.203.44:9200/_snapshot/es-nfs/daily-snap-2024.05.11-pfsf0g5er7ophfuigczrqw/_status
 
+#curl -k -u elastic:$ESPASSWD "https://222.24.203.42:9200/_snapshot/es_snp?verify=false" -X PUT -H "Content-Type: application/json" -d '{"type":"fs","settings":{"location":"/snp","compress":true,"readonly":true}}'
+
+#curl -k -u elastic:$ESPASSWD "https://222.24.203.42:9200/_snapshot/es_snp" -X PUT -H "Content-Type: application/json" -d '{"type":"fs","settings":{"location":"/snp","compress":true}}'
 ```
 
 
@@ -2518,8 +3097,17 @@ curl -XGET http://172.18.13.120:9200/_snapshot/es-nfs/daily-snap-2024.05.11-pfsf
 
 ##### 5.1、通过kibana打快照
 
+#配置完策略后，可以点击立即执行，会立即生成一份快照
+
 ```
 Management ---> Stack Management ---> Snapshot and Restore ---> 策略
+
+策略名称: daily-snap
+快照名称: <daily-snap-{now/d}>
+存储库: es_snp
+计划: 0 30 1 * * ?
+
+快照保留: 5days
 
 ---> 所有数据流和索引
 ---> 单个索引等
@@ -2616,7 +3204,7 @@ xpack.security.enabled: false
 #报错内容
 
 ```bash
-[root@k8s-mysql-ole-117 ~]# elasticsearch -d
+[root@es02 ~]# elasticsearch -d
 warning: ignoring JAVA_HOME=/opt/elasticsearch/jdk; using bundled JDK
 May 09, 2024 3:42:41 PM sun.util.locale.provider.LocaleProviderAdapter <clinit>
 WARNING: COMPAT locale provider will be removed in a future release
@@ -2635,7 +3223,7 @@ ERROR: Elasticsearch died while starting up, with exit code 1
 
 
 
-#### 3、es集群第一边初始化成功后，需要修改配置文件
+#### 3、es集群第一遍初始化成功后，需要修改配置文件
 
 #/opt/elasticsearch/config/elasticsearch.yml
 
@@ -2653,12 +3241,12 @@ ERROR: Elasticsearch died while starting up, with exit code 1
 
 ```log
 [2024-05-09T15:43:00,388][WARN ][o.e.c.c.ClusterBootstrapService] [node-1] this node is locked into cluster UUID [cpLLf87gS2uEEAVlPEFYaA] but [cluster.initial_master_nodes] is set to [node-1, node-2, node-3]; remove this setting to avoid possible data loss caused by subsequent cluster bootstrap attempts; for further information see https://www.elastic.co/guide/en/elasticsearch/reference/8.13/important-settings.html#initial_master_nodes
-[2024-05-09T15:43:10,404][WARN ][o.e.c.c.ClusterFormationFailureHelper] [node-1] master not discovered or elected yet, an election requires at least 2 nodes with ids from [178aaQJ1RTut1WclHoKkOw, tAGwLBqPR6KS0E-tzhRFgw, 4mfikY7-RpyVPJ2EQ6RKJw], have only discovered non-quorum [{node-1}{178aaQJ1RTut1WclHoKkOw}{i6BZQOmtSw2ntcfq7T6wnQ}{node-1}{172.18.13.112}{172.18.13.112:9300}{cdfhilmrstw}{8.13.3}{7000099-8503000}]; discovery will continue using [172.18.13.117:9300, 172.18.13.120:9300] from hosts providers and [{node-1}{178aaQJ1RTut1WclHoKkOw}{i6BZQOmtSw2ntcfq7T6wnQ}{node-1}{172.18.13.112}{172.18.13.112:9300}{cdfhilmrstw}{8.13.3}{7000099-8503000}] from last-known cluster state; node term 2, last-accepted version 148 in term 2; for troubleshooting guidance, see https://www.elastic.co/guide/en/elasticsearch/reference/8.13/discovery-troubleshooting.html
-[2024-05-09T15:43:20,409][WARN ][o.e.c.c.ClusterFormationFailureHelper] [node-1] master not discovered or elected yet, an election requires at least 2 nodes with ids from [178aaQJ1RTut1WclHoKkOw, tAGwLBqPR6KS0E-tzhRFgw, 4mfikY7-RpyVPJ2EQ6RKJw], have only discovered non-quorum [{node-1}{178aaQJ1RTut1WclHoKkOw}{i6BZQOmtSw2ntcfq7T6wnQ}{node-1}{172.18.13.112}{172.18.13.112:9300}{cdfhilmrstw}{8.13.3}{7000099-8503000}]; discovery will continue using [172.18.13.117:9300, 172.18.13.120:9300] from hosts providers and [{node-1}{178aaQJ1RTut1WclHoKkOw}{i6BZQOmtSw2ntcfq7T6wnQ}{node-1}{172.18.13.112}{172.18.13.112:9300}{cdfhilmrstw}{8.13.3}{7000099-8503000}] from last-known cluster state; node term 2, last-accepted version 148 in term 2; for troubleshooting guidance, see https://www.elastic.co/guide/en/elasticsearch/reference/8.13/discovery-troubleshooting.html
-[2024-05-09T15:43:23,349][INFO ][o.e.c.s.ClusterApplierService] [node-1] master node changed {previous [], current [{node-2}{4mfikY7-RpyVPJ2EQ6RKJw}{sQaBo1vGTUK-8B-9xWBYIQ}{node-2}{172.18.13.117}{172.18.13.117:9300}{cdfhilmrstw}{8.13.3}{7000099-8503000}]}, added {{node-2}{4mfikY7-RpyVPJ2EQ6RKJw}{sQaBo1vGTUK-8B-9xWBYIQ}{node-2}{172.18.13.117}{172.18.13.117:9300}{cdfhilmrstw}{8.13.3}{7000099-8503000}}, term: 3, version: 185, reason: ApplyCommitRequest{term=3, version=185, sourceNode={node-2}{4mfikY7-RpyVPJ2EQ6RKJw}{sQaBo1vGTUK-8B-9xWBYIQ}{node-2}{172.18.13.117}{172.18.13.117:9300}{cdfhilmrstw}{8.13.3}{7000099-8503000}{ml.allocated_processors=16, ml.machine_memory=33371656192, transform.config_version=10.0.0, xpack.installed=true, ml.config_version=12.0.0, ml.max_jvm_size=16684941312, ml.allocated_processors_double=16.0}}
-[2024-05-09T15:43:23,376][INFO ][o.e.h.AbstractHttpServerTransport] [node-1] publish_address {172.18.13.112:9200}, bound_addresses {172.18.13.112:9200}
-[2024-05-09T15:43:23,395][INFO ][o.e.n.Node               ] [node-1] started {node-1}{178aaQJ1RTut1WclHoKkOw}{i6BZQOmtSw2ntcfq7T6wnQ}{node-1}{172.18.13.112}{172.18.13.112:9300}{cdfhilmrstw}{8.13.3}{7000099-8503000}{ml.allocated_processors=16, ml.machine_memory=33371656192, transform.config_version=10.0.0, xpack.installed=true, ml.config_version=12.0.0, ml.max_jvm_size=16684941312, ml.allocated_processors_double=16.0}
-[elasticsearch@k8s-mysql-ole config]$ 
+[2024-05-09T15:43:10,404][WARN ][o.e.c.c.ClusterFormationFailureHelper] [node-1] master not discovered or elected yet, an election requires at least 2 nodes with ids from [178aaQJ1RTut1WclHoKkOw, tAGwLBqPR6KS0E-tzhRFgw, 4mfikY7-RpyVPJ2EQ6RKJw], have only discovered non-quorum [{node-1}{178aaQJ1RTut1WclHoKkOw}{i6BZQOmtSw2ntcfq7T6wnQ}{node-1}{222.24.203.42}{222.24.203.42:9300}{cdfhilmrstw}{8.13.3}{7000099-8503000}]; discovery will continue using [222.24.203.43:9300, 222.24.203.44:9300] from hosts providers and [{node-1}{178aaQJ1RTut1WclHoKkOw}{i6BZQOmtSw2ntcfq7T6wnQ}{node-1}{222.24.203.42}{222.24.203.42:9300}{cdfhilmrstw}{8.13.3}{7000099-8503000}] from last-known cluster state; node term 2, last-accepted version 148 in term 2; for troubleshooting guidance, see https://www.elastic.co/guide/en/elasticsearch/reference/8.13/discovery-troubleshooting.html
+[2024-05-09T15:43:20,409][WARN ][o.e.c.c.ClusterFormationFailureHelper] [node-1] master not discovered or elected yet, an election requires at least 2 nodes with ids from [178aaQJ1RTut1WclHoKkOw, tAGwLBqPR6KS0E-tzhRFgw, 4mfikY7-RpyVPJ2EQ6RKJw], have only discovered non-quorum [{node-1}{178aaQJ1RTut1WclHoKkOw}{i6BZQOmtSw2ntcfq7T6wnQ}{node-1}{222.24.203.42}{222.24.203.42:9300}{cdfhilmrstw}{8.13.3}{7000099-8503000}]; discovery will continue using [222.24.203.43:9300, 222.24.203.44:9300] from hosts providers and [{node-1}{178aaQJ1RTut1WclHoKkOw}{i6BZQOmtSw2ntcfq7T6wnQ}{node-1}{222.24.203.42}{222.24.203.42:9300}{cdfhilmrstw}{8.13.3}{7000099-8503000}] from last-known cluster state; node term 2, last-accepted version 148 in term 2; for troubleshooting guidance, see https://www.elastic.co/guide/en/elasticsearch/reference/8.13/discovery-troubleshooting.html
+[2024-05-09T15:43:23,349][INFO ][o.e.c.s.ClusterApplierService] [node-1] master node changed {previous [], current [{node-2}{4mfikY7-RpyVPJ2EQ6RKJw}{sQaBo1vGTUK-8B-9xWBYIQ}{node-2}{222.24.203.43}{222.24.203.43:9300}{cdfhilmrstw}{8.13.3}{7000099-8503000}]}, added {{node-2}{4mfikY7-RpyVPJ2EQ6RKJw}{sQaBo1vGTUK-8B-9xWBYIQ}{node-2}{222.24.203.43}{222.24.203.43:9300}{cdfhilmrstw}{8.13.3}{7000099-8503000}}, term: 3, version: 185, reason: ApplyCommitRequest{term=3, version=185, sourceNode={node-2}{4mfikY7-RpyVPJ2EQ6RKJw}{sQaBo1vGTUK-8B-9xWBYIQ}{node-2}{222.24.203.43}{222.24.203.43:9300}{cdfhilmrstw}{8.13.3}{7000099-8503000}{ml.allocated_processors=16, ml.machine_memory=33371656192, transform.config_version=10.0.0, xpack.installed=true, ml.config_version=12.0.0, ml.max_jvm_size=16684941312, ml.allocated_processors_double=16.0}}
+[2024-05-09T15:43:23,376][INFO ][o.e.h.AbstractHttpServerTransport] [node-1] publish_address {222.24.203.42:9200}, bound_addresses {222.24.203.42:9200}
+[2024-05-09T15:43:23,395][INFO ][o.e.n.Node               ] [node-1] started {node-1}{178aaQJ1RTut1WclHoKkOw}{i6BZQOmtSw2ntcfq7T6wnQ}{node-1}{222.24.203.42}{222.24.203.42:9300}{cdfhilmrstw}{8.13.3}{7000099-8503000}{ml.allocated_processors=16, ml.machine_memory=33371656192, transform.config_version=10.0.0, xpack.installed=true, ml.config_version=12.0.0, ml.max_jvm_size=16684941312, ml.allocated_processors_double=16.0}
+[elasticsearch@es01 config]$ 
 ```
 
 
@@ -2834,7 +3422,7 @@ wget https://raw.githubusercontent.com/elastic/elasticsearch/v8.13.3/docs/src/ya
 #导入es数据
 
 ```bash
-curl -H "Content-Type: application/json" -XPOST "172.18.13.112:9200/bank/_bulk?pretty&refresh" --data-binary "@/root/es/accounts.json"
+curl -H "Content-Type: application/json" -XPOST "222.24.203.42:9200/bank/_bulk?pretty&refresh" --data-binary "@/root/es/accounts.json"
 ```
 
 
@@ -2842,7 +3430,7 @@ curl -H "Content-Type: application/json" -XPOST "172.18.13.112:9200/bank/_bulk?p
 #查看状态
 
 ```bash
-# curl -XGET "172.18.13.112:9200/_cat/indices?v" | grep bank
+# curl -XGET "222.24.203.42:9200/_cat/indices?v" | grep bank
   % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
                                  Dload  Upload   Total   Spent    Left  Speed
 100  4025    0  4025    0     0   194k      0 --:--:-- --:--:-- --:--:--  196k
@@ -2856,8 +3444,6 @@ green  open   bank                                                              
 ##### 2.1.查询所有
 
 #查询所有，并按照account_number升序排序
-
-#`match_all`表示查询所有的数据，`sort`即按照什么字段排序
 
 ```bash
 GET /bank/_search
@@ -2950,9 +3536,12 @@ timed_out – 搜索请求是否超时
 _shards - 搜索了多少个碎片，以及成功，失败或跳过了多少个碎片的细目分类
 max_score – 找到的最相关文档的分数
 hits.total.value - 找到了多少个匹配的文档
-hits.hits.sort - 文档的排序位置（不按相关性得分排序时）
-hits.hits._score - 文档的相关性得分（使用match_all时不适用）
+hits.sort - 文档的排序位置（不按相关性得分排序时）
+hits._score - 文档的相关性得分（使用match_all时不适用）
 ```
+
+
+
 
 
 
@@ -3784,7 +4373,7 @@ http://127.0.0.1:8090
 #!/bin/bash
 
 # 定义变量
-ES_HOST="172.18.13.120:9200"
+ES_HOST="es03:9200"
 INDEX_NAME="cat"
 BULK_SIZE=100M   # 每个小文件的大小，可以根据实际情况调整
 SOURCE_FILE="/newdata/cat.json"
@@ -4022,7 +4611,7 @@ func main() {
 	// Elasticsearch configuration with basic authentication
 	es, err := elasticsearch.NewClient(elasticsearch.Config{
 		Addresses: []string{
-			"https://172.18.13.112:9200",
+			"https://222.24.203.42:9200",
 		},
 		Username: "elastic",
 		Password: "elastic123",
@@ -4205,9 +4794,9 @@ func main() {
 	// Elasticsearch configuration with basic authentication
 	es, err := elasticsearch.NewClient(elasticsearch.Config{
 		Addresses: []string{
-			"https://172.18.13.112:9200",
-			"https://172.18.13.117:9200",
-			"https://172.18.13.120:9200",
+			"https://222.24.203.42:9200",
+			"https://es02:9200",
+			"https://es03:9200",
 		},
 		Username: "elastic",
 		Password: "elastic123",
@@ -4428,9 +5017,9 @@ func main() {
 	// Elasticsearch configuration with multiple nodes and TLS settings
 	es, err := elasticsearch.NewClient(elasticsearch.Config{
 		Addresses: []string{
-			"https://172.18.13.112:9200",
-			"https://172.18.13.117:9200",
-			"https://172.18.13.120:9200",
+			"https://222.24.203.42:9200",
+			"https://es02:9200",
+			"https://es03:9200",
 		},
 		Username: "elastic",
 		Password: "elastic123",
@@ -4594,3 +5183,6 @@ exit status 1
 
 修改到200mb后，重启es，重新导入
 
+
+
+### 十四、ES集群的迁移
