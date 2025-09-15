@@ -95,14 +95,26 @@ NEW_PASS=yyyy
   mkdir -p /snp
   #chown -R elasticsearch:elasticsearch /snp
   ```
+  
 - 挂载（示例参数，按你现网 NFS 实际版本/要求调整，可用 vers=3 或 vers=4，均需测试稳定性）
   ```bash
   #mount -t nfs -o vers=3,proto=tcp,hard,nointr,timeo=600,retrans=2,ro 10.40.2.72:/CM_VFS1/CM_VFS1/Ecampus_NAS/Ecampus_NAS/es-snp /snp
   
   mount -t nfs -o ro 10.40.2.72:/CM_VFS1/CM_VFS1/Ecampus_NAS/Ecampus_NAS/es-snp /snp
   ```
+  
 - 建议将该挂载写入 /etc/fstab，确保重启后仍自动挂载。
+
+  ```bash
+  cat >> /etc/fstab <<EOF
+  10.40.2.72:/CM_VFS1/CM_VFS1/Ecampus_NAS/Ecampus_NAS/es-snp   /snp   nfs   ro,_netdev   0  0
+  EOF
+  ```
+
+  
+
 - 确认三台新节点的 /snp 内容与旧集群一致（能看到快照仓库下的 index-*, snap-*, meta-* 等文件/目录）。
+
 - • 若不能共享网络存储，可先 `rsync -a --delete /snp/ node11:/snp/` 完成一次全量复制，后续再增量同步。
 
 #### 2. 修改es节点的elasticsearch.yml
@@ -919,6 +931,882 @@ curl -s -k -u elastic "https://222.24.203.42:9200/_template" \
 - 兼容性：模板中若设置 index.lifecycle.name 或 index.default_pipeline，请先把对应的 ILM 和 pipeline 导入，否则创建索引时会报错或告警。
 - 插件：模板里若引用自定义分析器（如 IK），新集群插件必须已安装。
 - 已恢复的历史索引不受模板影响；模板主要是保障后续“新写入/新月份滚动索引”的一致性。
+
+#### 6.新建可读写快照仓库
+##### 6.1.nfs服务器或者nfs存储
+
+```bash
+yum install -y nfs*
+
+mkdir /newes
+
+chmod -R 777 /newes
+
+cat >> /etc/exports <<EOF
+/newes 222.24.203.0/24(rw,sync,insecure,no_subtree_check,no_root_squash)
+
+EOF
+
+
+systemctl restart nfs
+
+systemctl enable nfs
+
+showmount -e
+```
+
+
+
+#all_squash 表示客户机写入nfs的数据全部映射为nobody用户 这里设置 all_squash并把目录设置为777 是为防止elasticsearch 集群的每个节点启动的uid和gid 不一致导致在创建快照仓库时无法创建成功
+
+#uid/gid不同时，快照存储库验证失败
+
+##### 6.2.每台es节点创建备份目录，并mount共享目录
+
+```bash
+su - root
+
+mkdir /newessnp
+
+yum install -y nfs-utils
+
+#mount -t nfs 10.40.2.72:/CM_VFS1/CM_VFS1/Ecampus_NAS/Ecampus_NAS/es-snp /snp
+mount -t nfs 10.40.2.72:/CM_VFS1/CM_VFS1/Ecampus_NAS_share/Ecampus_tmp /newessnp
+
+chmod -R 777 /newessnp
+
+cat >> /etc/fstab <<EOF
+10.40.2.72:/CM_VFS1/CM_VFS1/Ecampus_NAS_share/Ecampus_tmp /newessnp      nfs  defaults,_netdev  0 0
+EOF
+```
+
+##### 6.3.修改es节点的elasticsearch.yml
+
+```bash
+su - elasticsearch
+
+cat >> /opt/elasticsearch/config/elasticsearch.yml <<EOF
+#path.repo: ["/snp"]
+path.repo: ["/snp","/newessnp"]
+EOF
+
+su - root
+systemctl restart elasticsearch
+```
+
+##### 6.4.注册存储库
+###### 6.4.1.通过kibana注册存储库
+
+```yaml
+Management ---> Stack Management ---> Snapshot and Restore
+```
+
+###### 6.4.2.通过命令注册存储库
+
+```bash
+#
+PUT _snapshot/newes_snp
+{
+  "type": "fs",
+  "settings": {
+    "location": "/newessnp",
+  }
+}
+
+#或者
+
+curl -XPUT -k -u elastic https:222.24.203.42:9200/_snapshot/newes_snp -d 
+'{
+  "type": "fs",
+  "settings": {
+    "location": "/newessnp"
+  }
+}'
+
+#注册后建议立即验证仓库可用性
+curl -X POST -k -u elastic 'https://222.24.203.42:9200:9200/_snapshot/newes_snp/_verify'
+
+POST /_snapshot/newes_snp/_verify
+{
+  "nodes" : {
+    "s3cH7VN6RkqEkCNlo9C4bQ" : {
+      "name" : "node-3"
+    },
+    "iNNFAI8vQc6EbszuTWIBAg" : {
+      "name" : "node-1"
+    },
+    "avGPTYI_Qce5ykmbvKZpyA" : {
+      "name" : "node-2"
+    }
+  }
+}
+
+
+#查看存储库
+#GET /_snapshot/newes_snp
+
+curl -XGET 222.24.203.42:9200/_snapshot/newes_snp
+
+/*
+{
+  "es-nfs": {
+    "type": "fs",
+    "settings": {
+      "location": "/newessnp"
+    }
+  }
+}
+*/
+
+
+
+
+#GET _snapshot/newes_snp/_all
+
+#GET /_cat/snapshots/newes_snp?v
+
+#单个快照库时查询
+curl -XGET -k -u elastic https://222.24.203.42:9200/_cat/snapshots?v
+
+#多个快照库时查询，必须指定快照库的名字
+#目前 ES 不支持一次性查询所有仓库的快照列表，只能分别查询每个仓库
+GET /_cat/snapshots/newes_snp?v
+curl -XGET -k -u elastic https://222.24.203.42:9200/_cat/snapshots/newes_snp?v
+
+#
+id                 status start_epoch start_time end_epoch  end_time duration indices successful_shards failed_shards total_shards
+snapshot_20240814 SUCCESS 1755155369  07:09:29   1755155369 07:09:29    200ms       1                 1             0            1
+
+
+curl -XGET -k -u elastic https://222.24.203.44:9200/_snapshot/newes_snp/snapshot_20240814/_status
+
+#如果忘记仓库名，可以先查仓库列表
+curl -XGET -k -u elastic "https://222.24.203.42:9200/_cat/repositories?v"
+# /_cat/repositories?v
+id          type
+es_snp      fs
+newes_snp   fs
+
+
+#仓库属性，比如只读等
+GET _snapshot/es_snp
+GET _snapshot/newes_snp
+
+# GET _snapshot/es_snp
+{
+  "es_snp" : {
+    "type" : "fs",
+    "settings" : {
+      "readonly" : "true",
+      "location" : "/snp"
+    }
+  }
+}
+
+# GET _snapshot/newes_snp
+{
+  "newes_snp" : {
+    "type" : "fs",
+    "settings" : {
+      "location" : "/newessnp"
+    }
+  }
+}
+
+
+
+#curl -k -u elastic:$ESPASSWD "https://222.24.203.42:9200/_snapshot/es_snp?verify=false" -X PUT -H "Content-Type: application/json" -d '{"type":"fs","settings":{"location":"/snp","compress":true,"readonly":true}}'
+
+#curl -k -u elastic:$ESPASSWD "https://222.24.203.42:9200/_snapshot/es_snp" -X PUT -H "Content-Type: application/json" -d '{"type":"fs","settings":{"location":"/snp","compress":true}}'
+```
+
+##### 6.5.快照
+###### 6.5.1.通过kibana打快照
+
+#配置完策略后，可以点击立即执行，会立即生成一份快照
+
+```
+Management ---> Stack Management ---> Snapshot and Restore ---> 策略
+
+策略名称: daily-snap
+快照名称: <daily-snap-{now/d}>
+存储库: newes_snp
+计划: 0 30 1 * * ?
+
+快照保留: 5days
+
+---> 所有数据流和索引
+---> 单个索引等
+```
+
+```bash
+创建与 Kibana 相同的 SLM 策略
+
+- 策略名：daily-snap
+- 调度：0 30 17 * * ?（每天 01:30）
+- 快照名模板：<daily-snap-{now/d}>
+- 仓库：newes_snp
+- 索引：所有索引
+- 忽略不可用索引：是
+- 允许部分快照：是
+- 包含全局状态：是
+- 保留期限：5d
+```
+
+
+
+###### 6.5.2.通过命令打快照
+
+```bash
+# 创建单次快照
+PUT /_snapshot/newes_snp/daily-snap-2024.05.11-16-43?wait_for_completion=true 
+{
+  "indices": "kibana_sample_data_ecommerce,kibana_sample_data_flights",
+  "ignore_unavailable": true,
+  "include_global_state": false,
+  "metadata": {
+    "taken_by": "supwisdom",
+    "taken_because": "backup before upgrading"
+  }
+}
+# 查看快照
+GET /_snapshot/newes_snp/daily-snap-2024.05.11-16-43
+
+#创建每日快照
+curl -u elastic:$ESPASSWD -H 'Content-Type: application/json' -X PUT -k  "https://222.24.203.42:9200/_slm/policy/daily-snap" -d '{
+  "schedule": "0 30 17 * * ?",
+  "name": "<daily-snap-{now/d}>",
+  "repository": "newes_snp",
+  "config": {
+    "indices": ["*"],
+    "ignore_unavailable": true,
+    "include_global_state": true,
+    "partial": true
+  },
+  "retention": {
+    "expire_after": "5d"
+  }
+}'
+
+
+#立即执行一次此策略 
+curl -X POST -k -u elastic:$ESPASSWD "https://222.24.203.42:9200/_slm/policy/daily-snap/_execute"
+#查看策略 
+curl -X GET -k -u elastic:$ESPASSWD "https://222.24.203.42:9200/_slm/policy/daily-snap?pretty"
+#查看 SLM 状态 
+curl -X GET -k -u elastic:$ESPASSWD "https://222.24.203.42:9200/_slm/status?pretty"
+#立刻执行一次保留清理（删除超过 5d 的快照） 
+curl -X POST -k -u elastic:$ESPASSWD "https://222.24.203.42:9200/_slm/_execute_retention"
+
+
+#查看进行中的快照进度
+#查所有正在进行的快照 
+curl -X GET -k -u elastic:$ESPASSWD "https://222.24.203.42:9200/_snapshot/_status?pretty"
+#只看指定仓库 
+curl -X GET -k -u elastic:$ESPASSWD "https://222.24.203.42:9200/_snapshot/newes_snp/_status?pretty"
+#已知快照名时（进度最详细） 
+curl -X GET -k -u elastic:$ESPASSWD "https://222.24.203.42:9200/_snapshot/newes_snp/<SNAPSHOT_NAME>/_status?pretty"
+
+#以上返回中的关键字段：
+snapshots[0].state: IN_PROGRESS / SUCCESS / FAILED
+snapshots[0].shards_stats: initializing/started/finalizing/done/failed/total
+snapshots[0].stats.time_in_millis、size_in_bytes
+
+#快速看状态列表
+#列出仓库里快照及状态（IN_PROGRESS/SUCCESS/FAILED） 
+curl -X GET -k -u elastic:$ESPASSWD "https://222.24.203.42:9200/_cat/snapshots/newes_snp?v&s=start_epoch:desc"
+
+#通过任务查看（可选，看到创建快照的任务） 
+curl -X GET -k -u elastic:$ESPASSWD "https://222.24.203.42:9200/_tasks?detailed=true&actions=cluster:admin/snapshot/*&pretty"
+
+#查看策略的最近一次成功/失败时间 
+curl -X GET -k -u elastic:$ESPASSWD "https://222.24.203.42:9200/_slm/policy/daily-snap?pretty"
+
+
+#查询 SLM 历史（最近10条） 
+#查询字段
+curl -k -u elastic:$ESPASSWD "https://222.24.203.42:9200/.slm-history-*/_mapping?pretty&filter_path=**.properties"
+
+#根据上面查询出的字段名称，来查询最近的十条---@timestamp
+curl -H 'Content-Type: application/json' -X GET -k -u elastic:$ESPASSWD "https://222.24.203.42:9200/.slm-history-*/_search?pretty" -d '{"size":10,"sort":[{"@timestamp":"desc"}]}'
+
+#（按快照名显示完成分片数/总数） SN=<执行策略后返回的snapshot_name> 
+#daily-snap-2025.08.15-cnkywxe1sycafrf_vtjouw
+export SN='daily-snap-2025.08.15-cnkywxe1sycafrf_vtjouw'   
+watch -n 5 "curl -s -k -u elastic:$ESPASSWD 'https://222.24.203.42:9200/_snapshot/newes_snp/daily-snap-2025.08.15-cnkywxe1sycafrf_vtjouw/_status' | jq -r '.snapshots[0] | \"state=\(.state) done=\(.shards_stats.done)/\(.shards_stats.total)\"'"
+
+export SN='daily-snap-2025.08.15-cnkywxe1sycafrf_vtjouw'   
+while true; do
+  curl -s -k -u elastic:$ESPASSWD 'https://222.24.203.42:9200/_snapshot/newes_snp/'"$SN"'/_status' \
+  | jq -r '.snapshots[0] | "state=\(.state) done=\(.shards_stats.done)/\(.shards_stats.total)"'
+  sleep 5
+done
+```
+
+```log
+常规
+版本
+2
+最后修改时间
+2025年8月15日 GMT+8 09:50
+快照名称
+<daily-snap-{now/d}>
+存储库
+newes_snp
+计划
+0 30 17 * * ?
+下一快照
+2025年8月16日 GMT+8 01:30
+索引
+所有索引
+忽略不可用索引
+是
+允许部分分片
+是
+包括全局状态
+是
+```
+
+```bash
+[elasticsearch@es03 ~]$ curl -X GET -k -u elastic:$ESPASSWD "https://222.24.203.42:9200/_cat/snapshots/newes_snp?v&s=start_epoch:desc"
+id                                                status start_epoch start_time end_epoch  end_time duration indices successful_shards failed_shards total_shards
+daily-snap-2025.08.15-cnkywxe1sycafrf_vtjouw IN_PROGRESS 1755222710  01:51:50   0          00:00:00    11.6m      75                 0             0            0
+snapshot_20240814                                SUCCESS 1755155369  07:09:29   1755155369 07:09:29    200ms       1                 1             0            1
+
+
+[elasticsearch@es03 ~]$ curl -X GET -k -u elastic:$ESPASSWD "https://222.24.203.42:9200/_tasks?detailed=true&actions=cluster:admin/snapshot/*&pretty"
+{
+  "nodes" : {
+    "s3cH7VN6RkqEkCNlo9C4bQ" : {
+      "name" : "node-3",
+      "transport_address" : "222.24.203.44:9300",
+      "host" : "222.24.203.44",
+      "ip" : "222.24.203.44:9300",
+      "roles" : [
+        "ingest",
+        "master",
+        "transform",
+        "data",
+        "remote_cluster_client",
+        "ml"
+      ],
+      "attributes" : {
+        "ml.machine_memory" : "32322408448",
+        "ml.max_open_jobs" : "20",
+        "xpack.installed" : "true",
+        "transform.node" : "true"
+      },
+      "tasks" : {
+        "s3cH7VN6RkqEkCNlo9C4bQ:567925" : {
+          "node" : "s3cH7VN6RkqEkCNlo9C4bQ",
+          "id" : 567925,
+          "type" : "transport",
+          "action" : "cluster:admin/snapshot/create",
+          "description" : "snapshot [newes_snp:daily-snap-2025.08.15-cnkywxe1sycafrf_vtjouw]",
+          "start_time_in_millis" : 1755222710484,
+          "running_time_in_nanos" : 833072763081,
+          "cancellable" : false,
+          "headers" : { }
+        }
+      }
+    }
+  }
+}
+
+#打快照中
+[devel@docker-01 ~]$ curl -X GET -k -u elastic:$ESPASSWD "https://222.24.203.42:9200/_slm/policy/daily-snap?pretty"
+{
+  "daily-snap" : {
+    "version" : 2,
+    "modified_date_millis" : 1755222630730,
+    "policy" : {
+      "name" : "<daily-snap-{now/d}>",
+      "schedule" : "0 30 17 * * ?",
+      "repository" : "newes_snp",
+      "config" : {
+        "ignore_unavailable" : true,
+        "partial" : true
+      },
+      "retention" : {
+        "expire_after" : "5d"
+      }
+    },
+    "next_execution_millis" : 1755279000000,
+    "in_progress" : {
+      "name" : "daily-snap-2025.08.15-cnkywxe1sycafrf_vtjouw",
+      "uuid" : "ZrS8LwCSQsG8dexSBWgQ9w",
+      "state" : "STARTED",
+      "start_time_millis" : 1755222710474
+    },
+    "stats" : {
+      "policy" : "daily-snap",
+      "snapshots_taken" : 0,
+      "snapshots_failed" : 0,
+      "snapshots_deleted" : 0,
+      "snapshot_deletion_failures" : 0
+    }
+  }
+}
+
+#快照完毕
+[elasticsearch@es03 ~]$ curl -X GET -k -u elastic:$ESPASSWD "https://222.24.203.42:9200/_slm/policy/daily-snap?pretty"
+{
+  "daily-snap" : {
+    "version" : 2,
+    "modified_date_millis" : 1755222630730,
+    "policy" : {
+      "name" : "<daily-snap-{now/d}>",
+      "schedule" : "0 30 17 * * ?",
+      "repository" : "newes_snp",
+      "config" : {
+        "ignore_unavailable" : true,
+        "partial" : true
+      },
+      "retention" : {
+        "expire_after" : "5d"
+      }
+    },
+    "last_success" : {
+      "snapshot_name" : "daily-snap-2025.08.15-cnkywxe1sycafrf_vtjouw",
+      "time" : 1755224920313
+    },
+    "next_execution_millis" : 1755279000000,
+    "stats" : {
+      "policy" : "daily-snap",
+      "snapshots_taken" : 1,
+      "snapshots_failed" : 0,
+      "snapshots_deleted" : 0,
+      "snapshot_deletion_failures" : 0
+    }
+  }
+}
+
+
+
+[elasticsearch@es03 indices]$ curl -X GET -k -u elastic:$ESPASSWD "https://222.24.203.42:9200/_snapshot/_status?pretty"
+{
+  "snapshots" : [
+    {
+      "snapshot" : "daily-snap-2025.08.15-cnkywxe1sycafrf_vtjouw",
+      "repository" : "newes_snp",
+      "uuid" : "ZrS8LwCSQsG8dexSBWgQ9w",
+      "state" : "STARTED",
+      "include_global_state" : true,
+      "shards_stats" : {
+        "initializing" : 0,
+        "started" : 61,
+        "finalizing" : 0,
+        "done" : 14,
+        "failed" : 0,
+        "total" : 75
+      },
+      "stats" : {
+        "incremental" : {
+          "file_count" : 8108,
+          "size_in_bytes" : 145754282608
+        },
+        "processed" : {
+          "file_count" : 1087,
+          "size_in_bytes" : 24843215555
+        },
+        "total" : {
+          "file_count" : 8108,
+          "size_in_bytes" : 145754282608
+        },
+        "start_time_in_millis" : 1755222710474,
+        "time_in_millis" : 299524
+      },
+      "indices" : {
+        "authx_log__service_access_log_index-2024.01" : {
+          "shards_stats" : {
+            "initializing" : 0,
+            "started" : 0,
+            "finalizing" : 0,
+            "done" : 1,
+            "failed" : 0,
+            "total" : 1
+          },
+          "stats" : {
+            "incremental" : {
+              "file_count" : 61,
+              "size_in_bytes" : 4264903144
+            },
+            "processed" : {
+              "file_count" : 44,
+              "size_in_bytes" : 4264895242
+            },
+            "total" : {
+              "file_count" : 61,
+              "size_in_bytes" : 4264903144
+            },
+            "start_time_in_millis" : 1755222710474,
+            "time_in_millis" : 238699
+          },
+          "shards" : {
+            "0" : {
+              "stage" : "DONE",
+              "stats" : {
+                "incremental" : {
+                  "file_count" : 61,
+                  "size_in_bytes" : 4264903144
+                },
+                "processed" : {
+                  "file_count" : 44,
+                  "size_in_bytes" : 4264895242
+                },
+                "total" : {
+                  "file_count" : 61,
+                  "size_in_bytes" : 4264903144
+                },
+                "start_time_in_millis" : 1755222710474,
+                "time_in_millis" : 238699
+              }
+            }
+          }
+        },
+        "authx_log__service_access_log_index-2024.03" : {
+          "shards_stats" : {
+            "initializing" : 0,
+            "started" : 1,
+            "finalizing" : 0,
+            "done" : 0,
+            "failed" : 0,
+            "total" : 1
+          },
+          "stats" : {
+            "incremental" : {
+              "file_count" : 79,
+              "size_in_bytes" : 4449175058
+            },
+            "processed" : {
+              "file_count" : 0,
+              "size_in_bytes" : 0
+            },
+            "total" : {
+              "file_count" : 79,
+              "size_in_bytes" : 4449175058
+            },
+            "start_time_in_millis" : 1755222710674,
+            "time_in_millis" : 0
+          },
+          "shards" : {
+            "0" : {
+              "stage" : "STARTED",
+              "stats" : {
+                "incremental" : {
+                  "file_count" : 79,
+                  "size_in_bytes" : 4449175058
+                },
+                "processed" : {
+                  "file_count" : 0,
+                  "size_in_bytes" : 0
+                },
+                "total" : {
+                  "file_count" : 79,
+                  "size_in_bytes" : 4449175058
+                },
+                "start_time_in_millis" : 1755222710674,
+                "time_in_millis" : 0
+              },
+              "node" : "s3cH7VN6RkqEkCNlo9C4bQ"
+            }
+          }
+        },
+  
+#快照进度
+export SN='daily-snap-2025.08.15-cnkywxe1sycafrf_vtjouw'   
+watch -n 5 "curl -s -k -u elastic:$ESPASSWD 'https://222.24.203.42:9200/_snapshot/newes_snp/daily-snap-2025.08.15-cnkywxe1sycafrf_vtjouw/_status' | jq -r '.snapshots[0] | \"state=\(.state) done=\(.shards_stats.done)/\(.shards_stats.total)\"'"
+
+Every 5.0s: curl -s -k -u elastic:XIlreSzGM51dH44yuxo1 'https://222.24.203.42:9200/_snapshot/newes_snp/daily-snap...  docker-01: Fri Aug 15 10:27:37 2025
+
+state=STARTED done=72/75
+......
+state=SUCCESS done=75/75
+
+
+#快照历史记录
+#查询字段
+[elasticsearch@es03 ~]$  curl -k -u elastic:$ESPASSWD "https://222.24.203.42:9200/.slm-history-*/_mapping?pretty&filter_path=**.properties"
+{
+  ".slm-history-2-000001" : {
+    "mappings" : {
+      "properties" : {
+        "@timestamp" : {
+          "type" : "date",
+          "format" : "epoch_millis"
+        },
+        "configuration" : {
+          "dynamic" : "false",
+          "properties" : {
+            "include_global_state" : {
+              "type" : "boolean"
+            },
+            "indices" : {
+              "type" : "keyword"
+            },
+            "partial" : {
+              "type" : "boolean"
+            }
+          }
+        },
+        "error_details" : {
+          "type" : "text",
+          "index" : false
+        },
+        "operation" : {
+          "type" : "keyword"
+        },
+        "policy" : {
+          "type" : "keyword"
+        },
+        "repository" : {
+          "type" : "keyword"
+        },
+        "snapshot_name" : {
+          "type" : "keyword"
+        },
+        "success" : {
+          "type" : "boolean"
+        }
+      }
+    }
+  }
+}
+
+[elasticsearch@es03 ~]$ curl -H 'Content-Type: application/json' -X GET -k -u elastic:$ESPASSWD "https://222.24.203.42:9200/.slm-history-*/_search?pretty" -d '{"size":10,"sort":[{"@timestamp":"desc"}]}'
+{
+  "took" : 1,
+  "timed_out" : false,
+  "_shards" : {
+    "total" : 1,
+    "successful" : 1,
+    "skipped" : 0,
+    "failed" : 0
+  },
+  "hits" : {
+    "total" : {
+      "value" : 1,
+      "relation" : "eq"
+    },
+    "max_score" : null,
+    "hits" : [
+      {
+        "_index" : ".slm-history-2-000001",
+        "_type" : "_doc",
+        "_id" : "UvCOq5gBbVBmE7QY0cWV",
+        "_score" : null,
+        "_source" : {
+          "@timestamp" : 1755224920313,
+          "policy" : "daily-snap",
+          "repository" : "newes_snp",
+          "snapshot_name" : "daily-snap-2025.08.15-cnkywxe1sycafrf_vtjouw",
+          "operation" : "CREATE",
+          "success" : true,
+          "configuration" : {
+            "ignore_unavailable" : true,
+            "partial" : true
+          },
+          "error_details" : null
+        },
+        "sort" : [
+          1755224920313
+        ]
+      }
+    ]
+  }
+}
+
+#其它多条记录的
+GET /.slm-history-*/_search?pretty
+{"size":6,"sort":[{"@timestamp":"desc"}]}
+
+{
+  "took" : 51,
+  "timed_out" : false,
+  "_shards" : {
+    "total" : 4,
+    "successful" : 4,
+    "skipped" : 0,
+    "failed" : 0
+  },
+  "hits" : {
+    "total" : {
+      "value" : 188,
+      "relation" : "eq"
+    },
+    "max_score" : null,
+    "hits" : [
+      {
+        "_index" : ".slm-history-2-000014",
+        "_type" : "_doc",
+        "_id" : "y5pZq5gBhgCqahXjJMgo",
+        "_score" : null,
+        "_source" : {
+          "@timestamp" : 1755221402664,
+          "policy" : "daily-snap",
+          "repository" : "es_snp",
+          "snapshot_name" : "daily-snap-2025.08.09-vr1mvm1itcqafltjyivlna",
+          "operation" : "DELETE",
+          "success" : true,
+          "configuration" : null,
+          "error_details" : null
+        },
+        "sort" : [
+          1755221402664
+        ]
+      },
+      {
+        "_index" : ".slm-history-2-000014",
+        "_type" : "_doc",
+        "_id" : "1ZahqZgBhgCqahXj5kd2",
+        "_score" : null,
+        "_source" : {
+          "@timestamp" : 1755192616566,
+          "policy" : "daily-snap",
+          "repository" : "es_snp",
+          "snapshot_name" : "daily-snap-2025.08.14-qwh4_zdxracjojhi2f2ymq",
+          "operation" : "CREATE",
+          "success" : true,
+          "configuration" : {
+            "ignore_unavailable" : true,
+            "partial" : true
+          },
+          "error_details" : null
+        },
+        "sort" : [
+          1755192616566
+        ]
+      },
+      {
+        "_index" : ".slm-history-2-000014",
+        "_type" : "_doc",
+        "_id" : "wo0yppgBhgCqahXjxj40",
+        "_score" : null,
+        "_source" : {
+          "@timestamp" : 1755135002163,
+          "policy" : "daily-snap",
+          "repository" : "es_snp",
+          "snapshot_name" : "daily-snap-2025.08.08-ahqjsvhatagf7cgczakvhq",
+          "operation" : "DELETE",
+          "success" : true,
+          "configuration" : null,
+          "error_details" : null
+        },
+        "sort" : [
+          1755135002163
+        ]
+      },
+      {
+        "_index" : ".slm-history-2-000014",
+        "_type" : "_doc",
+        "_id" : "uYh7pJgBhgCqahXjjLbC",
+        "_score" : null,
+        "_source" : {
+          "@timestamp" : 1755106217154,
+          "policy" : "daily-snap",
+          "repository" : "es_snp",
+          "snapshot_name" : "daily-snap-2025.08.13-hqqw5k6usrifnkflhhp0ig",
+          "operation" : "CREATE",
+          "success" : true,
+          "configuration" : {
+            "ignore_unavailable" : true,
+            "partial" : true
+          },
+          "error_details" : null
+        },
+        "sort" : [
+          1755106217154
+        ]
+      },
+      {
+        "_index" : ".slm-history-2-000014",
+        "_type" : "_doc",
+        "_id" : "3H8MoZgBhgCqahXjj6qO",
+        "_score" : null,
+        "_source" : {
+          "@timestamp" : 1755048611725,
+          "policy" : "daily-snap",
+          "repository" : "es_snp",
+          "snapshot_name" : "daily-snap-2025.08.07-v8mf6pb6ragvxy5kgcpg-q",
+          "operation" : "DELETE",
+          "success" : true,
+          "configuration" : null,
+          "error_details" : null
+        },
+        "sort" : [
+          1755048611725
+        ]
+      },
+      {
+        "_index" : ".slm-history-2-000014",
+        "_type" : "_doc",
+        "_id" : "kntVn5gBhgCqahXjHRt9",
+        "_score" : null,
+        "_source" : {
+          "@timestamp" : 1755019812221,
+          "policy" : "daily-snap",
+          "repository" : "es_snp",
+          "snapshot_name" : "daily-snap-2025.08.12-voemyurrtdwtdiwvltg7kg",
+          "operation" : "CREATE",
+          "success" : true,
+          "configuration" : {
+            "ignore_unavailable" : true,
+            "partial" : true
+          },
+          "error_details" : null
+        },
+        "sort" : [
+          1755019812221
+        ]
+      }
+    ]
+  }
+}
+```
+
+
+
+
+
+##### 6.6.还原
+
+###### 6.6.1.通过kibana还原快照
+
+```
+Management ---> Stack Management ---> Snapshot and Restore ---> Snapshot
+
+---> 所有数据流和索引
+---> 单个索引等
+```
+
+
+
+###### 6.6.2.通过命令恢复快照
+
+```bash
+POST /_snapshot/newes_snp/daily-snap-2024.05.11-pfsf0g5er7ophfuigczrqw/_restore
+{
+  "indices": "kibana_sample_data_ecommerce,kibana_sample_data_flights",
+  "ignore_unavailable": true,
+  "include_global_state": true,
+  "rename_pattern": "index_(.+)",
+  "rename_replacement": "restored_index_$1"
+}
+
+
+curl --k -u elastic:$ESPASSWD "https://222.24.203.42:9200/_snapshot/my_backup/snapshot_1/_restore' -H 'Content-Type: application/json' -d '{
+  "indices": "my_index",
+  "ignore_unavailable": true,
+  "include_global_state": false,
+  "rename_pattern": "my_index",
+  "rename_replacement": "my_index_restored"
+}'
+
+```
+
+
+
+
 
 ### 六、低/零停机的切换建议
 

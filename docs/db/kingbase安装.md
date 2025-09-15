@@ -222,6 +222,23 @@ cd /opt/Kingbase/storage
 wget https://kingbase.oss-cn-beijing.aliyuncs.com/KESV8R3/V008R006C009B0014/KingbaseES_V008R006C009B0014_Lin64_install.iso
 #https://kingbase.oss-cn-beijing.aliyuncs.com/KESV8R3/V008R006C009B0014/KingbaseES_V008R006C009B0014_Kunpeng64_install.iso
 
+#wget https://kingbase.oss-cn-beijing.aliyuncs.com/KESV8R3/V008R006C009B0014/KingbaseES_V008R006C009B0014_Kunpeng64_install.iso
+
+#飞腾
+#wget https://kingbase.oss-cn-beijing.aliyuncs.com/KESV8R3/V008R006C009B0014/KingbaseES_V008R006C009B0014_Aarch64_install.iso
+
+#海光
+#wget https://kingbase.oss-cn-beijing.aliyuncs.com/KESV8R3/V008R006C009B0014/KingbaseES_V008R006C009B0014_Lin64_install.iso
+
+#龙芯
+#wget https://kingbase.oss-cn-beijing.aliyuncs.com/KESV8R3/V008R006C009B0014/KingbaseES_V008R006C009B0014_Loongarch64_install.iso
+
+#申威
+#wget https://kingbase.oss-cn-beijing.aliyuncs.com/KESV8R3/V008R006C009B0014/KingbaseES_V008R006C009B0014_Sw64_install.iso
+
+#兆芯
+#wget https://kingbase.oss-cn-beijing.aliyuncs.com/KESV8R3/V008R006C009B0014/KingbaseES_V008R006C009B0014_Lin64_install.iso
+
 chmod o+rwx /opt/Kingbase/ES/V8
 
 chown -R kingbase:kingbase /opt/Kingbase
@@ -266,11 +283,12 @@ DO YOU ACCEPT THE TERMS OF THIS LICENSE AGREEMENT? (Y/N):
 • 默认端口为:54321（可自定义）
 • 默认账户为:system（可自定义）
 • 密码（自定义）
-• 默认字符集编码为：UTF8（可选 GBK、GB18030） 
+• 默认server字符集编码为：UTF8（可选 GBK、GB18030） 
+• 默认Locale字符集编码为：en_US.UTF-8
 • 默认数据库兼容模式为：ORACLE（可选 PG、MySQL） 
 • 默认大小写敏感为：是（可选否）--->选 否
 • 默认数据块大小为：8k（可选 16k、32k） 
-• 默认加密方法为 sm4（可选 rc4） 
+#• 默认加密方法为 sm4（可选 rc4） 
 • 默认身份认证方法为 scram-sha-256（可选 scram-sm3，sm4，sm3）
 
 
@@ -634,6 +652,8 @@ mkdir -p /data/tbs/dataassets_kingbase/idc_data_api
 mkdir -p /data/tbs/dataassets_kingbase/idc_data_dashboard
 mkdir -p /data/tbs/dataassets_kingbase/idc_data_swopwork
 mkdir -p /data/tbs/dataassets_kingbase/idc_data_ods
+mkdir -p /data/tbs/dataassets_kingbase/idc_data_job
+mkdir -p /data/tbs/dataassets_kingbase/idc_data_collect
 ```
 
 
@@ -780,6 +800,8 @@ CREATE TABLESPACE idc_data_api OWNER dataassets LOCATION '/data/tbs/dataassets_k
 CREATE TABLESPACE idc_data_dashboard OWNER dataassets LOCATION '/data/tbs/dataassets_kingbase/idc_data_dashboard';
 CREATE TABLESPACE idc_data_swopwork OWNER dataassets LOCATION '/data/tbs/dataassets_kingbase/idc_data_swopwork';
 CREATE TABLESPACE idc_data_ods OWNER dataassets LOCATION '/data/tbs/dataassets_kingbase/idc_data_ods';
+CREATE TABLESPACE idc_data_job OWNER dataassets LOCATION '/data/tbs/dataassets_kingbase/idc_data_job';
+CREATE TABLESPACE idc_data_collect OWNER dataassets LOCATION '/data/tbs/dataassets_kingbase/idc_data_collect';
 
 
 
@@ -827,9 +849,65 @@ create schema idc_data_swopwork authorization dataassets;
 
 create schema idc_data_ods authorization dataassets;
 
+create schema idc_data_job authorization dataassets;
+
+create schema idc_data_collect authorization dataassets;
+
 ```
 
 
+
+#快速重建schema
+
+```sql
+drop schema idc_data_assets CASCADE;
+
+drop schema idc_data_sharedb CASCADE;
+
+drop schema idc_data_standcode CASCADE;
+
+drop schema idc_data_dataquality CASCADE;
+
+drop schema idc_data_swop CASCADE;
+
+drop schema idc_data_api CASCADE;
+
+drop schema idc_data_dashboard CASCADE;
+
+drop schema idc_data_swopwork CASCADE;
+
+drop schema idc_data_ods CASCADE;
+
+drop schema idc_data_job CASCADE;
+
+drop schema idc_data_collect CASCADE;
+
+
+create schema idc_data_assets authorization dataassets;
+
+alter user dataassets set search_path to idc_data_assets;
+
+
+create schema idc_data_sharedb authorization dataassets;
+
+create schema idc_data_standcode authorization dataassets;
+
+create schema idc_data_dataquality authorization dataassets;
+
+create schema idc_data_swop authorization dataassets;
+
+create schema idc_data_api authorization dataassets;
+
+create schema idc_data_dashboard authorization dataassets;
+
+create schema idc_data_swopwork authorization dataassets;
+
+create schema idc_data_ods authorization dataassets;
+
+create schema idc_data_job authorization dataassets;
+
+create schema idc_data_collect authorization dataassets;
+```
 
 
 
@@ -956,7 +1034,7 @@ done
 
 --------------------------------------
 
-DATABASES=$(ls /home/kingbase/back-exp/2025-06-04/*.sql | xargs -n1 basename | sed 's/\.sql$//')
+DATABASES=$(ls /home/kingbase/back-exp/2025-08-21/*.sql | xargs -n1 basename | sed 's/\.sql$//')
 
 # 创建数据库
 for DB in $DATABASES; do
@@ -1747,6 +1825,166 @@ vi /opt/Kingbase/ES/V8/license.dat
 sys_ctl stop -D /opt/Kingbase/ES/V8/data/
 
 sys_ctl -w start -D /opt/Kingbase/ES/V8/data/ -l "/opt/Kingbase/ES/V8/data/sys_log/startup.log"
+```
+
+
+
+### 8.开启防火墙
+
+#Make absolutely sure your current SSH connection IP is in the allowlist before setting the default zone to drop, or you'll lose access!
+
+#确保当前ssh客户端的IP在防火墙的白名单列表中
+
+```bash
+echo $SSH_CLIENT | awk '{print $1}'
+```
+
+
+
+#方式一
+
+```bash
+# Add rich rules for each IP address
+firewall-cmd --permanent --add-rich-rule='rule family="ipv4" source address="172.16.50.213" port protocol="tcp" port="54321" accept'
+firewall-cmd --permanent --add-rich-rule='rule family="ipv4" source address="172.16.50.214" port protocol="tcp" port="54321" accept'
+firewall-cmd --permanent --add-rich-rule='rule family="ipv4" source address="172.16.50.215" port protocol="tcp" port="54321" accept'
+firewall-cmd --permanent --add-rich-rule='rule family="ipv4" source address="172.16.50.216" port protocol="tcp" port="54321" accept'
+firewall-cmd --permanent --add-rich-rule='rule family="ipv4" source address="172.16.50.217" port protocol="tcp" port="54321" accept'
+firewall-cmd --permanent --add-rich-rule='rule family="ipv4" source address="172.16.50.218" port protocol="tcp" port="54321" accept'
+firewall-cmd --permanent --add-rich-rule='rule family="ipv4" source address="172.16.50.219" port protocol="tcp" port="54321" accept'
+firewall-cmd --permanent --add-rich-rule='rule family="ipv4" source address="172.16.50.221" port protocol="tcp" port="54321" accept'
+firewall-cmd --permanent --add-rich-rule='rule family="ipv4" source address="172.16.50.222" port protocol="tcp" port="54321" accept'
+firewall-cmd --permanent --add-rich-rule='rule family="ipv4" source address="172.16.50.223" port protocol="tcp" port="54321" accept'
+firewall-cmd --permanent --add-rich-rule='rule family="ipv4" source address="172.16.50.224" port protocol="tcp" port="54321" accept'
+firewall-cmd --permanent --add-rich-rule='rule family="ipv4" source address="172.16.50.225" port protocol="tcp" port="54321" accept'
+firewall-cmd --permanent --add-rich-rule='rule family="ipv4" source address="172.16.50.226" port protocol="tcp" port="54321" accept'
+firewall-cmd --permanent --add-rich-rule='rule family="ipv4" source address="172.16.50.227" port protocol="tcp" port="54321" accept'
+firewall-cmd --permanent --add-rich-rule='rule family="ipv4" source address="172.16.50.228" port protocol="tcp" port="54321" accept'
+firewall-cmd --permanent --add-rich-rule='rule family="ipv4" source address="172.16.50.229" port protocol="tcp" port="54321" accept'
+firewall-cmd --permanent --add-rich-rule='rule family="ipv4" source address="172.16.50.232" port protocol="tcp" port="54321" accept'
+
+# Reload firewall
+firewall-cmd --reload
+```
+
+#方式一改进
+
+```bash
+for ip in 172.16.50.213 172.16.50.214 172.16.50.215 172.16.50.216 172.16.50.217 172.16.50.218 172.16.50.219 172.16.50.221 172.16.50.222 172.16.50.223 172.16.50.224 172.16.50.225 172.16.50.226 172.16.50.227 172.16.50.228 172.16.50.229 172.16.50.232; do
+  firewall-cmd --permanent --add-rich-rule="rule family=\"ipv4\" source address=\"${ip}\" accept"
+done
+```
+
+
+
+#方式二
+
+```bash
+# First, ensure firewalld is running
+systemctl start firewalld
+systemctl enable firewalld
+
+# Create a new zone for Kingbase (optional but recommended for better organization)
+firewall-cmd --permanent --new-zone=kingbase
+
+# Add the allowed IP addresses as sources to the zone
+firewall-cmd --permanent --zone=kingbase --add-source=172.16.50.213
+firewall-cmd --permanent --zone=kingbase --add-source=172.16.50.214
+firewall-cmd --permanent --zone=kingbase --add-source=172.16.50.215
+firewall-cmd --permanent --zone=kingbase --add-source=172.16.50.216
+firewall-cmd --permanent --zone=kingbase --add-source=172.16.50.217
+firewall-cmd --permanent --zone=kingbase --add-source=172.16.50.218
+firewall-cmd --permanent --zone=kingbase --add-source=172.16.50.219
+firewall-cmd --permanent --zone=kingbase --add-source=172.16.50.221
+firewall-cmd --permanent --zone=kingbase --add-source=172.16.50.222
+firewall-cmd --permanent --zone=kingbase --add-source=172.16.50.223
+firewall-cmd --permanent --zone=kingbase --add-source=172.16.50.224
+firewall-cmd --permanent --zone=kingbase --add-source=172.16.50.225
+firewall-cmd --permanent --zone=kingbase --add-source=172.16.50.226
+firewall-cmd --permanent --zone=kingbase --add-source=172.16.50.227
+firewall-cmd --permanent --zone=kingbase --add-source=172.16.50.228
+firewall-cmd --permanent --zone=kingbase --add-source=172.16.50.229
+firewall-cmd --permanent --zone=kingbase --add-source=172.16.50.232
+
+# Add the Kingbase port (default is 54321, adjust if different)
+#firewall-cmd --permanent --zone=kingbase --add-port=54321/tcp
+#firewall-cmd --permanent --zone=kingbase --add-port=22/tcp
+
+# Or if you want to allow all ports from these IPs (as mentioned "unrestricted access port")
+firewall-cmd --permanent --zone=kingbase --set-target=ACCEPT
+
+# Remove the Kingbase port from other zones if it was previously added
+firewall-cmd --permanent --zone=public --remove-port=54321/tcp
+
+# Reload the firewall to apply changes
+firewall-cmd --reload
+
+# Verify the configuration
+firewall-cmd --zone=kingbase --list-all
+```
+
+
+
+#方式二改进，不限制端口
+
+```bash
+systemctl start firewalld
+systemctl enable firewalld
+
+firewall-cmd --permanent --new-zone=allowlist
+firewall-cmd --permanent --zone=allowlist --set-target=ACCEPT
+
+for ip in 172.16.50.213 172.16.50.214 172.16.50.215 172.16.50.216 172.16.50.217 172.16.50.218 172.16.50.219 172.16.50.221 172.16.50.222 172.16.50.223 172.16.50.224 172.16.50.225 172.16.50.226 172.16.50.227 172.16.50.228 172.16.50.229 172.16.50.232; do
+  firewall-cmd --permanent --zone=allowlist --add-source=${ip}/32
+done
+
+firewall-cmd --permanent --zone=allowlist --add-source=127.0.0.1/32
+
+firewall-cmd --reload
+
+firewall-cmd --set-default-zone=drop
+
+firewall-cmd --get-default-zone
+firewall-cmd --zone=allowlist --list-all
+firewall-cmd --zone=drop --list-all
+firewall-cmd --list-all
+```
+
+
+
+#命令分层
+
+```bash
+# First, ensure firewalld is running
+systemctl start firewalld
+systemctl enable firewalld
+
+# Create the allowlist zone
+firewall-cmd --permanent --new-zone=allowlist
+
+# Set the zone to ACCEPT traffic from its sources
+firewall-cmd --permanent --zone=allowlist --set-target=ACCEPT
+
+# Add all allowed IPs to the allowlist zone
+for ip in 172.16.50.213 172.16.50.214 172.16.50.215 172.16.50.216 172.16.50.217 172.16.50.218 172.16.50.219 172.16.50.221 172.16.50.222 172.16.50.223 172.16.50.224 172.16.50.225 172.16.50.226 172.16.50.227 172.16.50.228 172.16.50.229 172.16.50.232; do
+  firewall-cmd --permanent --zone=allowlist --add-source=${ip}/32
+done
+
+firewall-cmd --permanent --zone=allowlist --add-source=127.0.0.1/32
+
+# Reload to apply changes
+firewall-cmd --reload
+
+# Set default zone to drop (blocks everything not explicitly allowed)
+# --set-default-zone changes both runtime and permanent configuration automatically, so it doesn't need (and can't use) the --permanent flag
+# This command will immediately change the default zone and the change will persist across reboots
+firewall-cmd --set-default-zone=drop
+
+# Verify the configuration
+firewall-cmd --get-default-zone
+firewall-cmd --zone=allowlist --list-all
+firewall-cmd --zone=drop --list-all
+firewall-cmd --list-all
 ```
 
 
