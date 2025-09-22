@@ -944,6 +944,7 @@ platform_openapi
 
  portal
 
+ dataassets
 ```
 
 
@@ -965,8 +966,15 @@ vi /home/kingbase/.kbpass
 chmod 0600 /home/kingbase/.kbpass
 chown kingbase:kingbase /home/kingbase/.kbpass
 
+su - kingbase
 
+ssh-keygen
 
+ssh-copy-id root@172.16.50.231
+
+#如果编译安装了openssh，那么采用以下命令
+#cat ~/.ssh/id_rsa.pub | ssh root@172.16.50.231 "mkdir -p ~/.ssh && cat >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys"
+#cat ~/.ssh/id_ed25519.pub | ssh root@172.16.50.231 "mkdir -p ~/.ssh && cat >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys"
 
 [kingbase@DBServer backup]$ ls
 kingbase_backup.sh  kingbase_cron.log
@@ -993,11 +1001,14 @@ for DB in $DATABASES; do
     /opt/Kingbase/ES/V8/Server/bin/sys_dump -h $HOST -p $PORT -U $USER -d $DB -f "$OUTPUT_DIR/$DB.sql"
 done
 
-
-
 echo "---------------压缩备份文件$(date +"%Y-%m-%d %H:%M:%S")----------------"
 cd ${OUTPUT_BASE_DIR}
 tar -czvf ${DATENOW}.tar.gz ${DATENOW} --remove-files
+
+echo "---------------传输到备份服务器$(date +"%Y-%m-%d %H:%M:%S")----------------"
+#rsync
+#which rsync
+/bin/rsync -azv --progress -e "ssh -p 22 " ${OUTPUT_BASE_DIR}/ root@172.16.50.231:${OUTPUT_BASE_DIR}/
 
 echo "---------------删除五天前备份的文件$(date +"%Y-%m-%d %H:%M:%S")----------------"
 cd /data/backup && find . -type f -name "*.tar.gz" -mtime +5 | tee -a delete_list.log | xargs rm -f
@@ -1011,9 +1022,9 @@ echo "---------------${DATENOW}结束备份----------------"| tee -a ${OUTPUT_BA
 #单次备份
 
 ```bash
- DATABASES=$(/opt/Kingbase/ES/V8/Server/bin/ksql -h 192.168.106.84 -p 54321 -U system -d test -t -c "SELECT datname FROM pg_database WHERE datname NOT IN ('template0', 'template1');")
+DATABASES=$(/opt/Kingbase/ES/V8/Server/bin/ksql -h 192.168.106.84 -p 54321 -U system -d test -t -c "SELECT datname FROM pg_database WHERE datname NOT IN ('template0', 'template1');")
  
- for DB in $DATABASES; do
+for DB in $DATABASES; do
     /opt/Kingbase/ES/V8/Server/bin/sys_dump -h 192.168.106.84 -p 54321 -U system -d $DB -f "/home/kingbase/$DB.sql"
 done
 ```
