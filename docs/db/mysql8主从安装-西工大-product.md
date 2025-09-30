@@ -869,8 +869,8 @@ yum install -y wget net-tools
 #mysql 8.4.x
 wget https://dev.mysql.com/get/mysql84-community-release-el7-1.noarch.rpm
 
-
-#8.0.39
+#20250923
+#8.0.43
 wget https://dev.mysql.com/get/mysql80-community-release-el7-11.noarch.rpm
 yum localinstall -y mysql80-community-release-el7-11.noarch.rpm
 
@@ -891,7 +891,7 @@ yum list mysql-community-client-plugins.x86_64  --showduplicates | sort -r
 yum install -y mysql-community-server --nogpgcheck
 
 [root@MHsql-db01 ~]# mysql -V
-mysql  Ver 8.0.42 for Linux on x86_64 (MySQL Community Server - GPL)
+mysql  Ver 8.0.43 for Linux on x86_64 (MySQL Community Server - GPL)
 
 
 
