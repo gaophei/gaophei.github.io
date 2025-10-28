@@ -491,6 +491,8 @@ yum makecache
 #使用阿里云的源
 wget -O /etc/yum.repos.d/CentOS-Base.repo https://mirrors.aliyun.com/repo/Centos-7.repo
 
+curl -o /etc/yum.repos.d/CentOS-Base.repo https://mirrors.aliyun.com/repo/Centos-7.repo
+
 yum clean all && yum makecache all
 ```
 ### 2.2. 安装 rpm 依赖包
@@ -709,6 +711,7 @@ chmod -R 775 /u01
 sudo sed -i 's/4096/90000/g' /etc/security/limits.d/20-nproc.conf
 ```
 #修改/etc/security/limits.conf
+
 ```bash
 cat >> /etc/security/limits.conf <<EOF
 
@@ -868,6 +871,33 @@ export CLASSPATH=$ORACLE_HOME/JRE:$ORACLE_HOME/jlib:$ORACLE_HOME/rdbms/jlib
 EOF
 
 ```
+#
+
+```bash
+su - oracle
+
+cat >> /home/oracle/.bash_profile <<'EOF'
+
+ORACLE_SID=szxy1;export ORACLE_SID
+ORACLE_BASE=/u01/app/oracle;export ORACLE_BASE
+ORACLE_HOME=$ORACLE_BASE/product/11.2.0/db_1;export ORACLE_HOME
+ORACLE_ADMIN=$ORACLE_BASE/admin;export ORACLE_ADMIN
+TNS_ADMIN=$ORACLE_HOME/network/admin;export TNS_ADMIN
+LD_LIBRARY_PATH=$ORACLE_HOME/lib:$ORACLE_HOME/jlib:/lib:/usr/lib;export LD_LIBRARY_PATH
+JAVA_HOME=$ORACLE_HOME/jdk;export JAVA_HOME
+PATH=$PATH:$ORACLE_HOME/bin:/usr/bin:/usr/sbin:/usr/local/sbin:/usr/lib:$JAVA_HOME/bin;export PATH
+ORACLE_TERM=xterm; export ORACLE_TERM
+CLASSPATH=$CLASSPATH:$ORACLE_HOME/JRE:$ORACLE_HOME/jlib:$ORACLE_HOME/rdbms/jlib; export CLASSPATH
+stty erase ^H
+export NLS_LANG=AMERICAN_AMERICA.ZHS16GBK
+export NLS_DATE_FORMAT='yyyy-mm-dd hh24:mi:ss'
+export TEMP=/tmp
+export TMPDIR=/tmp
+EOF
+```
+
+
+
 ### 2.9. 配置共享磁盘权限
 
 #### 2.9.1.无多路径模式
