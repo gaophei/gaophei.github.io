@@ -497,6 +497,7 @@ maintenance_work_mem = 1GB
 
 dynamic_shared_memory_type = posix
 
+idle_in_transaction_session_timeout = '2h'
 statement_timeout = 60min
 
 
@@ -1494,6 +1495,13 @@ SELECT pg_terminate_backend(pid)
 FROM pg_stat_activity
 WHERE state = 'idle in transaction'
   AND now() - xact_start > interval '1 hour';
+  
+#设置系统参数
+ALTER SYSTEM SET idle_in_transaction_session_timeout = '2h';
+
+ALTER SYSTEM SET statement_timeout = '1h';
+
+SELECT pg_reload_conf();
 
   
 #如果需要终止特定事务（例如 PID 为 26664 的事务）
@@ -1825,6 +1833,7 @@ ORDER BY
 
 
 
+
 ### 7.更新license
 
 ```bash
@@ -1999,4 +2008,191 @@ firewall-cmd --list-all
 ```
 
 
+
+### 9.死元组的autovacuum 的触发阈值
+
+```bash
+kingbase V8版本，目前部分表可以自动处理死元组，但是部分表为什么没有自动处理？
+[kingbase@DBServer sys_log]$ tail -1000f kingbase-2025-11-03_000000.log |grep METADATA_COLUMN
+2025-11-03 14:02:18 CST [7101]:  user=,db=,app=,client= LOG:  automatic vacuum of table "dataassets.idc_data_assets.METADATA_COLUMN_RULE_GROUPS": index scans: 1
+2025-11-03 14:02:18 CST [7101]:  user=,db=,app=,client= LOG:  automatic analyze of table "dataassets.idc_data_assets.METADATA_COLUMN_RULE_GROUPS" system usage: CPU: user: 0.02 s, system: 0.00 s, elapsed: 0.02 s
+2025-11-03 14:02:18 CST [7101]:  user=,db=,app=,client= LOG:  automatic vacuum of table "dataassets.idc_data_assets.METADATA_COLUMN": index scans: 1
+2025-11-03 14:02:20 CST [7101]:  user=,db=,app=,client= LOG:  automatic analyze of table "dataassets.idc_data_assets.METADATA_COLUMN" system usage: CPU: user: 2.16 s, system: 0.00 s, elapsed: 2.21 s
+^C
+[kingbase@DBServer sys_log]$ tail -1000f kingbase-2025-11-03_000000.log |grep ODS_ITEMS_IN_API
+^C
+[kingbase@DBServer sys_log]$ tail -1000f kingbase-2025-11-02_000000.log |grep ODS_ITEMS_IN_API
+^C
+[kingbase@DBServer sys_log]$ tail -1000f kingbase-2025-11-02_000000.log |grep ODS_ITEMS_IN_API
+^C
+[kingbase@DBServer sys_log]$ tail -1000f kingbase-2025-11-01_000000.log |grep ODS_ITEMS_IN_API
+^C
+[kingbase@DBServer sys_log]$ tail -1000f kingbase-2025-11-01_000000.log |grep METADATA_COLUMN
+2025-11-01 23:02:45 CST [13657]:  user=,db=,app=,client= LOG:  automatic vacuum of table "dataassets.idc_data_assets.METADATA_COLUMN_RULE_GROUPS": index scans: 1
+2025-11-01 23:02:45 CST [13657]:  user=,db=,app=,client= LOG:  automatic analyze of table "dataassets.idc_data_assets.METADATA_COLUMN_RULE_GROUPS" system usage: CPU: user: 0.02 s, system: 0.00 s, elapsed: 0.02 s
+2025-11-01 23:02:45 CST [13657]:  user=,db=,app=,client= LOG:  automatic vacuum of table "dataassets.idc_data_assets.METADATA_COLUMN": index scans: 1
+2025-11-01 23:02:47 CST [13657]:  user=,db=,app=,client= LOG:  automatic analyze of table "dataassets.idc_data_assets.METADATA_COLUMN" system usage: CPU: user: 2.20 s, system: 0.00 s, elapsed: 2.25 s
+^C
+[kingbase@DBServer sys_log]$
+```
+
+```sql
+SELECT schemaname, relname, n_dead_tup, n_live_tup,
+       round(n_dead_tup*100.0/nullif(n_live_tup,0),2) AS dead_pct
+FROM pg_stat_user_tables
+ORDER BY n_dead_tup DESC
+LIMIT 20;
+```
+
+```logs
+schemaname	relname	n_dead_tup	n_live_tup	dead_pct
+idc_data_dashboard	ODS_ITEMS_IN_API	33902	200585	16.90
+idc_data_assets	JOB_TASK_LOG	19737	248948	7.93
+idc_data_sharedb	ZCXTSJZD001	8538	92072	9.27
+idc_data_dashboard	ods_table_data_stat	7594	82047	9.26
+idc_data_dashboard	ODS_AS_METADATA_COLUMN	6913	72161	9.58
+idc_data_dashboard	ods_as_code_execute_code	6130	96308	6.36
+idc_data_swopwork	R_STEP_ATTRIBUTE	5962	39760	14.99
+idc_data_assets	DATA_TOTAL_RESULT_TABLE	5408	83645	6.47
+idc_data_sharedb	JX_XSPYKC	4927	226292	2.18
+idc_data_dashboard	ods_job_task	4076	39025	10.44
+idc_data_dashboard	ods_as_model_execute_item	3618	20756	17.43
+idc_data_dashboard	ods_swop_trans	3286	28077	11.70
+idc_data_sharedb	JX_JSKCB	3276	16750	19.56
+idc_data_swop	R_STEP_ATTRIBUTE	2835	94494	3.00
+idc_data_sharedb	xyk_yktryxx	2317	48261	4.80
+idc_data_assets	METADATA_COLLECT_RESULT	2261	109625	2.06
+idc_data_assets	METADATA_COLLECT_LOG_DETAIL	2261	109844	2.06
+idc_data_swopwork	R_TRANS_ATTRIBUTE	2220	24642	9.01
+idc_data_dashboard	ods_swop_trans_data_count	2157	17209	12.53
+idc_data_assets	METADATA_COLUMN_CHANGE	2151	105393	2.04
+```
+
+-------------------
+
+
+
+看图里的统计+日志，其实是**阈值没到**的典型现象：
+Autovacuum 是否对某个表做 VACUUM，主要看这个触发公式（KingbaseV8≃PostgreSQL）：
+
+> vacuum_threshold = autovacuum_vacuum_threshold
+>  + autovacuum_vacuum_scale_factor × reltuples(≈表中“活”行数)
+
+默认一般是：`autovacuum_vacuum_threshold=50`、`autovacuum_vacuum_scale_factor=0.2`。
+
+用截图里的两个表粗算一下（用 n_live_tup 近似 reltuples 就够用了）：
+
+* **ODS_ITEMS_IN_API**：
+  n_live_tup≈200,585 ⇒ 阈值 ≈ 50 + 0.2×200,585 = **40,167**
+  n_dead_tup=33,902 　**< 40,167** → 没达到触发条件，所以这几天日志里看不到它的自动 VACUUM，很正常。
+* **METADATA_COLUMN**：
+  n_live_tup≈72,161 ⇒ 阈值 ≈ 50 + 0.2×72,161 = **14,482**
+  这个表近期的 autovacuum 日志能看到，可能是**达到了阈值**，或者该表**设置了更激进的 per-table 参数**，又或者是**冻结/插入阈值**触发（某些版本带 `autovacuum_vacuum_insert_threshold/_scale_factor` 时，最近插入很多也会触发）。
+
+> 补充：如果存在**长事务/闲置但未提交的事务**、逻辑复制槽卡住、热备长查询等，也会阻止清理；你上次手动 kill 掉 “idle in transaction” 后自动清理恢复，正说明这类阻塞也在影响效果。
+
+---
+
+#### 9.1.一键自查 SQL（直接执行就能看出“谁该被扫”）
+
+```sql
+-- 计算每张表当前的 VACUUM 触发阈值和是否已超过
+WITH p AS (
+  SELECT
+    current_setting('autovacuum_vacuum_threshold')::int  AS thr,
+    current_setting('autovacuum_vacuum_scale_factor')::numeric AS sf
+)
+SELECT s.schemaname, s.relname, s.n_live_tup, s.n_dead_tup,
+       (p.thr + p.sf * GREATEST(s.n_live_tup,0))::bigint AS vacuum_threshold,
+       (s.n_dead_tup - (p.thr + p.sf * GREATEST(s.n_live_tup,0)))::bigint AS over_by
+FROM pg_stat_user_tables s, p
+ORDER BY over_by DESC
+LIMIT 50;
+```
+
+查看是否对单表做过特殊配置（可能解释为什么同库里有的表会自动扫、有的不会）：
+
+```sql
+SELECT n.nspname, c.relname, c.reloptions
+FROM pg_class c
+JOIN pg_namespace n ON n.oid=c.relnamespace
+WHERE c.reloptions IS NOT NULL
+  AND c.relname IN ('ODS_ITEMS_IN_API','METADATA_COLUMN');
+```
+
+排查会阻止回收的长事务/复制槽：
+
+```sql
+-- 长事务 / idle in transaction（会抬高全库 xmin）
+SELECT pid, usename, state, xact_start, now()-xact_start AS age, query
+FROM pg_stat_activity
+WHERE backend_xid IS NOT NULL OR state='idle in transaction'
+ORDER BY xact_start;
+
+-- 复制槽是否卡住
+SELECT slot_name, active, pg_size_pretty(pg_xlog_location_diff(pg_current_xlog_location(), restart_lsn)) AS lag
+FROM pg_replication_slots;
+```
+
+---
+
+#### 9.2.该怎么做
+
+**短期（立刻见效）**
+
+* 手动处理个别表：
+
+  ```sql
+  VACUUM (VERBOSE, ANALYZE) idc_data_dashboard."ODS_ITEMS_IN_API";
+  ```
+
+  若明确空间已严重膨胀并可接受锁表维护，再考虑 `VACUUM (FULL)`。
+
+**中期（让它以后“自动扫”起来）**
+
+* 只对“更新/删除频繁”的大表下调阈值，避免全库成本上升：
+
+  ```sql
+  ALTER TABLE idc_data_dashboard."ODS_ITEMS_IN_API"
+    SET (autovacuum_vacuum_scale_factor = 0.05,
+         autovacuum_vacuum_threshold     = 2000,
+         autovacuum_analyze_scale_factor = 0.05,
+         autovacuum_analyze_threshold    = 500);
+  ```
+
+  这样 ODS_ITEMS_IN_API 的触发线从 ~4 万降到 ~1 万以内，能更勤快地扫。
+
+* 保持你之前的“超时”设置（能防止 idle in transaction 卡住清理），但建议**先按会话/角色设置**，避免误杀 ETL/批处理长 SQL：
+
+  ```sql
+  -- 对特定角色
+  ALTER ROLE etl_user SET idle_in_transaction_session_timeout = '1h';
+  ALTER ROLE etl_user SET statement_timeout = '30min';
+  ```
+
+**长期（全局策略 & 监控）**
+
+* 如果这是个数仓/ETL 型系统，普遍更新量大，可以考虑全局把 scale_factor 降到 0.05～0.1：
+
+  ```sql
+  ALTER SYSTEM SET autovacuum_vacuum_scale_factor = '0.05';
+  ALTER SYSTEM SET autovacuum_analyze_scale_factor = '0.05';
+  SELECT pg_reload_conf();
+  ```
+* 确认并适当提高并发与速度：
+
+  ```sql
+  SHOW autovacuum_max_workers;          -- 视实例规模设为 5~10
+  SHOW autovacuum_vacuum_cost_limit;    -- 提高能加快清理
+  SHOW maintenance_work_mem;            -- 适当增大便于索引清理
+  ```
+* 打开详细日志方便日常观察：
+
+  ```sql
+  ALTER SYSTEM SET log_autovacuum_min_duration = 0;
+  SELECT pg_reload_conf();
+  ```
+
+**结论**：
+看到“有的表扫、有的表不扫”，主要是**没有达到 autovacuum 的触发阈值**；个别能扫的表，要么达标了，要么被设置了更激进的参数，或被“冻结/插入阈值”触发。按上面的自查 SQL 验证一下，再对热点表**单表下调阈值**，基本就能让它们也自动清理起来。
 
