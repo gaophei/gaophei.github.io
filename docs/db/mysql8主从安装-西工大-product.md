@@ -4492,6 +4492,572 @@ No query specified
 
 
 
+
+
+##### 9) 主库有记录，从库没有记录，只在从库补充单条记录
+
+#故障原因
+
+```logs
+在从库用 SET GTID_NEXT=...; BEGIN; COMMIT; 注入了空事务来“消化”冲突 GTID，所以该事务在从库被标记为已执行，但实际业务数据没有落地——因此现在复制继续跑、而从库缺这条账号记录，这是预期结果（但造成主从轻微不一致）
+```
+
+#从库操作logs
+
+```bash
+[root@mysql02 fw]# tail  -20f /data/mysql/error.log
+2025-11-19T02:07:41.646879+08:00 0 [Note] [MY-011953] [InnoDB] Page cleaner took 4113ms to flush 10000 and evict 0 pages
+2025-11-19T02:07:48.002490+08:00 0 [Note] [MY-011953] [InnoDB] Page cleaner took 4355ms to flush 10000 and evict 0 pages
+2025-11-19T02:07:54.348300+08:00 0 [Note] [MY-011953] [InnoDB] Page cleaner took 4345ms to flush 10000 and evict 0 pages
+2025-11-19T02:08:02.503364+08:00 0 [Note] [MY-011953] [InnoDB] Page cleaner took 4154ms to flush 10000 and evict 0 pages
+2025-11-19T05:08:37.446149+08:00 0 [Note] [MY-011953] [InnoDB] Page cleaner took 4028ms to flush 10000 and evict 0 pages
+2025-11-19T05:08:46.730706+08:00 0 [Note] [MY-011953] [InnoDB] Page cleaner took 4284ms to flush 10000 and evict 0 pages
+2025-11-19T05:08:52.988072+08:00 0 [Note] [MY-011953] [InnoDB] Page cleaner took 4257ms to flush 10000 and evict 0 pages
+2025-11-19T05:08:58.207135+08:00 0 [Note] [MY-011953] [InnoDB] Page cleaner took 4218ms to flush 10000 and evict 0 pages
+2025-11-20T02:07:34.494949+08:00 0 [Note] [MY-011953] [InnoDB] Page cleaner took 4194ms to flush 10000 and evict 0 pages
+2025-11-20T02:07:40.753262+08:00 0 [Note] [MY-011953] [InnoDB] Page cleaner took 4258ms to flush 10000 and evict 0 pages
+2025-11-20T02:07:47.162612+08:00 0 [Note] [MY-011953] [InnoDB] Page cleaner took 4409ms to flush 10000 and evict 0 pages
+2025-11-20T02:07:54.619455+08:00 0 [Note] [MY-011953] [InnoDB] Page cleaner took 4456ms to flush 10000 and evict 0 pages
+2025-11-20T05:05:56.579547+08:00 0 [Note] [MY-011953] [InnoDB] Page cleaner took 4008ms to flush 10000 and evict 0 pages
+2025-11-20T05:06:03.142946+08:00 0 [Note] [MY-011953] [InnoDB] Page cleaner took 4563ms to flush 10000 and evict 0 pages
+2025-11-20T05:06:10.155403+08:00 0 [Note] [MY-011953] [InnoDB] Page cleaner took 5012ms to flush 10000 and evict 0 pages
+2025-11-20T05:06:18.044275+08:00 0 [Note] [MY-011953] [InnoDB] Page cleaner took 4888ms to flush 10000 and evict 0 pages
+2025-11-20T14:55:50.143398+08:00 5388168 [ERROR] [MY-010584] [Repl] Replica SQL for channel '': Worker 2 failed executing transaction 'af179f66-7990-11ee-97cc-fa163e1255d2:77621204' at source log mysql-bin.000904, end_log_pos 19717894; Could not execute Write_rows event on table cas_server.tb_account; Duplicate entry '2510001' for key 'tb_account.UQ_USERNAME', Error_code: 1062; handler error HA_ERR_FOUND_DUPP_KEY; the event's source log mysql-bin.000904, end_log_pos 19717894, Error_code: MY-001062
+2025-11-20T14:55:50.151123+08:00 5388166 [ERROR] [MY-010586] [Repl] Error running query, replica SQL thread aborted. Fix the problem, and restart the replica SQL thread with "START REPLICA". We stopped at log 'mysql-bin.000904' position 19708198
+2025-11-24T18:07:30.160395+08:00 5388165 [Warning] [MY-010897] [Repl] Storing MySQL user name or password information in the connection metadata repository is not secure and is therefore not recommended. Please consider using the USER and PASSWORD connection options for START REPLICA; see the 'START REPLICA Syntax' in the MySQL Manual for more information.
+2025-11-24T18:07:30.193541+08:00 5388165 [System] [MY-014002] [Repl] Replica receiver thread for channel '': connected to source 'repl@10.20.12.136:3306' with server_uuid=af179f66-7990-11ee-97cc-fa163e1255d2, server_id=136. Starting GTID-based replication.
+^C
+[root@mysql02 fw]# mysql
+Welcome to the MySQL monitor.  Commands end with ; or \g.
+Your MySQL connection id is 32518348
+Server version: 8.0.35 MySQL Community Server - GPL
+
+Copyright (c) 2000, 2023, Oracle and/or its affiliates.
+
+Oracle is a registered trademark of Oracle Corporation and/or its
+affiliates. Other names may be trademarks of their respective
+owners.
+
+Type 'help;' or '\h' for help. Type '\c' to clear the current input statement.
+
+root@localhost:mysql.sock [(none)]> show replica status\G;
+*************************** 1. row ***************************
+             Replica_IO_State: Waiting for source to send event
+                  Source_Host: 10.20.12.136
+                  Source_User: repl
+                  Source_Port: 3306
+                Connect_Retry: 60
+              Source_Log_File: mysql-bin.000911
+          Read_Source_Log_Pos: 334924396
+               Relay_Log_File: relay-bin.002711
+                Relay_Log_Pos: 19708374
+        Relay_Source_Log_File: mysql-bin.000904
+           Replica_IO_Running: Yes
+          Replica_SQL_Running: No
+              Replicate_Do_DB:
+          Replicate_Ignore_DB:
+           Replicate_Do_Table:
+       Replicate_Ignore_Table:
+      Replicate_Wild_Do_Table:
+  Replicate_Wild_Ignore_Table:
+                   Last_Errno: 1062
+                   Last_Error: Coordinator stopped because there were error(s) in the worker(s). The most recent failure being: Worker 2 failed executing transaction 'af179f66-7990-11ee-97cc-fa163e1255d2:77621204' at source log mysql-bin.000904, end_log_pos 19717894. See error log and/or performance_schema.replication_applier_status_by_worker table for more details about this failure or others, if any.
+                 Skip_Counter: 0
+          Exec_Source_Log_Pos: 19708198
+              Relay_Log_Space: 4122132606
+              Until_Condition: None
+               Until_Log_File:
+                Until_Log_Pos: 0
+           Source_SSL_Allowed: No
+           Source_SSL_CA_File:
+           Source_SSL_CA_Path:
+              Source_SSL_Cert:
+            Source_SSL_Cipher:
+               Source_SSL_Key:
+        Seconds_Behind_Source: NULL
+Source_SSL_Verify_Server_Cert: No
+                Last_IO_Errno: 0
+                Last_IO_Error:
+               Last_SQL_Errno: 1062
+               Last_SQL_Error: Coordinator stopped because there were error(s) in the worker(s). The most recent failure being: Worker 2 failed executing transaction 'af179f66-7990-11ee-97cc-fa163e1255d2:77621204' at source log mysql-bin.000904, end_log_pos 19717894. See error log and/or performance_schema.replication_applier_status_by_worker table for more details about this failure or others, if any.
+  Replicate_Ignore_Server_Ids:
+             Source_Server_Id: 136
+                  Source_UUID: af179f66-7990-11ee-97cc-fa163e1255d2
+             Source_Info_File: mysql.slave_master_info
+                    SQL_Delay: 0
+          SQL_Remaining_Delay: NULL
+    Replica_SQL_Running_State:
+           Source_Retry_Count: 86400
+                  Source_Bind:
+      Last_IO_Error_Timestamp:
+     Last_SQL_Error_Timestamp: 251120 14:55:50
+               Source_SSL_Crl:
+           Source_SSL_Crlpath:
+           Retrieved_Gtid_Set: af179f66-7990-11ee-97cc-fa163e1255d2:1-78375385
+            Executed_Gtid_Set: af179f66-7990-11ee-97cc-fa163e1255d2:1-77621203,
+b00ea401-7990-11ee-a316-fa163e3f7e56:1-21
+                Auto_Position: 1
+         Replicate_Rewrite_DB:
+                 Channel_Name:
+           Source_TLS_Version:
+       Source_public_key_path:
+        Get_Source_public_key: 0
+            Network_Namespace:
+1 row in set (0.00 sec)
+
+ERROR:
+No query specified
+
+root@localhost:mysql.sock [(none)]> STOP REPLICA;
+Query OK, 0 rows affected (0.01 sec)
+
+
+root@localhost:mysql.sock [(none)]> SELECT * FROM cas_server.tb_account WHERE username='2510001'
+    -> ;
++----------------------------------+------------+---------+-------------+---------------------+--------------+---------------------+----------------+-------------+----------+----------------------------------+-------------+---------+---------------------+--------------------+-------------------------+--------------+---------+--------+----------------------------------+--------+---------------+---------------+-------------+----------------------------------+
+| ID                               | COMPANY_ID | DELETED | ADD_ACCOUNT | ADD_TIME            | EDIT_ACCOUNT | EDIT_TIME           | DELETE_ACCOUNT | DELETE_TIME | USERNAME | PASSWORD                         | DESCRIPTION | ENABLED | ACCOUNT_NON_EXPIRED | ACCOUNT_NON_LOCKED | CREDENTIALS_NON_EXPIRED | IDENTITY_    | USER_ID | NAME   | USER_NO                          | MOBILE | EMAIL_ADDRESS | IDENTITY_TYPE | IDENTITY_NO | EXTERNAL_ID                      |
++----------------------------------+------------+---------+-------------+---------------------+--------------+---------------------+----------------+-------------+----------+----------------------------------+-------------+---------+---------------------+--------------------+-------------------------+--------------+---------+--------+----------------------------------+--------+---------------+---------------+-------------+----------------------------------+
+| 78cacdc0ad9311f0c7e50130648a5cc0 | 1          |       0 | anonymous   | 2025-10-20 17:02:11 | anonymous    | 2025-10-20 17:03:32 | NULL           | NULL        | 2510001  | 767c22d0ad9311f0498bc9f52b2637bd | NULL        |       1 |                   1 |                  1 |                       1 | 临时人员     | NULL    | 王帅   | 78c68801ad9311f0c7e50130648a5cc0 | NULL   | NULL          | NULL          | NULL        | 78cacdc0ad9311f0c7e50130648a5cc0 |
++----------------------------------+------------+---------+-------------+---------------------+--------------+---------------------+----------------+-------------+----------+----------------------------------+-------------+---------+---------------------+--------------------+-------------------------+--------------+---------+--------+----------------------------------+--------+---------------+---------------+-------------+----------------------------------+
+1 row in set (0.00 sec)
+
+root@localhost:mysql.sock [(none)]> SELECT * FROM cas_server.tb_account WHERE username='2510001'\G
+*************************** 1. row ***************************
+                     ID: 78cacdc0ad9311f0c7e50130648a5cc0
+             COMPANY_ID: 1
+                DELETED: 0
+            ADD_ACCOUNT: anonymous
+               ADD_TIME: 2025-10-20 17:02:11
+           EDIT_ACCOUNT: anonymous
+              EDIT_TIME: 2025-10-20 17:03:32
+         DELETE_ACCOUNT: NULL
+            DELETE_TIME: NULL
+               USERNAME: 2510001
+               PASSWORD: 767c22d0ad9311f0498bc9f52b2637bd
+            DESCRIPTION: NULL
+                ENABLED: 1
+    ACCOUNT_NON_EXPIRED: 1
+     ACCOUNT_NON_LOCKED: 1
+CREDENTIALS_NON_EXPIRED: 1
+              IDENTITY_: 临时人员
+                USER_ID: NULL
+                   NAME: 王帅
+                USER_NO: 78c68801ad9311f0c7e50130648a5cc0
+                 MOBILE: NULL
+          EMAIL_ADDRESS: NULL
+          IDENTITY_TYPE: NULL
+            IDENTITY_NO: NULL
+            EXTERNAL_ID: 78cacdc0ad9311f0c7e50130648a5cc0
+1 row in set (0.00 sec)
+
+root@localhost:mysql.sock [(none)]> show replica status\G;
+*************************** 1. row ***************************
+             Replica_IO_State:
+                  Source_Host: 10.20.12.136
+                  Source_User: repl
+                  Source_Port: 3306
+                Connect_Retry: 60
+              Source_Log_File: mysql-bin.000911
+          Read_Source_Log_Pos: 334980904
+               Relay_Log_File: relay-bin.002711
+                Relay_Log_Pos: 19708374
+        Relay_Source_Log_File: mysql-bin.000904
+           Replica_IO_Running: No
+          Replica_SQL_Running: No
+              Replicate_Do_DB:
+          Replicate_Ignore_DB:
+           Replicate_Do_Table:
+       Replicate_Ignore_Table:
+      Replicate_Wild_Do_Table:
+  Replicate_Wild_Ignore_Table:
+                   Last_Errno: 1062
+                   Last_Error: Coordinator stopped because there were error(s) in the worker(s). The most recent failure being: Worker 2 failed executing transaction 'af179f66-7990-11ee-97cc-fa163e1255d2:77621204' at source log mysql-bin.000904, end_log_pos 19717894. See error log and/or performance_schema.replication_applier_status_by_worker table for more details about this failure or others, if any.
+                 Skip_Counter: 0
+          Exec_Source_Log_Pos: 19708198
+              Relay_Log_Space: 4122189114
+              Until_Condition: None
+               Until_Log_File:
+                Until_Log_Pos: 0
+           Source_SSL_Allowed: No
+           Source_SSL_CA_File:
+           Source_SSL_CA_Path:
+              Source_SSL_Cert:
+            Source_SSL_Cipher:
+               Source_SSL_Key:
+        Seconds_Behind_Source: NULL
+Source_SSL_Verify_Server_Cert: No
+                Last_IO_Errno: 0
+                Last_IO_Error:
+               Last_SQL_Errno: 1062
+               Last_SQL_Error: Coordinator stopped because there were error(s) in the worker(s). The most recent failure being: Worker 2 failed executing transaction 'af179f66-7990-11ee-97cc-fa163e1255d2:77621204' at source log mysql-bin.000904, end_log_pos 19717894. See error log and/or performance_schema.replication_applier_status_by_worker table for more details about this failure or others, if any.
+  Replicate_Ignore_Server_Ids:
+             Source_Server_Id: 136
+                  Source_UUID: af179f66-7990-11ee-97cc-fa163e1255d2
+             Source_Info_File: mysql.slave_master_info
+                    SQL_Delay: 0
+          SQL_Remaining_Delay: NULL
+    Replica_SQL_Running_State:
+           Source_Retry_Count: 86400
+                  Source_Bind:
+      Last_IO_Error_Timestamp:
+     Last_SQL_Error_Timestamp: 251120 14:55:50
+               Source_SSL_Crl:
+           Source_SSL_Crlpath:
+           Retrieved_Gtid_Set: af179f66-7990-11ee-97cc-fa163e1255d2:1-78375431
+            Executed_Gtid_Set: af179f66-7990-11ee-97cc-fa163e1255d2:1-77621203,
+b00ea401-7990-11ee-a316-fa163e3f7e56:1-21
+                Auto_Position: 1
+         Replicate_Rewrite_DB:
+                 Channel_Name:
+           Source_TLS_Version:
+       Source_public_key_path:
+        Get_Source_public_key: 0
+            Network_Namespace:
+1 row in set (0.00 sec)
+
+ERROR:
+No query specified
+
+root@localhost:mysql.sock [(none)]> stop replica;
+Query OK, 0 rows affected, 1 warning (0.00 sec)
+
+root@localhost:mysql.sock [(none)]>
+root@localhost:mysql.sock [(none)]>  set @@session.gtid_next='af179f66-7990-11ee-97cc-fa163e1255d2:77621204';
+Query OK, 0 rows affected (0.00 sec)
+
+root@localhost:mysql.sock [(none)]>  begin;
+Query OK, 0 rows affected (0.00 sec)
+
+root@localhost:mysql.sock [(none)]>  commit;
+Query OK, 0 rows affected (0.00 sec)
+
+root@localhost:mysql.sock [(none)]>
+root@localhost:mysql.sock [(none)]>
+root@localhost:mysql.sock [(none)]>  set @@session.gtid_next=automatic;
+Query OK, 0 rows affected (0.00 sec)
+
+root@localhost:mysql.sock [(none)]>
+root@localhost:mysql.sock [(none)]>  start replica;
+Query OK, 0 rows affected (0.04 sec)
+
+root@localhost:mysql.sock [(none)]>
+root@localhost:mysql.sock [(none)]>  SHOW REPLICA STATUS \G;
+*************************** 1. row ***************************
+             Replica_IO_State: Waiting for source to send event
+                  Source_Host: 10.20.12.136
+                  Source_User: repl
+                  Source_Port: 3306
+                Connect_Retry: 60
+              Source_Log_File: mysql-bin.000911
+          Read_Source_Log_Pos: 335141472
+               Relay_Log_File: relay-bin.002711
+                Relay_Log_Pos: 19985339
+        Relay_Source_Log_File: mysql-bin.000904
+           Replica_IO_Running: Yes
+          Replica_SQL_Running: Yes
+              Replicate_Do_DB:
+          Replicate_Ignore_DB:
+           Replicate_Do_Table:
+       Replicate_Ignore_Table:
+      Replicate_Wild_Do_Table:
+  Replicate_Wild_Ignore_Table:
+                   Last_Errno: 0
+                   Last_Error:
+                 Skip_Counter: 0
+          Exec_Source_Log_Pos: 19985163
+              Relay_Log_Space: 4122350189
+              Until_Condition: None
+               Until_Log_File:
+                Until_Log_Pos: 0
+           Source_SSL_Allowed: No
+           Source_SSL_CA_File:
+           Source_SSL_CA_Path:
+              Source_SSL_Cert:
+            Source_SSL_Cipher:
+               Source_SSL_Key:
+        Seconds_Behind_Source: 358033
+Source_SSL_Verify_Server_Cert: No
+                Last_IO_Errno: 0
+                Last_IO_Error:
+               Last_SQL_Errno: 0
+               Last_SQL_Error:
+  Replicate_Ignore_Server_Ids:
+             Source_Server_Id: 136
+                  Source_UUID: af179f66-7990-11ee-97cc-fa163e1255d2
+             Source_Info_File: mysql.slave_master_info
+                    SQL_Delay: 0
+          SQL_Remaining_Delay: NULL
+    Replica_SQL_Running_State: Waiting for dependent transaction to commit
+           Source_Retry_Count: 86400
+                  Source_Bind:
+      Last_IO_Error_Timestamp:
+     Last_SQL_Error_Timestamp:
+               Source_SSL_Crl:
+           Source_SSL_Crlpath:
+           Retrieved_Gtid_Set: af179f66-7990-11ee-97cc-fa163e1255d2:1-78375574
+            Executed_Gtid_Set: af179f66-7990-11ee-97cc-fa163e1255d2:1-77621427,
+b00ea401-7990-11ee-a316-fa163e3f7e56:1-21
+                Auto_Position: 1
+         Replicate_Rewrite_DB:
+                 Channel_Name:
+           Source_TLS_Version:
+       Source_public_key_path:
+        Get_Source_public_key: 0
+            Network_Namespace:
+1 row in set (0.00 sec)
+
+ERROR:
+No query specified
+
+root@localhost:mysql.sock [(none)]> SELECT * FROM cas_server.tb_account WHERE username='2510001'\G
+Empty set (0.00 sec)
+
+```
+
+#手工补齐从库缺失的那条记录
+
+```sql
+-- 仅暂停 SQL 线程即可（IO 线程保持拉取）
+STOP REPLICA SQL_THREAD;
+
+-- 避免写本地 binlog
+SET SQL_LOG_BIN=0;
+
+INSERT INTO cas_server.tb_account
+( ID, COMPANY_ID, DELETED, ADD_ACCOUNT, ADD_TIME, EDIT_ACCOUNT, EDIT_TIME,
+  DELETE_ACCOUNT, DELETE_TIME, USERNAME, PASSWORD, DESCRIPTION,
+  ENABLED, ACCOUNT_NON_EXPIRED, ACCOUNT_NON_LOCKED, CREDENTIALS_NON_EXPIRED,
+  IDENTITY_, USER_ID, NAME, USER_NO, MOBILE, EMAIL_ADDRESS,
+  IDENTITY_TYPE, IDENTITY_NO, EXTERNAL_ID )
+VALUES
+('f5352330c5dd11f023929d6fbb10da2f', 1, 0, 'anonymous', '2025-11-20 14:55:50',
+ 'anonymous', '2025-11-20 14:56:13', NULL, NULL, '2510001',
+ '{bcrypt}$2a$04$STYMV/fXvAbA0ybtLaSuDubChWK6s3G5EbzQOmLccdt4T4lmaV8.q', '',
+ 1, 1, 1, 1,
+ '劳务派遣', 'f5301a20c5dd11f023929d6fbb10da2f', '刘彤', 'f5301a21c5dd11f023929d6fbb10da2f',
+ NULL, NULL, '居民身份证', '230622199502074064', 'f5352330c5dd11f023929d6fbb10da2f');
+
+-- 恢复本地 binlog
+SET SQL_LOG_BIN=1;
+
+START REPLICA SQL_THREAD;
+```
+
+#从库确认
+
+```sql
+SELECT * FROM cas_server.tb_account WHERE username='2510001'\G
+SHOW REPLICA STATUS\G   -- 期望 IO/SQL 都是 Yes
+```
+
+
+
+#从库确认logs
+
+```sql
+root@localhost:mysql.sock [(none)]>  SHOW REPLICA STATUS \G;
+*************************** 1. row ***************************
+             Replica_IO_State: Waiting for source to send event
+                  Source_Host: 10.20.12.136
+                  Source_User: repl
+                  Source_Port: 3306
+                Connect_Retry: 60
+              Source_Log_File: mysql-bin.000911
+          Read_Source_Log_Pos: 335622633
+               Relay_Log_File: relay-bin.002717
+                Relay_Log_Pos: 321576381
+        Relay_Source_Log_File: mysql-bin.000906
+           Replica_IO_Running: Yes
+          Replica_SQL_Running: Yes
+              Replicate_Do_DB:
+          Replicate_Ignore_DB:
+           Replicate_Do_Table:
+       Replicate_Ignore_Table:
+      Replicate_Wild_Do_Table:
+  Replicate_Wild_Ignore_Table:
+                   Last_Errno: 0
+                   Last_Error:
+                 Skip_Counter: 0
+          Exec_Source_Log_Pos: 321576205
+              Relay_Log_Space: 3048697450
+              Until_Condition: None
+               Until_Log_File:
+                Until_Log_Pos: 0
+           Source_SSL_Allowed: No
+           Source_SSL_CA_File:
+           Source_SSL_CA_Path:
+              Source_SSL_Cert:
+            Source_SSL_Cipher:
+               Source_SSL_Key:
+        Seconds_Behind_Source: 232693
+Source_SSL_Verify_Server_Cert: No
+                Last_IO_Errno: 0
+                Last_IO_Error:
+               Last_SQL_Errno: 0
+               Last_SQL_Error:
+  Replicate_Ignore_Server_Ids:
+             Source_Server_Id: 136
+                  Source_UUID: af179f66-7990-11ee-97cc-fa163e1255d2
+             Source_Info_File: mysql.slave_master_info
+                    SQL_Delay: 0
+          SQL_Remaining_Delay: NULL
+    Replica_SQL_Running_State: Waiting for dependent transaction to commit
+           Source_Retry_Count: 86400
+                  Source_Bind:
+      Last_IO_Error_Timestamp:
+     Last_SQL_Error_Timestamp:
+               Source_SSL_Crl:
+           Source_SSL_Crlpath:
+           Retrieved_Gtid_Set: af179f66-7990-11ee-97cc-fa163e1255d2:1-78376026
+            Executed_Gtid_Set: af179f66-7990-11ee-97cc-fa163e1255d2:1-77846294,
+b00ea401-7990-11ee-a316-fa163e3f7e56:1-21
+                Auto_Position: 1
+         Replicate_Rewrite_DB:
+                 Channel_Name:
+           Source_TLS_Version:
+       Source_public_key_path:
+        Get_Source_public_key: 0
+            Network_Namespace:
+1 row in set (0.00 sec)
+
+ERROR:
+No query specified
+
+root@localhost:mysql.sock [(none)]> SELECT * FROM cas_server.tb_account WHERE username='2510001'\G
+*************************** 1. row ***************************
+                     ID: f5352330c5dd11f023929d6fbb10da2f
+             COMPANY_ID: 1
+                DELETED: 0
+            ADD_ACCOUNT: anonymous
+               ADD_TIME: 2025-11-20 14:55:50
+           EDIT_ACCOUNT: anonymous
+              EDIT_TIME: 2025-11-20 14:56:13
+         DELETE_ACCOUNT: NULL
+            DELETE_TIME: NULL
+               USERNAME: 2510001
+               PASSWORD: {bcrypt}$2a$04$STYMV/fXvAbA0ybtLaSuDubChWK6s3G5EbzQOmLccdt4T4lmaV8.q
+            DESCRIPTION:
+                ENABLED: 1
+    ACCOUNT_NON_EXPIRED: 1
+     ACCOUNT_NON_LOCKED: 1
+CREDENTIALS_NON_EXPIRED: 1
+              IDENTITY_: 劳务派遣
+                USER_ID: f5301a20c5dd11f023929d6fbb10da2f
+                   NAME: 刘彤
+                USER_NO: f5301a21c5dd11f023929d6fbb10da2f
+                 MOBILE: NULL
+          EMAIL_ADDRESS: NULL
+          IDENTITY_TYPE: 居民身份证
+            IDENTITY_NO: 230622199502074064
+            EXTERNAL_ID: f5352330c5dd11f023929d6fbb10da2f
+1 row in set (0.00 sec)
+
+```
+
+#主库确认Logs
+
+```sql
+root@localhost:mysql.sock [(none)]> SHOW REPLICA STATUS\G
+*************************** 1. row ***************************
+             Replica_IO_State: Waiting for source to send event
+                  Source_Host: 10.20.12.137
+                  Source_User: repl
+                  Source_Port: 3306
+                Connect_Retry: 60
+              Source_Log_File: mysql-bin.000758
+          Read_Source_Log_Pos: 250078915
+               Relay_Log_File: relay-bin.001516
+                Relay_Log_Pos: 453
+        Relay_Source_Log_File: mysql-bin.000758
+           Replica_IO_Running: Yes
+          Replica_SQL_Running: Yes
+              Replicate_Do_DB:
+          Replicate_Ignore_DB:
+           Replicate_Do_Table:
+       Replicate_Ignore_Table:
+      Replicate_Wild_Do_Table:
+  Replicate_Wild_Ignore_Table:
+                   Last_Errno: 0
+                   Last_Error:
+                 Skip_Counter: 0
+          Exec_Source_Log_Pos: 250078915
+              Relay_Log_Space: 784
+              Until_Condition: None
+               Until_Log_File:
+                Until_Log_Pos: 0
+           Source_SSL_Allowed: No
+           Source_SSL_CA_File:
+           Source_SSL_CA_Path:
+              Source_SSL_Cert:
+            Source_SSL_Cipher:
+               Source_SSL_Key:
+        Seconds_Behind_Source: 0
+Source_SSL_Verify_Server_Cert: No
+                Last_IO_Errno: 0
+                Last_IO_Error:
+               Last_SQL_Errno: 0
+               Last_SQL_Error:
+  Replicate_Ignore_Server_Ids:
+             Source_Server_Id: 137
+                  Source_UUID: b00ea401-7990-11ee-a316-fa163e3f7e56
+             Source_Info_File: mysql.slave_master_info
+                    SQL_Delay: 0
+          SQL_Remaining_Delay: NULL
+    Replica_SQL_Running_State: Replica has read all relay log; waiting for more updates
+           Source_Retry_Count: 86400
+                  Source_Bind:
+      Last_IO_Error_Timestamp:
+     Last_SQL_Error_Timestamp:
+               Source_SSL_Crl:
+           Source_SSL_Crlpath:
+           Retrieved_Gtid_Set: af179f66-7990-11ee-97cc-fa163e1255d2:77621204,
+b00ea401-7990-11ee-a316-fa163e3f7e56:1-21
+            Executed_Gtid_Set: af179f66-7990-11ee-97cc-fa163e1255d2:1-78376384,
+b00ea401-7990-11ee-a316-fa163e3f7e56:1-21
+                Auto_Position: 1
+         Replicate_Rewrite_DB:
+                 Channel_Name:
+           Source_TLS_Version:
+       Source_public_key_path:
+        Get_Source_public_key: 0
+            Network_Namespace:
+1 row in set (0.00 sec)
+
+root@localhost:mysql.sock [(none)]> SELECT * FROM cas_server.tb_account WHERE username='2510001'\G
+*************************** 1. row ***************************
+                     ID: f5352330c5dd11f023929d6fbb10da2f
+             COMPANY_ID: 1
+                DELETED: 0
+            ADD_ACCOUNT: anonymous
+               ADD_TIME: 2025-11-20 14:55:50
+           EDIT_ACCOUNT: anonymous
+              EDIT_TIME: 2025-11-20 14:56:13
+         DELETE_ACCOUNT: NULL
+            DELETE_TIME: NULL
+               USERNAME: 2510001
+               PASSWORD: {bcrypt}$2a$04$STYMV/fXvAbA0ybtLaSuDubChWK6s3G5EbzQOmLccdt4T4lmaV8.q
+            DESCRIPTION:
+                ENABLED: 1
+    ACCOUNT_NON_EXPIRED: 1
+     ACCOUNT_NON_LOCKED: 1
+CREDENTIALS_NON_EXPIRED: 1
+              IDENTITY_: 劳务派遣
+                USER_ID: f5301a20c5dd11f023929d6fbb10da2f
+                   NAME: 刘彤
+                USER_NO: f5301a21c5dd11f023929d6fbb10da2f
+                 MOBILE: NULL
+          EMAIL_ADDRESS: NULL
+          IDENTITY_TYPE: 居民身份证
+            IDENTITY_NO: 230622199502074064
+            EXTERNAL_ID: f5352330c5dd11f023929d6fbb10da2f
+1 row in set (0.00 sec)
+
+root@localhost:mysql.sock [(none)]>
+
+```
+
+
+
 #### 7、压测
 
 ```
@@ -7068,7 +7634,8 @@ mysqlcheck -Aa
 
 ### 七、开启防火墙
 
-#
+#开放3306和vrrp
+
 ```bash
 systemctl start firewalld
 
@@ -7085,3 +7652,93 @@ firewall-cmd --reload
 
 firewall-cmd --list-all
 ```
+
+
+
+#ip白名单设置
+
+#精简版
+
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
+
+ZONE=public
+IFACE=eth0
+
+# Auto-detect local IP
+LOCAL_IP=$(ip -4 addr show dev "$IFACE" | awk '/inet /{print $2}' | cut -d/ -f1 | grep -E '^10\.20\.12\.(136|137)$' || true)
+
+if [[ "$LOCAL_IP" == "10.20.12.136" ]]; then
+  PEER_IP=10.20.12.137
+elif [[ "$LOCAL_IP" == "10.20.12.137" ]]; then
+  PEER_IP=10.20.12.136
+else
+  echo "Unable to recognize local machine as 10.20.12.136 or 10.20.12.137 on $IFACE" >&2
+  exit 1
+fi
+
+echo "Configuring firewall on $LOCAL_IP (peer: $PEER_IP)"
+
+# Enable firewalld
+systemctl enable firewalld --now >/dev/null
+firewall-cmd --state
+
+# Basic services
+firewall-cmd --permanent --zone="$ZONE" --add-service=ssh
+
+# Clean up old MySQL configurations
+firewall-cmd --permanent --zone="$ZONE" --remove-service=mysql 2>/dev/null || true
+firewall-cmd --permanent --zone="$ZONE" --remove-port=3306/tcp 2>/dev/null || true
+
+# Create/verify ipset
+if ! firewall-cmd --permanent --get-ipsets | grep -qw mysql_allowed; then
+  firewall-cmd --permanent --new-ipset=mysql_allowed --type=hash:ip
+fi
+
+# Add allowed IPs
+ALLOW_IPS=(
+  # Application servers
+  10.20.12.103 10.20.12.104 10.20.12.105 10.20.12.106 10.20.12.107
+  10.20.12.108 10.20.12.109 10.20.12.110 10.20.12.111 10.20.12.112
+  10.20.12.113 10.20.12.114 10.20.12.118 10.20.12.119
+  # Other servers
+  10.20.12.128 10.20.12.129 10.20.12.130 10.20.12.132 10.20.12.133 10.20.12.134
+  # MySQL replication peers
+  10.20.12.136 10.20.12.137
+)
+
+for ip in "${ALLOW_IPS[@]}"; do
+  firewall-cmd --permanent --ipset=mysql_allowed --add-entry="$ip" 2>/dev/null || true
+done
+
+# MySQL access rules
+firewall-cmd --permanent --zone="$ZONE" \
+  --add-rich-rule='rule family="ipv4" source ipset="mysql_allowed" port port="3306" protocol="tcp" accept'
+
+# Clean up old VRRP rules
+firewall-cmd --permanent --zone="$ZONE" -mysql
+-remove-rich-rule='rule protocol value="vrrp" accept' 2>/dev/null || true
+firewall-cmd --permanent --zone="$ZONE" --remove-rich-rule='rule family="ipv4" destination address="224.0.0.18" accept' 2>/dev/null || true
+firewall-cmd --permanent --zone="$ZONE" --remove-rich-rule='rule family="ipv4" source address="10.20.12.136" protocol value="vrrp" accept' 2>/dev/null || true
+firewall-cmd --permanent --zone="$ZONE" --remove-rich-rule='rule family="ipv4" source address="10.20.12.137" protocol value="vrrp" accept' 2>/dev/null || true
+
+# Add VRRP rule for keepalived (without interface specification for OL7 compatibility)
+firewall-cmd --permanent --zone="$ZONE" \
+  --add-rich-rule='rule family="ipv4" source address="10.20.12.0/24" destination address="224.0.0.18" protocol value="vrrp" accept'
+
+# Reload
+firewall-cmd --reload
+
+# Verification
+echo "================================"
+echo "Configuration: $LOCAL_IP -> $PEER_IP"
+echo "================================"
+echo "Rich Rules ($ZONE):"
+firewall-cmd --zone="$ZONE" --list-rich-rules
+echo "================================"
+echo "MySQL Allowed IPs:"
+firewall-cmd --info-ipset=mysql_allowed
+echo "================================"
+```
+
