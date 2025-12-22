@@ -4952,6 +4952,19 @@ CREDENTIALS_NON_EXPIRED: 1
             EXTERNAL_ID: f5352330c5dd11f023929d6fbb10da2f
 1 row in set (0.00 sec)
 
+root@localhost:mysql.sock [(none)]> SELECT USERNAME, COUNT(*) c FROM cas_server.tb_account GROUP BY USERNAME HAVING c>1;
+Empty set (0.02 sec)
+
+root@localhost:mysql.sock [(none)]> SELECT COUNT(*) FROM cas_server.tb_account;
++----------+
+| COUNT(*) |
++----------+
+|    52504 |
++----------+
+1 row in set (0.33 sec)
+
+root@localhost:mysql.sock [(none)]>
+
 ```
 
 #主库确认Logs
@@ -5054,7 +5067,89 @@ CREDENTIALS_NON_EXPIRED: 1
 
 root@localhost:mysql.sock [(none)]>
 
+
+root@localhost:mysql.sock [(none)]> SELECT COUNT(*) FROM cas_server.tb_account;
++----------+
+| COUNT(*) |
++----------+
+|    52504 |
++----------+
+1 row in set (0.00 sec)
+
+root@localhost:mysql.sock [(none)]>
+
+
 ```
+
+
+
+##### 10) 主库有数据库账户A，从库缺少该数据库账户，只在从库添加该账户
+
+```mysql
+#从库报错
+2025-11-21T20:05:50.759488+08:00 3093 [ERROR] [MY-010584] [Repl] Replica SQL for channel '': Worker 1 failed executing transaction 'a36b6a91-5adc-11f0-864f-286ed48a126e:197692526' at source log mysql-bin.000414, end_log_pos 244248430; Error 'Operation ALTER USER failed for 'authx_log_sjh'@'%'' on query. Default database: 'mysql'. Query: 'ALTER USER 'authx_log_sjh'@'%' IDENTIFIED WITH 'mysql_native_password' AS '*C8AD5D8DE8FEAA56857958402DF5E5DF14B671F8' PASSWORD EXPIRE NEVER', Error_code: MY-001396
+2025-11-21T20:05:50.760816+08:00 3092 [ERROR] [MY-010586] [Repl] Error running query, replica SQL thread aborted. Fix the problem, and restart the replica SQL thread with "START REPLICA". We stopped at log 'mysql-bin.000414' position 244235477
+
+
+
+#主库
+
+root@localhost:mysql.sock [mysql]> SHOW CREATE USER 'authx_log_sjh'@'%'\G
+*************************** 1. row ***************************
+CREATE USER for authx_log_sjh@%: CREATE USER `authx_log_sjh`@`%` IDENTIFIED WITH 'mysql_native_password' AS '*C8AD5D8DE8FEAA56857958402DF5E5DF14B671F8' REQUIRE NONE PASSWORD EXPIRE NEVER ACCOUNT UNLOCK PASSWORD HISTORY DEFAULT PASSWORD REUSE INTERVAL DEFAULT PASSWORD REQUIRE CURRENT DEFAULT
+1 row in set (0.00 sec)
+
+root@localhost:mysql.sock [mysql]> SHOW GRANTS FOR 'authx_log_sjh'@'%'\G
+*************************** 1. row ***************************
+Grants for authx_log_sjh@%: GRANT USAGE ON *.* TO `authx_log_sjh`@`%`
+*************************** 2. row ***************************
+Grants for authx_log_sjh@%: GRANT SELECT ON `authx_log`.`tb_l_authentication_log` TO `authx_log_sjh`@`%`
+*************************** 3. row ***************************
+Grants for authx_log_sjh@%: GRANT SELECT ON `authx_log`.`tb_l_online_log` TO `authx_log_sjh`@`%`
+*************************** 4. row ***************************
+Grants for authx_log_sjh@%: GRANT SELECT ON `authx_log`.`tb_l_service_access_log` TO `authx_log_sjh`@`%`
+4 rows in set (0.00 sec)
+
+root@localhost:mysql.sock [mysql]>
+
+#从库缺少该账户
+
+
+#从库添加该账户
+
+-- 仅暂停 SQL 线程即可（IO 线程保持拉取）
+STOP REPLICA SQL_THREAD;
+
+-- 避免写本地 binlog
+SET SQL_LOG_BIN=0;
+
+
+-- 2）创建和主库完全一致的账号（照你贴的 SHOW CREATE USER 原样抄）
+CREATE USER `authx_log_sjh`@`%`
+  IDENTIFIED WITH 'mysql_native_password'
+  AS '*C8AD5D8DE8FEAA56857958402DF5E5DF14B671F8'
+  REQUIRE NONE
+  PASSWORD EXPIRE NEVER
+  ACCOUNT UNLOCK
+  PASSWORD HISTORY DEFAULT
+  PASSWORD REUSE INTERVAL DEFAULT
+  PASSWORD REQUIRE CURRENT DEFAULT;
+
+-- 3）按主库的授权，一条条补上（照你贴的 SHOW GRANTS）
+GRANT USAGE ON *.* TO `authx_log_sjh`@`%`;
+GRANT SELECT ON `authx_log`.`tb_l_authentication_log` TO `authx_log_sjh`@`%`;
+GRANT SELECT ON `authx_log`.`tb_l_online_log`          TO `authx_log_sjh`@`%`;
+GRANT SELECT ON `authx_log`.`tb_l_service_access_log`  TO `authx_log_sjh`@`%`;
+
+-- 4）恢复本会话的 binlog 记录
+SET sql_log_bin = 1;
+
+
+
+START REPLICA SQL_THREAD;
+```
+
+
 
 
 
