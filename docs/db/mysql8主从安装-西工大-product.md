@@ -5151,6 +5151,2168 @@ START REPLICA SQL_THREAD;
 
 
 
+##### 11) 从库落后主库太多，追赶慢
+
+```
+mysql双主模式，但是只有一路主数据库进行写入操作，另一路作为从库，进行读操作。当前从库在同步报错后，进行了人工修复后恢复双主模式，但是一直落后于当前的主数据库。有没有提高同步效率的办法？
+root@localhost:mysql.sock [mysql]>  show replica status\G;
+*************************** 1. row ***************************
+             Replica_IO_State: Waiting for source to send event
+                  Source_Host: 10.40.10.132
+                  Source_User: repl
+                  Source_Port: 3306
+                Connect_Retry: 60
+              Source_Log_File: mysql-bin.000796
+          Read_Source_Log_Pos: 515555540
+               Relay_Log_File: relay-bin.003666
+                Relay_Log_Pos: 216654590
+        Relay_Source_Log_File: mysql-bin.000454
+           Replica_IO_Running: Yes
+          Replica_SQL_Running: Yes
+              Replicate_Do_DB:
+          Replicate_Ignore_DB:
+           Replicate_Do_Table:
+       Replicate_Ignore_Table:
+      Replicate_Wild_Do_Table:
+  Replicate_Wild_Ignore_Table:
+                   Last_Errno: 0
+                   Last_Error:
+                 Skip_Counter: 0
+          Exec_Source_Log_Pos: 216654398
+              Relay_Log_Space: 183558180613
+              Until_Condition: None
+               Until_Log_File:
+                Until_Log_Pos: 0
+           Source_SSL_Allowed: No
+           Source_SSL_CA_File:
+           Source_SSL_CA_Path:
+              Source_SSL_Cert:
+            Source_SSL_Cipher:
+               Source_SSL_Key:
+        Seconds_Behind_Source: 5729924
+Source_SSL_Verify_Server_Cert: No
+                Last_IO_Errno: 0
+                Last_IO_Error:
+               Last_SQL_Errno: 0
+               Last_SQL_Error:
+  Replicate_Ignore_Server_Ids:
+             Source_Server_Id: 132
+                  Source_UUID: a36b6a91-5adc-11f0-864f-286ed48a126e
+             Source_Info_File: mysql.slave_master_info
+                    SQL_Delay: 0
+          SQL_Remaining_Delay: NULL
+    Replica_SQL_Running_State: Waiting for dependent transaction to commit
+           Source_Retry_Count: 86400
+                  Source_Bind:
+      Last_IO_Error_Timestamp:
+     Last_SQL_Error_Timestamp:
+               Source_SSL_Crl:
+           Source_SSL_Crlpath:
+           Retrieved_Gtid_Set: a36b6a91-5adc-11f0-864f-286ed48a126e:52053:197337666-406747334
+            Executed_Gtid_Set: a36b6a91-5adc-11f0-864f-286ed48a126e:1-52052:52054-219274744,
+a52be673-5adc-11f0-85e5-286ed4894d31:1-3332
+                Auto_Position: 1
+         Replicate_Rewrite_DB:
+                 Channel_Name:
+           Source_TLS_Version:
+       Source_public_key_path:
+        Get_Source_public_key: 0
+            Network_Namespace:
+1 row in set (0.00 sec)
+
+ERROR:
+No query specified
+
+root@localhost:mysql.sock [mysql]>  show replica status\G;
+*************************** 1. row ***************************
+             Replica_IO_State: Waiting for source to send event
+                  Source_Host: 10.40.10.132
+                  Source_User: repl
+                  Source_Port: 3306
+                Connect_Retry: 60
+              Source_Log_File: mysql-bin.000796
+          Read_Source_Log_Pos: 515608426
+               Relay_Log_File: relay-bin.003666
+                Relay_Log_Pos: 216967740
+        Relay_Source_Log_File: mysql-bin.000454
+           Replica_IO_Running: Yes
+          Replica_SQL_Running: Yes
+              Replicate_Do_DB:
+          Replicate_Ignore_DB:
+           Replicate_Do_Table:
+       Replicate_Ignore_Table:
+      Replicate_Wild_Do_Table:
+  Replicate_Wild_Ignore_Table:
+                   Last_Errno: 0
+                   Last_Error:
+                 Skip_Counter: 0
+          Exec_Source_Log_Pos: 216967548
+              Relay_Log_Space: 183558233499
+              Until_Condition: None
+               Until_Log_File:
+                Until_Log_Pos: 0
+           Source_SSL_Allowed: No
+           Source_SSL_CA_File:
+           Source_SSL_CA_Path:
+              Source_SSL_Cert:
+            Source_SSL_Cipher:
+               Source_SSL_Key:
+        Seconds_Behind_Source: 5729925
+Source_SSL_Verify_Server_Cert: No
+                Last_IO_Errno: 0
+                Last_IO_Error:
+               Last_SQL_Errno: 0
+               Last_SQL_Error:
+  Replicate_Ignore_Server_Ids:
+             Source_Server_Id: 132
+                  Source_UUID: a36b6a91-5adc-11f0-864f-286ed48a126e
+             Source_Info_File: mysql.slave_master_info
+                    SQL_Delay: 0
+          SQL_Remaining_Delay: NULL
+    Replica_SQL_Running_State: Waiting for dependent transaction to commit
+           Source_Retry_Count: 86400
+                  Source_Bind:
+      Last_IO_Error_Timestamp:
+     Last_SQL_Error_Timestamp:
+               Source_SSL_Crl:
+           Source_SSL_Crlpath:
+           Retrieved_Gtid_Set: a36b6a91-5adc-11f0-864f-286ed48a126e:52053:197337666-406747382
+            Executed_Gtid_Set: a36b6a91-5adc-11f0-864f-286ed48a126e:1-52052:52054-219275054,
+a52be673-5adc-11f0-85e5-286ed4894d31:1-3332
+                Auto_Position: 1
+         Replicate_Rewrite_DB:
+                 Channel_Name:
+           Source_TLS_Version:
+       Source_public_key_path:
+        Get_Source_public_key: 0
+            Network_Namespace:
+1 row in set (0.00 sec)
+
+ERROR:
+No query specified
+
+root@localhost:mysql.sock [mysql]>  show replica status\G;
+*************************** 1. row ***************************
+             Replica_IO_State: Waiting for source to send event
+                  Source_Host: 10.40.10.132
+                  Source_User: repl
+                  Source_Port: 3306
+                Connect_Retry: 60
+              Source_Log_File: mysql-bin.000796
+          Read_Source_Log_Pos: 515657500
+               Relay_Log_File: relay-bin.003666
+                Relay_Log_Pos: 217361116
+        Relay_Source_Log_File: mysql-bin.000454
+           Replica_IO_Running: Yes
+          Replica_SQL_Running: Yes
+              Replicate_Do_DB:
+          Replicate_Ignore_DB:
+           Replicate_Do_Table:
+       Replicate_Ignore_Table:
+      Replicate_Wild_Do_Table:
+  Replicate_Wild_Ignore_Table:
+                   Last_Errno: 0
+                   Last_Error:
+                 Skip_Counter: 0
+          Exec_Source_Log_Pos: 217360924
+              Relay_Log_Space: 183558282573
+              Until_Condition: None
+               Until_Log_File:
+                Until_Log_Pos: 0
+           Source_SSL_Allowed: No
+           Source_SSL_CA_File:
+           Source_SSL_CA_Path:
+              Source_SSL_Cert:
+            Source_SSL_Cipher:
+               Source_SSL_Key:
+        Seconds_Behind_Source: 5729926
+Source_SSL_Verify_Server_Cert: No
+                Last_IO_Errno: 0
+                Last_IO_Error:
+               Last_SQL_Errno: 0
+               Last_SQL_Error:
+  Replicate_Ignore_Server_Ids:
+             Source_Server_Id: 132
+                  Source_UUID: a36b6a91-5adc-11f0-864f-286ed48a126e
+             Source_Info_File: mysql.slave_master_info
+                    SQL_Delay: 0
+          SQL_Remaining_Delay: NULL
+    Replica_SQL_Running_State: Waiting for dependent transaction to commit
+           Source_Retry_Count: 86400
+                  Source_Bind:
+      Last_IO_Error_Timestamp:
+     Last_SQL_Error_Timestamp:
+               Source_SSL_Crl:
+           Source_SSL_Crlpath:
+           Retrieved_Gtid_Set: a36b6a91-5adc-11f0-864f-286ed48a126e:52053:197337666-406747427
+            Executed_Gtid_Set: a36b6a91-5adc-11f0-864f-286ed48a126e:1-52052:52054-219275405,
+a52be673-5adc-11f0-85e5-286ed4894d31:1-3332
+                Auto_Position: 1
+         Replicate_Rewrite_DB:
+                 Channel_Name:
+           Source_TLS_Version:
+       Source_public_key_path:
+        Get_Source_public_key: 0
+            Network_Namespace:
+1 row in set (0.00 sec)
+
+ERROR:
+No query specified
+
+root@localhost:mysql.sock [mysql]>
+
+```
+
+#从库同步初步分析
+
+```
+从你贴的 SHOW REPLICA STATUS\G 看，IO 线程是正常拉取的（Read_Source_Log_Pos 一直涨），但 SQL 线程应用很慢，而且 Relay_Log_Space 已经堆到 183GB；Replica_SQL_Running_State: Waiting for dependent transaction to commit 也很典型：回放端受“提交顺序/依赖”限制，吞吐上不去。这种情况下，提速主要就两条路：“并行回放 + 降低落盘开销”；如果落后太久，**“直接重建从库”**通常更快。
+```
+
+
+
+#从库查询状态
+
+```sql
+root@localhost:mysql.sock [(none)]> show processlist;
++---------+-----------------+--------------------+-----------+------------------+---------+-----------------------------------------------------------------+------------------------------------------------------------------------------------------------------+
+| Id      | User            | Host               | db        | Command          | Time    | State                                                           | Info                                                                                                 |
++---------+-----------------+--------------------+-----------+------------------+---------+-----------------------------------------------------------------+------------------------------------------------------------------------------------------------------+
+|       7 | event_scheduler | localhost          | NULL      | Daemon           | 3457397 | Waiting on empty queue                                          | NULL                                                                                                 |
+|   87921 | repl            | 10.40.10.132:45110 | NULL      | Binlog Dump GTID | 2650235 | Source has sent all binlog to replica; waiting for more updates | NULL                                                                                                 |
+| 1349811 | system user     | connecting host    | NULL      | Connect          |  172410 | Waiting for source to send event                                | NULL                                                                                                 |
+| 1358108 | system user     |                    | NULL      | Query            |       0 | Waiting for dependent transaction to commit                     | NULL                                                                                                 |
+| 1358109 | system user     |                    | authx_log | Query            | 5730507 | Applying batch of row changes (write)                           | insert into TB_L_APPLY_CALL_LOG (ADD_ACCOUNT, ADD_TIME, COMPANY_ID, DELETE_ACCOUNT, DELETE_TIME, DEL |
+| 1358110 | system user     |                    | authx_log | Query            | 5730507 | Applying batch of row changes (write)                           | insert into TB_L_APPLY_CALL_LOG (ADD_ACCOUNT, ADD_TIME, COMPANY_ID, DELETE_ACCOUNT, DELETE_TIME, DEL |
+| 1358111 | system user     |                    | authx_log | Query            | 5730507 | Applying batch of row changes (write)                           | insert into TB_L_APPLY_CALL_LOG (ADD_ACCOUNT, ADD_TIME, COMPANY_ID, DELETE_ACCOUNT, DELETE_TIME, DEL |
+| 1358112 | system user     |                    | authx_log | Query            | 5730507 | Applying batch of row changes (write)                           | insert into TB_L_APPLY_CALL_LOG (ADD_ACCOUNT, ADD_TIME, COMPANY_ID, DELETE_ACCOUNT, DELETE_TIME, DEL |
+| 1358113 | system user     |                    | NULL      | Query            | 5730507 | Waiting for an event from Coordinator                           | NULL                                                                                                 |
+| 1358114 | system user     |                    | NULL      | Query            | 5730508 | Waiting for an event from Coordinator                           | NULL                                                                                                 |
+| 1358115 | system user     |                    | NULL      | Query            | 5730508 | Waiting for an event from Coordinator                           | NULL                                                                                                 |
+| 1358116 | system user     |                    | NULL      | Query            | 5730508 | Waiting for an event from Coordinator                           | NULL                                                                                                 |
+| 1358117 | system user     |                    | NULL      | Query            | 5730508 | Waiting for an event from Coordinator                           | NULL                                                                                                 |
+| 1358118 | system user     |                    | NULL      | Query            | 5730508 | Waiting for an event from Coordinator                           | NULL                                                                                                 |
+| 1358119 | system user     |                    | NULL      | Query            | 5730521 | Waiting for an event from Coordinator                           | NULL                                                                                                 |
+| 1358120 | system user     |                    | NULL      | Query            | 5730521 | Waiting for an event from Coordinator                           | NULL                                                                                                 |
+| 1358121 | system user     |                    | NULL      | Query            | 5730521 | Waiting for an event from Coordinator                           | NULL                                                                                                 |
+| 1358122 | system user     |                    | NULL      | Query            | 5730521 | Waiting for an event from Coordinator                           | NULL                                                                                                 |
+| 1358123 | system user     |                    | NULL      | Query            | 5730521 | Waiting for an event from Coordinator                           | NULL                                                                                                 |
+| 1358124 | system user     |                    | NULL      | Query            | 5730521 | Waiting for an event from Coordinator                           | NULL                                                                                                 |
+| 1436164 | root            | localhost          | NULL      | Query            |       0 | init                                                            | show processlist                                                                                     |
++---------+-----------------+--------------------+-----------+------------------+---------+-----------------------------------------------------------------+------------------------------------------------------------------------------------------------------+
+21 rows in set, 1 warning (0.00 sec)
+
+root@localhost:mysql.sock [(none)]> SHOW VARIABLES LIKE 'replica_parallel%';
++--------------------------+---------------+
+| Variable_name            | Value         |
++--------------------------+---------------+
+| replica_parallel_type    | LOGICAL_CLOCK |
+| replica_parallel_workers | 16            |
++--------------------------+---------------+
+2 rows in set (0.00 sec)
+
+root@localhost:mysql.sock [(none)]> SHOW VARIABLES LIKE 'transaction_write_set_extraction';
++----------------------------------+----------+
+| Variable_name                    | Value    |
++----------------------------------+----------+
+| transaction_write_set_extraction | XXHASH64 |
++----------------------------------+----------+
+1 row in set (0.00 sec)
+
+root@localhost:mysql.sock [(none)]> SHOW VARIABLES LIKE 'binlog_transaction_dependency_tracking';
++----------------------------------------+--------------+
+| Variable_name                          | Value        |
++----------------------------------------+--------------+
+| binlog_transaction_dependency_tracking | COMMIT_ORDER |
++----------------------------------------+--------------+
+1 row in set (0.01 sec)
+
+root@localhost:mysql.sock [(none)]> SHOW VARIABLES LIKE 'replica_preserve_commit_order';
++-------------------------------+-------+
+| Variable_name                 | Value |
++-------------------------------+-------+
+| replica_preserve_commit_order | OFF   |
++-------------------------------+-------+
+1 row in set (0.00 sec)
+
+root@localhost:mysql.sock [(none)]> SHOW VARIABLES LIKE 'innodb_flush_log_at_trx_commit ';
+Empty set (0.00 sec)
+
+root@localhost:mysql.sock [(none)]> SHOW VARIABLES LIKE 'innodb_flush_log_at_trx_commit';
++--------------------------------+-------+
+| Variable_name                  | Value |
++--------------------------------+-------+
+| innodb_flush_log_at_trx_commit | 1     |
++--------------------------------+-------+
+1 row in set (0.00 sec)
+
+root@localhost:mysql.sock [(none)]>
+root@localhost:mysql.sock [(none)]> SELECT * FROM performance_schema.replication_applier_status_by_worker\G
+*************************** 1. row ***************************
+                                           CHANNEL_NAME:
+                                              WORKER_ID: 1
+                                              THREAD_ID: 1358153
+                                          SERVICE_STATE: ON
+                                      LAST_ERROR_NUMBER: 0
+                                     LAST_ERROR_MESSAGE:
+                                   LAST_ERROR_TIMESTAMP: 0000-00-00 00:00:00.000000
+                               LAST_APPLIED_TRANSACTION: a36b6a91-5adc-11f0-864f-286ed48a126e:219479592
+     LAST_APPLIED_TRANSACTION_ORIGINAL_COMMIT_TIMESTAMP: 2025-10-19 02:26:35.843178
+    LAST_APPLIED_TRANSACTION_IMMEDIATE_COMMIT_TIMESTAMP: 2025-10-19 02:26:35.843178
+         LAST_APPLIED_TRANSACTION_START_APPLY_TIMESTAMP: 2025-12-24 10:18:55.024100
+           LAST_APPLIED_TRANSACTION_END_APPLY_TIMESTAMP: 2025-12-24 10:18:55.032866
+                                   APPLYING_TRANSACTION:
+         APPLYING_TRANSACTION_ORIGINAL_COMMIT_TIMESTAMP: 0000-00-00 00:00:00.000000
+        APPLYING_TRANSACTION_IMMEDIATE_COMMIT_TIMESTAMP: 0000-00-00 00:00:00.000000
+             APPLYING_TRANSACTION_START_APPLY_TIMESTAMP: 0000-00-00 00:00:00.000000
+                 LAST_APPLIED_TRANSACTION_RETRIES_COUNT: 0
+   LAST_APPLIED_TRANSACTION_LAST_TRANSIENT_ERROR_NUMBER: 0
+  LAST_APPLIED_TRANSACTION_LAST_TRANSIENT_ERROR_MESSAGE:
+LAST_APPLIED_TRANSACTION_LAST_TRANSIENT_ERROR_TIMESTAMP: 0000-00-00 00:00:00.000000
+                     APPLYING_TRANSACTION_RETRIES_COUNT: 0
+       APPLYING_TRANSACTION_LAST_TRANSIENT_ERROR_NUMBER: 0
+      APPLYING_TRANSACTION_LAST_TRANSIENT_ERROR_MESSAGE:
+    APPLYING_TRANSACTION_LAST_TRANSIENT_ERROR_TIMESTAMP: 0000-00-00 00:00:00.000000
+*************************** 2. row ***************************
+                                           CHANNEL_NAME:
+                                              WORKER_ID: 2
+                                              THREAD_ID: 1358154
+                                          SERVICE_STATE: ON
+                                      LAST_ERROR_NUMBER: 0
+                                     LAST_ERROR_MESSAGE:
+                                   LAST_ERROR_TIMESTAMP: 0000-00-00 00:00:00.000000
+                               LAST_APPLIED_TRANSACTION: a36b6a91-5adc-11f0-864f-286ed48a126e:219479590
+     LAST_APPLIED_TRANSACTION_ORIGINAL_COMMIT_TIMESTAMP: 2025-10-19 02:26:35.836248
+    LAST_APPLIED_TRANSACTION_IMMEDIATE_COMMIT_TIMESTAMP: 2025-10-19 02:26:35.836248
+         LAST_APPLIED_TRANSACTION_START_APPLY_TIMESTAMP: 2025-12-24 10:18:55.015401
+           LAST_APPLIED_TRANSACTION_END_APPLY_TIMESTAMP: 2025-12-24 10:18:55.021981
+                                   APPLYING_TRANSACTION: a36b6a91-5adc-11f0-864f-286ed48a126e:219479593
+         APPLYING_TRANSACTION_ORIGINAL_COMMIT_TIMESTAMP: 2025-10-19 02:26:35.843212
+        APPLYING_TRANSACTION_IMMEDIATE_COMMIT_TIMESTAMP: 2025-10-19 02:26:35.843212
+             APPLYING_TRANSACTION_START_APPLY_TIMESTAMP: 2025-12-24 10:18:55.024115
+                 LAST_APPLIED_TRANSACTION_RETRIES_COUNT: 0
+   LAST_APPLIED_TRANSACTION_LAST_TRANSIENT_ERROR_NUMBER: 0
+  LAST_APPLIED_TRANSACTION_LAST_TRANSIENT_ERROR_MESSAGE:
+LAST_APPLIED_TRANSACTION_LAST_TRANSIENT_ERROR_TIMESTAMP: 0000-00-00 00:00:00.000000
+                     APPLYING_TRANSACTION_RETRIES_COUNT: 0
+       APPLYING_TRANSACTION_LAST_TRANSIENT_ERROR_NUMBER: 0
+      APPLYING_TRANSACTION_LAST_TRANSIENT_ERROR_MESSAGE:
+    APPLYING_TRANSACTION_LAST_TRANSIENT_ERROR_TIMESTAMP: 0000-00-00 00:00:00.000000
+*************************** 3. row ***************************
+                                           CHANNEL_NAME:
+                                              WORKER_ID: 3
+                                              THREAD_ID: 1358155
+                                          SERVICE_STATE: ON
+                                      LAST_ERROR_NUMBER: 0
+                                     LAST_ERROR_MESSAGE:
+                                   LAST_ERROR_TIMESTAMP: 0000-00-00 00:00:00.000000
+                               LAST_APPLIED_TRANSACTION: a36b6a91-5adc-11f0-864f-286ed48a126e:219479559
+     LAST_APPLIED_TRANSACTION_ORIGINAL_COMMIT_TIMESTAMP: 2025-10-19 02:26:35.712290
+    LAST_APPLIED_TRANSACTION_IMMEDIATE_COMMIT_TIMESTAMP: 2025-10-19 02:26:35.712290
+         LAST_APPLIED_TRANSACTION_START_APPLY_TIMESTAMP: 2025-12-24 10:18:54.753865
+           LAST_APPLIED_TRANSACTION_END_APPLY_TIMESTAMP: 2025-12-24 10:18:54.760610
+                                   APPLYING_TRANSACTION:
+         APPLYING_TRANSACTION_ORIGINAL_COMMIT_TIMESTAMP: 0000-00-00 00:00:00.000000
+        APPLYING_TRANSACTION_IMMEDIATE_COMMIT_TIMESTAMP: 0000-00-00 00:00:00.000000
+             APPLYING_TRANSACTION_START_APPLY_TIMESTAMP: 0000-00-00 00:00:00.000000
+                 LAST_APPLIED_TRANSACTION_RETRIES_COUNT: 0
+   LAST_APPLIED_TRANSACTION_LAST_TRANSIENT_ERROR_NUMBER: 0
+  LAST_APPLIED_TRANSACTION_LAST_TRANSIENT_ERROR_MESSAGE:
+LAST_APPLIED_TRANSACTION_LAST_TRANSIENT_ERROR_TIMESTAMP: 0000-00-00 00:00:00.000000
+                     APPLYING_TRANSACTION_RETRIES_COUNT: 0
+       APPLYING_TRANSACTION_LAST_TRANSIENT_ERROR_NUMBER: 0
+      APPLYING_TRANSACTION_LAST_TRANSIENT_ERROR_MESSAGE:
+    APPLYING_TRANSACTION_LAST_TRANSIENT_ERROR_TIMESTAMP: 0000-00-00 00:00:00.000000
+*************************** 4. row ***************************
+                                           CHANNEL_NAME:
+                                              WORKER_ID: 4
+                                              THREAD_ID: 1358156
+                                          SERVICE_STATE: ON
+                                      LAST_ERROR_NUMBER: 0
+                                     LAST_ERROR_MESSAGE:
+                                   LAST_ERROR_TIMESTAMP: 0000-00-00 00:00:00.000000
+                               LAST_APPLIED_TRANSACTION: a36b6a91-5adc-11f0-864f-286ed48a126e:219479556
+     LAST_APPLIED_TRANSACTION_ORIGINAL_COMMIT_TIMESTAMP: 2025-10-19 02:26:35.693681
+    LAST_APPLIED_TRANSACTION_IMMEDIATE_COMMIT_TIMESTAMP: 2025-10-19 02:26:35.693681
+         LAST_APPLIED_TRANSACTION_START_APPLY_TIMESTAMP: 2025-12-24 10:18:54.746359
+           LAST_APPLIED_TRANSACTION_END_APPLY_TIMESTAMP: 2025-12-24 10:18:54.753790
+                                   APPLYING_TRANSACTION:
+         APPLYING_TRANSACTION_ORIGINAL_COMMIT_TIMESTAMP: 0000-00-00 00:00:00.000000
+        APPLYING_TRANSACTION_IMMEDIATE_COMMIT_TIMESTAMP: 0000-00-00 00:00:00.000000
+             APPLYING_TRANSACTION_START_APPLY_TIMESTAMP: 0000-00-00 00:00:00.000000
+                 LAST_APPLIED_TRANSACTION_RETRIES_COUNT: 0
+   LAST_APPLIED_TRANSACTION_LAST_TRANSIENT_ERROR_NUMBER: 0
+  LAST_APPLIED_TRANSACTION_LAST_TRANSIENT_ERROR_MESSAGE:
+LAST_APPLIED_TRANSACTION_LAST_TRANSIENT_ERROR_TIMESTAMP: 0000-00-00 00:00:00.000000
+                     APPLYING_TRANSACTION_RETRIES_COUNT: 0
+       APPLYING_TRANSACTION_LAST_TRANSIENT_ERROR_NUMBER: 0
+      APPLYING_TRANSACTION_LAST_TRANSIENT_ERROR_MESSAGE:
+    APPLYING_TRANSACTION_LAST_TRANSIENT_ERROR_TIMESTAMP: 0000-00-00 00:00:00.000000
+*************************** 5. row ***************************
+                                           CHANNEL_NAME:
+                                              WORKER_ID: 5
+                                              THREAD_ID: 1358157
+                                          SERVICE_STATE: ON
+                                      LAST_ERROR_NUMBER: 0
+                                     LAST_ERROR_MESSAGE:
+                                   LAST_ERROR_TIMESTAMP: 0000-00-00 00:00:00.000000
+                               LAST_APPLIED_TRANSACTION: a36b6a91-5adc-11f0-864f-286ed48a126e:219479532
+     LAST_APPLIED_TRANSACTION_ORIGINAL_COMMIT_TIMESTAMP: 2025-10-19 02:26:35.603581
+    LAST_APPLIED_TRANSACTION_IMMEDIATE_COMMIT_TIMESTAMP: 2025-10-19 02:26:35.603581
+         LAST_APPLIED_TRANSACTION_START_APPLY_TIMESTAMP: 2025-12-24 10:18:54.569421
+           LAST_APPLIED_TRANSACTION_END_APPLY_TIMESTAMP: 2025-12-24 10:18:54.575780
+                                   APPLYING_TRANSACTION:
+         APPLYING_TRANSACTION_ORIGINAL_COMMIT_TIMESTAMP: 0000-00-00 00:00:00.000000
+        APPLYING_TRANSACTION_IMMEDIATE_COMMIT_TIMESTAMP: 0000-00-00 00:00:00.000000
+             APPLYING_TRANSACTION_START_APPLY_TIMESTAMP: 0000-00-00 00:00:00.000000
+                 LAST_APPLIED_TRANSACTION_RETRIES_COUNT: 0
+   LAST_APPLIED_TRANSACTION_LAST_TRANSIENT_ERROR_NUMBER: 0
+  LAST_APPLIED_TRANSACTION_LAST_TRANSIENT_ERROR_MESSAGE:
+LAST_APPLIED_TRANSACTION_LAST_TRANSIENT_ERROR_TIMESTAMP: 0000-00-00 00:00:00.000000
+                     APPLYING_TRANSACTION_RETRIES_COUNT: 0
+       APPLYING_TRANSACTION_LAST_TRANSIENT_ERROR_NUMBER: 0
+      APPLYING_TRANSACTION_LAST_TRANSIENT_ERROR_MESSAGE:
+    APPLYING_TRANSACTION_LAST_TRANSIENT_ERROR_TIMESTAMP: 0000-00-00 00:00:00.000000
+*************************** 6. row ***************************
+                                           CHANNEL_NAME:
+                                              WORKER_ID: 6
+                                              THREAD_ID: 1358158
+                                          SERVICE_STATE: ON
+                                      LAST_ERROR_NUMBER: 0
+                                     LAST_ERROR_MESSAGE:
+                                   LAST_ERROR_TIMESTAMP: 0000-00-00 00:00:00.000000
+                               LAST_APPLIED_TRANSACTION: a36b6a91-5adc-11f0-864f-286ed48a126e:219479426
+     LAST_APPLIED_TRANSACTION_ORIGINAL_COMMIT_TIMESTAMP: 2025-10-19 02:26:35.239433
+    LAST_APPLIED_TRANSACTION_IMMEDIATE_COMMIT_TIMESTAMP: 2025-10-19 02:26:35.239433
+         LAST_APPLIED_TRANSACTION_START_APPLY_TIMESTAMP: 2025-12-24 10:18:53.675908
+           LAST_APPLIED_TRANSACTION_END_APPLY_TIMESTAMP: 2025-12-24 10:18:53.679387
+                                   APPLYING_TRANSACTION:
+         APPLYING_TRANSACTION_ORIGINAL_COMMIT_TIMESTAMP: 0000-00-00 00:00:00.000000
+        APPLYING_TRANSACTION_IMMEDIATE_COMMIT_TIMESTAMP: 0000-00-00 00:00:00.000000
+             APPLYING_TRANSACTION_START_APPLY_TIMESTAMP: 0000-00-00 00:00:00.000000
+                 LAST_APPLIED_TRANSACTION_RETRIES_COUNT: 0
+   LAST_APPLIED_TRANSACTION_LAST_TRANSIENT_ERROR_NUMBER: 0
+  LAST_APPLIED_TRANSACTION_LAST_TRANSIENT_ERROR_MESSAGE:
+LAST_APPLIED_TRANSACTION_LAST_TRANSIENT_ERROR_TIMESTAMP: 0000-00-00 00:00:00.000000
+                     APPLYING_TRANSACTION_RETRIES_COUNT: 0
+       APPLYING_TRANSACTION_LAST_TRANSIENT_ERROR_NUMBER: 0
+      APPLYING_TRANSACTION_LAST_TRANSIENT_ERROR_MESSAGE:
+    APPLYING_TRANSACTION_LAST_TRANSIENT_ERROR_TIMESTAMP: 0000-00-00 00:00:00.000000
+*************************** 7. row ***************************
+                                           CHANNEL_NAME:
+                                              WORKER_ID: 7
+                                              THREAD_ID: 1358159
+                                          SERVICE_STATE: ON
+                                      LAST_ERROR_NUMBER: 0
+                                     LAST_ERROR_MESSAGE:
+                                   LAST_ERROR_TIMESTAMP: 0000-00-00 00:00:00.000000
+                               LAST_APPLIED_TRANSACTION: a36b6a91-5adc-11f0-864f-286ed48a126e:219479134
+     LAST_APPLIED_TRANSACTION_ORIGINAL_COMMIT_TIMESTAMP: 2025-10-19 02:26:34.185192
+    LAST_APPLIED_TRANSACTION_IMMEDIATE_COMMIT_TIMESTAMP: 2025-10-19 02:26:34.185192
+         LAST_APPLIED_TRANSACTION_START_APPLY_TIMESTAMP: 2025-12-24 10:18:51.410411
+           LAST_APPLIED_TRANSACTION_END_APPLY_TIMESTAMP: 2025-12-24 10:18:51.413617
+                                   APPLYING_TRANSACTION:
+         APPLYING_TRANSACTION_ORIGINAL_COMMIT_TIMESTAMP: 0000-00-00 00:00:00.000000
+        APPLYING_TRANSACTION_IMMEDIATE_COMMIT_TIMESTAMP: 0000-00-00 00:00:00.000000
+             APPLYING_TRANSACTION_START_APPLY_TIMESTAMP: 0000-00-00 00:00:00.000000
+                 LAST_APPLIED_TRANSACTION_RETRIES_COUNT: 0
+   LAST_APPLIED_TRANSACTION_LAST_TRANSIENT_ERROR_NUMBER: 0
+  LAST_APPLIED_TRANSACTION_LAST_TRANSIENT_ERROR_MESSAGE:
+LAST_APPLIED_TRANSACTION_LAST_TRANSIENT_ERROR_TIMESTAMP: 0000-00-00 00:00:00.000000
+                     APPLYING_TRANSACTION_RETRIES_COUNT: 0
+       APPLYING_TRANSACTION_LAST_TRANSIENT_ERROR_NUMBER: 0
+      APPLYING_TRANSACTION_LAST_TRANSIENT_ERROR_MESSAGE:
+    APPLYING_TRANSACTION_LAST_TRANSIENT_ERROR_TIMESTAMP: 0000-00-00 00:00:00.000000
+*************************** 8. row ***************************
+                                           CHANNEL_NAME:
+                                              WORKER_ID: 8
+                                              THREAD_ID: 1358160
+                                          SERVICE_STATE: ON
+                                      LAST_ERROR_NUMBER: 0
+                                     LAST_ERROR_MESSAGE:
+                                   LAST_ERROR_TIMESTAMP: 0000-00-00 00:00:00.000000
+                               LAST_APPLIED_TRANSACTION: a36b6a91-5adc-11f0-864f-286ed48a126e:219478952
+     LAST_APPLIED_TRANSACTION_ORIGINAL_COMMIT_TIMESTAMP: 2025-10-19 02:26:33.491548
+    LAST_APPLIED_TRANSACTION_IMMEDIATE_COMMIT_TIMESTAMP: 2025-10-19 02:26:33.491548
+         LAST_APPLIED_TRANSACTION_START_APPLY_TIMESTAMP: 2025-12-24 10:18:50.196109
+           LAST_APPLIED_TRANSACTION_END_APPLY_TIMESTAMP: 2025-12-24 10:18:50.230919
+                                   APPLYING_TRANSACTION:
+         APPLYING_TRANSACTION_ORIGINAL_COMMIT_TIMESTAMP: 0000-00-00 00:00:00.000000
+        APPLYING_TRANSACTION_IMMEDIATE_COMMIT_TIMESTAMP: 0000-00-00 00:00:00.000000
+             APPLYING_TRANSACTION_START_APPLY_TIMESTAMP: 0000-00-00 00:00:00.000000
+                 LAST_APPLIED_TRANSACTION_RETRIES_COUNT: 0
+   LAST_APPLIED_TRANSACTION_LAST_TRANSIENT_ERROR_NUMBER: 0
+  LAST_APPLIED_TRANSACTION_LAST_TRANSIENT_ERROR_MESSAGE:
+LAST_APPLIED_TRANSACTION_LAST_TRANSIENT_ERROR_TIMESTAMP: 0000-00-00 00:00:00.000000
+                     APPLYING_TRANSACTION_RETRIES_COUNT: 0
+       APPLYING_TRANSACTION_LAST_TRANSIENT_ERROR_NUMBER: 0
+      APPLYING_TRANSACTION_LAST_TRANSIENT_ERROR_MESSAGE:
+    APPLYING_TRANSACTION_LAST_TRANSIENT_ERROR_TIMESTAMP: 0000-00-00 00:00:00.000000
+*************************** 9. row ***************************
+                                           CHANNEL_NAME:
+                                              WORKER_ID: 9
+                                              THREAD_ID: 1358161
+                                          SERVICE_STATE: ON
+                                      LAST_ERROR_NUMBER: 0
+                                     LAST_ERROR_MESSAGE:
+                                   LAST_ERROR_TIMESTAMP: 0000-00-00 00:00:00.000000
+                               LAST_APPLIED_TRANSACTION: a36b6a91-5adc-11f0-864f-286ed48a126e:219478905
+     LAST_APPLIED_TRANSACTION_ORIGINAL_COMMIT_TIMESTAMP: 2025-10-19 02:26:33.321266
+    LAST_APPLIED_TRANSACTION_IMMEDIATE_COMMIT_TIMESTAMP: 2025-10-19 02:26:33.321266
+         LAST_APPLIED_TRANSACTION_START_APPLY_TIMESTAMP: 2025-12-24 10:18:49.717092
+           LAST_APPLIED_TRANSACTION_END_APPLY_TIMESTAMP: 2025-12-24 10:18:49.724764
+                                   APPLYING_TRANSACTION:
+         APPLYING_TRANSACTION_ORIGINAL_COMMIT_TIMESTAMP: 0000-00-00 00:00:00.000000
+        APPLYING_TRANSACTION_IMMEDIATE_COMMIT_TIMESTAMP: 0000-00-00 00:00:00.000000
+             APPLYING_TRANSACTION_START_APPLY_TIMESTAMP: 0000-00-00 00:00:00.000000
+                 LAST_APPLIED_TRANSACTION_RETRIES_COUNT: 0
+   LAST_APPLIED_TRANSACTION_LAST_TRANSIENT_ERROR_NUMBER: 0
+  LAST_APPLIED_TRANSACTION_LAST_TRANSIENT_ERROR_MESSAGE:
+LAST_APPLIED_TRANSACTION_LAST_TRANSIENT_ERROR_TIMESTAMP: 0000-00-00 00:00:00.000000
+                     APPLYING_TRANSACTION_RETRIES_COUNT: 0
+       APPLYING_TRANSACTION_LAST_TRANSIENT_ERROR_NUMBER: 0
+      APPLYING_TRANSACTION_LAST_TRANSIENT_ERROR_MESSAGE:
+    APPLYING_TRANSACTION_LAST_TRANSIENT_ERROR_TIMESTAMP: 0000-00-00 00:00:00.000000
+*************************** 10. row ***************************
+                                           CHANNEL_NAME:
+                                              WORKER_ID: 10
+                                              THREAD_ID: 1358162
+                                          SERVICE_STATE: ON
+                                      LAST_ERROR_NUMBER: 0
+                                     LAST_ERROR_MESSAGE:
+                                   LAST_ERROR_TIMESTAMP: 0000-00-00 00:00:00.000000
+                               LAST_APPLIED_TRANSACTION: a36b6a91-5adc-11f0-864f-286ed48a126e:219478906
+     LAST_APPLIED_TRANSACTION_ORIGINAL_COMMIT_TIMESTAMP: 2025-10-19 02:26:33.321268
+    LAST_APPLIED_TRANSACTION_IMMEDIATE_COMMIT_TIMESTAMP: 2025-10-19 02:26:33.321268
+         LAST_APPLIED_TRANSACTION_START_APPLY_TIMESTAMP: 2025-12-24 10:18:49.717112
+           LAST_APPLIED_TRANSACTION_END_APPLY_TIMESTAMP: 2025-12-24 10:18:49.719879
+                                   APPLYING_TRANSACTION:
+         APPLYING_TRANSACTION_ORIGINAL_COMMIT_TIMESTAMP: 0000-00-00 00:00:00.000000
+        APPLYING_TRANSACTION_IMMEDIATE_COMMIT_TIMESTAMP: 0000-00-00 00:00:00.000000
+             APPLYING_TRANSACTION_START_APPLY_TIMESTAMP: 0000-00-00 00:00:00.000000
+                 LAST_APPLIED_TRANSACTION_RETRIES_COUNT: 0
+   LAST_APPLIED_TRANSACTION_LAST_TRANSIENT_ERROR_NUMBER: 0
+  LAST_APPLIED_TRANSACTION_LAST_TRANSIENT_ERROR_MESSAGE:
+LAST_APPLIED_TRANSACTION_LAST_TRANSIENT_ERROR_TIMESTAMP: 0000-00-00 00:00:00.000000
+                     APPLYING_TRANSACTION_RETRIES_COUNT: 0
+       APPLYING_TRANSACTION_LAST_TRANSIENT_ERROR_NUMBER: 0
+      APPLYING_TRANSACTION_LAST_TRANSIENT_ERROR_MESSAGE:
+    APPLYING_TRANSACTION_LAST_TRANSIENT_ERROR_TIMESTAMP: 0000-00-00 00:00:00.000000
+*************************** 11. row ***************************
+                                           CHANNEL_NAME:
+                                              WORKER_ID: 11
+                                              THREAD_ID: 1358163
+                                          SERVICE_STATE: ON
+                                      LAST_ERROR_NUMBER: 0
+                                     LAST_ERROR_MESSAGE:
+                                   LAST_ERROR_TIMESTAMP: 0000-00-00 00:00:00.000000
+                               LAST_APPLIED_TRANSACTION: a36b6a91-5adc-11f0-864f-286ed48a126e:219478179
+     LAST_APPLIED_TRANSACTION_ORIGINAL_COMMIT_TIMESTAMP: 2025-10-19 02:26:30.628222
+    LAST_APPLIED_TRANSACTION_IMMEDIATE_COMMIT_TIMESTAMP: 2025-10-19 02:26:30.628222
+         LAST_APPLIED_TRANSACTION_START_APPLY_TIMESTAMP: 2025-12-24 10:18:44.112358
+           LAST_APPLIED_TRANSACTION_END_APPLY_TIMESTAMP: 2025-12-24 10:18:44.118143
+                                   APPLYING_TRANSACTION:
+         APPLYING_TRANSACTION_ORIGINAL_COMMIT_TIMESTAMP: 0000-00-00 00:00:00.000000
+        APPLYING_TRANSACTION_IMMEDIATE_COMMIT_TIMESTAMP: 0000-00-00 00:00:00.000000
+             APPLYING_TRANSACTION_START_APPLY_TIMESTAMP: 0000-00-00 00:00:00.000000
+                 LAST_APPLIED_TRANSACTION_RETRIES_COUNT: 0
+   LAST_APPLIED_TRANSACTION_LAST_TRANSIENT_ERROR_NUMBER: 0
+  LAST_APPLIED_TRANSACTION_LAST_TRANSIENT_ERROR_MESSAGE:
+LAST_APPLIED_TRANSACTION_LAST_TRANSIENT_ERROR_TIMESTAMP: 0000-00-00 00:00:00.000000
+                     APPLYING_TRANSACTION_RETRIES_COUNT: 0
+       APPLYING_TRANSACTION_LAST_TRANSIENT_ERROR_NUMBER: 0
+      APPLYING_TRANSACTION_LAST_TRANSIENT_ERROR_MESSAGE:
+    APPLYING_TRANSACTION_LAST_TRANSIENT_ERROR_TIMESTAMP: 0000-00-00 00:00:00.000000
+*************************** 12. row ***************************
+                                           CHANNEL_NAME:
+                                              WORKER_ID: 12
+                                              THREAD_ID: 1358164
+                                          SERVICE_STATE: ON
+                                      LAST_ERROR_NUMBER: 0
+                                     LAST_ERROR_MESSAGE:
+                                   LAST_ERROR_TIMESTAMP: 0000-00-00 00:00:00.000000
+                               LAST_APPLIED_TRANSACTION: a36b6a91-5adc-11f0-864f-286ed48a126e:219478180
+     LAST_APPLIED_TRANSACTION_ORIGINAL_COMMIT_TIMESTAMP: 2025-10-19 02:26:30.628226
+    LAST_APPLIED_TRANSACTION_IMMEDIATE_COMMIT_TIMESTAMP: 2025-10-19 02:26:30.628226
+         LAST_APPLIED_TRANSACTION_START_APPLY_TIMESTAMP: 2025-12-24 10:18:44.112384
+           LAST_APPLIED_TRANSACTION_END_APPLY_TIMESTAMP: 2025-12-24 10:18:44.118897
+                                   APPLYING_TRANSACTION:
+         APPLYING_TRANSACTION_ORIGINAL_COMMIT_TIMESTAMP: 0000-00-00 00:00:00.000000
+        APPLYING_TRANSACTION_IMMEDIATE_COMMIT_TIMESTAMP: 0000-00-00 00:00:00.000000
+             APPLYING_TRANSACTION_START_APPLY_TIMESTAMP: 0000-00-00 00:00:00.000000
+                 LAST_APPLIED_TRANSACTION_RETRIES_COUNT: 0
+   LAST_APPLIED_TRANSACTION_LAST_TRANSIENT_ERROR_NUMBER: 0
+  LAST_APPLIED_TRANSACTION_LAST_TRANSIENT_ERROR_MESSAGE:
+LAST_APPLIED_TRANSACTION_LAST_TRANSIENT_ERROR_TIMESTAMP: 0000-00-00 00:00:00.000000
+                     APPLYING_TRANSACTION_RETRIES_COUNT: 0
+       APPLYING_TRANSACTION_LAST_TRANSIENT_ERROR_NUMBER: 0
+      APPLYING_TRANSACTION_LAST_TRANSIENT_ERROR_MESSAGE:
+    APPLYING_TRANSACTION_LAST_TRANSIENT_ERROR_TIMESTAMP: 0000-00-00 00:00:00.000000
+*************************** 13. row ***************************
+                                           CHANNEL_NAME:
+                                              WORKER_ID: 13
+                                              THREAD_ID: 1358165
+                                          SERVICE_STATE: ON
+                                      LAST_ERROR_NUMBER: 0
+                                     LAST_ERROR_MESSAGE:
+                                   LAST_ERROR_TIMESTAMP: 0000-00-00 00:00:00.000000
+                               LAST_APPLIED_TRANSACTION: a36b6a91-5adc-11f0-864f-286ed48a126e:219474211
+     LAST_APPLIED_TRANSACTION_ORIGINAL_COMMIT_TIMESTAMP: 2025-10-19 02:26:16.002072
+    LAST_APPLIED_TRANSACTION_IMMEDIATE_COMMIT_TIMESTAMP: 2025-10-19 02:26:16.002072
+         LAST_APPLIED_TRANSACTION_START_APPLY_TIMESTAMP: 2025-12-24 10:18:13.410898
+           LAST_APPLIED_TRANSACTION_END_APPLY_TIMESTAMP: 2025-12-24 10:18:13.415269
+                                   APPLYING_TRANSACTION:
+         APPLYING_TRANSACTION_ORIGINAL_COMMIT_TIMESTAMP: 0000-00-00 00:00:00.000000
+        APPLYING_TRANSACTION_IMMEDIATE_COMMIT_TIMESTAMP: 0000-00-00 00:00:00.000000
+             APPLYING_TRANSACTION_START_APPLY_TIMESTAMP: 0000-00-00 00:00:00.000000
+                 LAST_APPLIED_TRANSACTION_RETRIES_COUNT: 0
+   LAST_APPLIED_TRANSACTION_LAST_TRANSIENT_ERROR_NUMBER: 0
+  LAST_APPLIED_TRANSACTION_LAST_TRANSIENT_ERROR_MESSAGE:
+LAST_APPLIED_TRANSACTION_LAST_TRANSIENT_ERROR_TIMESTAMP: 0000-00-00 00:00:00.000000
+                     APPLYING_TRANSACTION_RETRIES_COUNT: 0
+       APPLYING_TRANSACTION_LAST_TRANSIENT_ERROR_NUMBER: 0
+      APPLYING_TRANSACTION_LAST_TRANSIENT_ERROR_MESSAGE:
+    APPLYING_TRANSACTION_LAST_TRANSIENT_ERROR_TIMESTAMP: 0000-00-00 00:00:00.000000
+*************************** 14. row ***************************
+                                           CHANNEL_NAME:
+                                              WORKER_ID: 14
+                                              THREAD_ID: 1358166
+                                          SERVICE_STATE: ON
+                                      LAST_ERROR_NUMBER: 0
+                                     LAST_ERROR_MESSAGE:
+                                   LAST_ERROR_TIMESTAMP: 0000-00-00 00:00:00.000000
+                               LAST_APPLIED_TRANSACTION: a36b6a91-5adc-11f0-864f-286ed48a126e:219467921
+     LAST_APPLIED_TRANSACTION_ORIGINAL_COMMIT_TIMESTAMP: 2025-10-19 02:25:52.779292
+    LAST_APPLIED_TRANSACTION_IMMEDIATE_COMMIT_TIMESTAMP: 2025-10-19 02:25:52.779292
+         LAST_APPLIED_TRANSACTION_START_APPLY_TIMESTAMP: 2025-12-24 10:17:21.497691
+           LAST_APPLIED_TRANSACTION_END_APPLY_TIMESTAMP: 2025-12-24 10:17:21.519021
+                                   APPLYING_TRANSACTION:
+         APPLYING_TRANSACTION_ORIGINAL_COMMIT_TIMESTAMP: 0000-00-00 00:00:00.000000
+        APPLYING_TRANSACTION_IMMEDIATE_COMMIT_TIMESTAMP: 0000-00-00 00:00:00.000000
+             APPLYING_TRANSACTION_START_APPLY_TIMESTAMP: 0000-00-00 00:00:00.000000
+                 LAST_APPLIED_TRANSACTION_RETRIES_COUNT: 0
+   LAST_APPLIED_TRANSACTION_LAST_TRANSIENT_ERROR_NUMBER: 0
+  LAST_APPLIED_TRANSACTION_LAST_TRANSIENT_ERROR_MESSAGE:
+LAST_APPLIED_TRANSACTION_LAST_TRANSIENT_ERROR_TIMESTAMP: 0000-00-00 00:00:00.000000
+                     APPLYING_TRANSACTION_RETRIES_COUNT: 0
+       APPLYING_TRANSACTION_LAST_TRANSIENT_ERROR_NUMBER: 0
+      APPLYING_TRANSACTION_LAST_TRANSIENT_ERROR_MESSAGE:
+    APPLYING_TRANSACTION_LAST_TRANSIENT_ERROR_TIMESTAMP: 0000-00-00 00:00:00.000000
+*************************** 15. row ***************************
+                                           CHANNEL_NAME:
+                                              WORKER_ID: 15
+                                              THREAD_ID: 1358167
+                                          SERVICE_STATE: ON
+                                      LAST_ERROR_NUMBER: 0
+                                     LAST_ERROR_MESSAGE:
+                                   LAST_ERROR_TIMESTAMP: 0000-00-00 00:00:00.000000
+                               LAST_APPLIED_TRANSACTION: a36b6a91-5adc-11f0-864f-286ed48a126e:219467922
+     LAST_APPLIED_TRANSACTION_ORIGINAL_COMMIT_TIMESTAMP: 2025-10-19 02:25:52.779295
+    LAST_APPLIED_TRANSACTION_IMMEDIATE_COMMIT_TIMESTAMP: 2025-10-19 02:25:52.779295
+         LAST_APPLIED_TRANSACTION_START_APPLY_TIMESTAMP: 2025-12-24 10:17:21.497726
+           LAST_APPLIED_TRANSACTION_END_APPLY_TIMESTAMP: 2025-12-24 10:17:21.501034
+                                   APPLYING_TRANSACTION:
+         APPLYING_TRANSACTION_ORIGINAL_COMMIT_TIMESTAMP: 0000-00-00 00:00:00.000000
+        APPLYING_TRANSACTION_IMMEDIATE_COMMIT_TIMESTAMP: 0000-00-00 00:00:00.000000
+             APPLYING_TRANSACTION_START_APPLY_TIMESTAMP: 0000-00-00 00:00:00.000000
+                 LAST_APPLIED_TRANSACTION_RETRIES_COUNT: 0
+   LAST_APPLIED_TRANSACTION_LAST_TRANSIENT_ERROR_NUMBER: 0
+  LAST_APPLIED_TRANSACTION_LAST_TRANSIENT_ERROR_MESSAGE:
+LAST_APPLIED_TRANSACTION_LAST_TRANSIENT_ERROR_TIMESTAMP: 0000-00-00 00:00:00.000000
+                     APPLYING_TRANSACTION_RETRIES_COUNT: 0
+       APPLYING_TRANSACTION_LAST_TRANSIENT_ERROR_NUMBER: 0
+      APPLYING_TRANSACTION_LAST_TRANSIENT_ERROR_MESSAGE:
+    APPLYING_TRANSACTION_LAST_TRANSIENT_ERROR_TIMESTAMP: 0000-00-00 00:00:00.000000
+*************************** 16. row ***************************
+                                           CHANNEL_NAME:
+                                              WORKER_ID: 16
+                                              THREAD_ID: 1358168
+                                          SERVICE_STATE: ON
+                                      LAST_ERROR_NUMBER: 0
+                                     LAST_ERROR_MESSAGE:
+                                   LAST_ERROR_TIMESTAMP: 0000-00-00 00:00:00.000000
+                               LAST_APPLIED_TRANSACTION: a36b6a91-5adc-11f0-864f-286ed48a126e:219467923
+     LAST_APPLIED_TRANSACTION_ORIGINAL_COMMIT_TIMESTAMP: 2025-10-19 02:25:52.779297
+    LAST_APPLIED_TRANSACTION_IMMEDIATE_COMMIT_TIMESTAMP: 2025-10-19 02:25:52.779297
+         LAST_APPLIED_TRANSACTION_START_APPLY_TIMESTAMP: 2025-12-24 10:17:21.497730
+           LAST_APPLIED_TRANSACTION_END_APPLY_TIMESTAMP: 2025-12-24 10:17:21.505583
+                                   APPLYING_TRANSACTION:
+         APPLYING_TRANSACTION_ORIGINAL_COMMIT_TIMESTAMP: 0000-00-00 00:00:00.000000
+        APPLYING_TRANSACTION_IMMEDIATE_COMMIT_TIMESTAMP: 0000-00-00 00:00:00.000000
+             APPLYING_TRANSACTION_START_APPLY_TIMESTAMP: 0000-00-00 00:00:00.000000
+                 LAST_APPLIED_TRANSACTION_RETRIES_COUNT: 0
+   LAST_APPLIED_TRANSACTION_LAST_TRANSIENT_ERROR_NUMBER: 0
+  LAST_APPLIED_TRANSACTION_LAST_TRANSIENT_ERROR_MESSAGE:
+LAST_APPLIED_TRANSACTION_LAST_TRANSIENT_ERROR_TIMESTAMP: 0000-00-00 00:00:00.000000
+                     APPLYING_TRANSACTION_RETRIES_COUNT: 0
+       APPLYING_TRANSACTION_LAST_TRANSIENT_ERROR_NUMBER: 0
+      APPLYING_TRANSACTION_LAST_TRANSIENT_ERROR_MESSAGE:
+    APPLYING_TRANSACTION_LAST_TRANSIENT_ERROR_TIMESTAMP: 0000-00-00 00:00:00.000000
+16 rows in set (0.09 sec)
+
+root@localhost:mysql.sock [(none)]>
+
+
+```
+
+#继续分析
+
+```
+IO 线程已经追到源库头部（源库上 Binlog Dump GTID 显示 Source has sent all binlog… waiting for more updates）
+
+SQL 回放线程在追历史（LAST_APPLIED_TRANSACTION_ORIGINAL_COMMIT_TIMESTAMP 还是 2025-10-19，而现在是 2025-12-24）
+
+虽然你开了 16 个 worker + LOGICAL_CLOCK，但 processlist 里只有少数 worker 在忙，其它都在等 Coordinator——典型原因就是：源库的依赖跟踪仍是 COMMIT_ORDER，并行度被依赖判定“锁死”了。
+```
+
+#临时从库调整参数
+
+```sql
+#追数据阶段：临时降低从库“落盘/刷盘”开销（吞吐提升通常很明显）
+
+#这招对“回放慢”特别有效，因为回放本质是不断 COMMIT。
+
+#在从库执行（追赶期间临时调，追平后再改回去）：
+
+SET GLOBAL innodb_flush_log_at_trx_commit = 2;
+SET GLOBAL sync_binlog = 0;
+
+
+#innodb_flush_log_at_trx_commit=2：每秒刷一次日志（崩溃可能丢 1 秒内事务，但这是从库回放，通常可接受）
+
+#sync_binlog=0：binlog 不强制每次刷盘（如果你的从库还开着 binlog / log_replica_updates，这个很关键）
+
+#追平后建议恢复更稳的值（按你们的可靠性要求）：
+
+SET GLOBAL innodb_flush_log_at_trx_commit = 1;
+SET GLOBAL sync_binlog = 1;
+```
+
+
+
+#修改参数后的效果
+
+```sql
+root@localhost:mysql.sock [(none)]> SHOW VARIABLES LIKE 'sync_binlog';
++---------------+-------+
+| Variable_name | Value |
++---------------+-------+
+| sync_binlog   | 0     |
++---------------+-------+
+1 row in set (0.00 sec)
+
+root@localhost:mysql.sock [(none)]> SHOW VARIABLES LIKE 'innodb_flush_log_at_trx_commit';
++--------------------------------+-------+
+| Variable_name                  | Value |
++--------------------------------+-------+
+| innodb_flush_log_at_trx_commit | 2     |
++--------------------------------+-------+
+1 row in set (0.00 sec)
+
+root@localhost:mysql.sock [(none)]> SHOW PROCESSLIST;
++---------+-----------------+--------------------+-----------+------------------+---------+-----------------------------------------------------------------+------------------------------------------------------------------------------------------------------+
+| Id      | User            | Host               | db        | Command          | Time    | State                                                           | Info                                                                                                 |
++---------+-----------------+--------------------+-----------+------------------+---------+-----------------------------------------------------------------+------------------------------------------------------------------------------------------------------+
+|       7 | event_scheduler | localhost          | NULL      | Daemon           | 3458922 | Waiting on empty queue                                          | NULL                                                                                                 |
+|   87921 | repl            | 10.40.10.132:45110 | NULL      | Binlog Dump GTID | 2651760 | Source has sent all binlog to replica; waiting for more updates | NULL                                                                                                 |
+| 1349811 | system user     | connecting host    | NULL      | Connect          |  173935 | Waiting for source to send event                                | NULL                                                                                                 |
+| 1358108 | system user     |                    | NULL      | Query            |       0 | Waiting for dependent transaction to commit                     | NULL                                                                                                 |
+| 1358109 | system user     |                    | authx_log | Query            | 5731293 | Applying batch of row changes (write)                           | insert into TB_L_APPLY_CALL_LOG (ADD_ACCOUNT, ADD_TIME, COMPANY_ID, DELETE_ACCOUNT, DELETE_TIME, DEL |
+| 1358110 | system user     |                    | NULL      | Query            | 5731293 | Waiting for an event from Coordinator                           | NULL                                                                                                 |
+| 1358111 | system user     |                    | NULL      | Query            | 5731293 | Waiting for an event from Coordinator                           | NULL                                                                                                 |
+| 1358112 | system user     |                    | NULL      | Query            | 5731293 | Waiting for an event from Coordinator                           | NULL                                                                                                 |
+| 1358113 | system user     |                    | NULL      | Query            | 5731293 | Waiting for an event from Coordinator                           | NULL                                                                                                 |
+| 1358114 | system user     |                    | NULL      | Query            | 5731293 | Waiting for an event from Coordinator                           | NULL                                                                                                 |
+| 1358115 | system user     |                    | NULL      | Query            | 5731293 | Waiting for an event from Coordinator                           | NULL                                                                                                 |
+| 1358116 | system user     |                    | NULL      | Query            | 5731294 | Waiting for an event from Coordinator                           | NULL                                                                                                 |
+| 1358117 | system user     |                    | NULL      | Query            | 5731294 | Waiting for an event from Coordinator                           | NULL                                                                                                 |
+| 1358118 | system user     |                    | NULL      | Query            | 5731294 | Waiting for an event from Coordinator                           | NULL                                                                                                 |
+| 1358119 | system user     |                    | NULL      | Query            | 5731294 | Waiting for an event from Coordinator                           | NULL                                                                                                 |
+| 1358120 | system user     |                    | NULL      | Query            | 5731335 | Waiting for an event from Coordinator                           | NULL                                                                                                 |
+| 1358121 | system user     |                    | NULL      | Query            | 5731335 | Waiting for an event from Coordinator                           | NULL                                                                                                 |
+| 1358122 | system user     |                    | NULL      | Query            | 5731335 | Waiting for an event from Coordinator                           | NULL                                                                                                 |
+| 1358123 | system user     |                    | NULL      | Query            | 5731350 | Waiting for an event from Coordinator                           | NULL                                                                                                 |
+| 1358124 | system user     |                    | NULL      | Query            | 5731423 | Waiting for an event from Coordinator                           | NULL                                                                                                 |
+| 1436786 | root            | localhost          | NULL      | Query            |       0 | init                                                            | SHOW PROCESSLIST                                                                                     |
++---------+-----------------+--------------------+-----------+------------------+---------+-----------------------------------------------------------------+------------------------------------------------------------------------------------------------------+
+21 rows in set, 1 warning (0.00 sec)
+
+root@localhost:mysql.sock [(none)]> SELECT * FROM performance_schema.replication_applier_status_by_worker;
++--------------+-----------+-----------+---------------+-------------------+--------------------+----------------------------+------------------------------------------------+----------------------------------------------------+-----------------------------------------------------+------------------------------------------------+----------------------------------------------+------------------------------------------------+------------------------------------------------+-------------------------------------------------+--------------------------------------------+----------------------------------------+------------------------------------------------------+-------------------------------------------------------+---------------------------------------------------------+------------------------------------+--------------------------------------------------+---------------------------------------------------+-----------------------------------------------------+
+| CHANNEL_NAME | WORKER_ID | THREAD_ID | SERVICE_STATE | LAST_ERROR_NUMBER | LAST_ERROR_MESSAGE | LAST_ERROR_TIMESTAMP       | LAST_APPLIED_TRANSACTION                       | LAST_APPLIED_TRANSACTION_ORIGINAL_COMMIT_TIMESTAMP | LAST_APPLIED_TRANSACTION_IMMEDIATE_COMMIT_TIMESTAMP | LAST_APPLIED_TRANSACTION_START_APPLY_TIMESTAMP | LAST_APPLIED_TRANSACTION_END_APPLY_TIMESTAMP | APPLYING_TRANSACTION                           | APPLYING_TRANSACTION_ORIGINAL_COMMIT_TIMESTAMP | APPLYING_TRANSACTION_IMMEDIATE_COMMIT_TIMESTAMP | APPLYING_TRANSACTION_START_APPLY_TIMESTAMP | LAST_APPLIED_TRANSACTION_RETRIES_COUNT | LAST_APPLIED_TRANSACTION_LAST_TRANSIENT_ERROR_NUMBER | LAST_APPLIED_TRANSACTION_LAST_TRANSIENT_ERROR_MESSAGE | LAST_APPLIED_TRANSACTION_LAST_TRANSIENT_ERROR_TIMESTAMP | APPLYING_TRANSACTION_RETRIES_COUNT | APPLYING_TRANSACTION_LAST_TRANSIENT_ERROR_NUMBER | APPLYING_TRANSACTION_LAST_TRANSIENT_ERROR_MESSAGE | APPLYING_TRANSACTION_LAST_TRANSIENT_ERROR_TIMESTAMP |
++--------------+-----------+-----------+---------------+-------------------+--------------------+----------------------------+------------------------------------------------+----------------------------------------------------+-----------------------------------------------------+------------------------------------------------+----------------------------------------------+------------------------------------------------+------------------------------------------------+-------------------------------------------------+--------------------------------------------+----------------------------------------+------------------------------------------------------+-------------------------------------------------------+---------------------------------------------------------+------------------------------------+--------------------------------------------------+---------------------------------------------------+-----------------------------------------------------+
+|              |         1 |   1358153 | ON            |                 0 |                    | 0000-00-00 00:00:00.000000 | a36b6a91-5adc-11f0-864f-286ed48a126e:219622575 | 2025-10-19 02:35:35.224111                         | 2025-10-19 02:35:35.224111                          | 2025-12-24 10:37:08.780908                     | 2025-12-24 10:37:08.781915                   | a36b6a91-5adc-11f0-864f-286ed48a126e:219622578 | 2025-10-19 02:35:35.228213                     | 2025-10-19 02:35:35.228213                      | 2025-12-24 10:37:08.790247                 |                                      0 |                                                    0 |                                                       | 0000-00-00 00:00:00.000000                              |                                  0 |                                                0 |                                                   | 0000-00-00 00:00:00.000000                          |
+|              |         2 |   1358154 | ON            |                 0 |                    | 0000-00-00 00:00:00.000000 | a36b6a91-5adc-11f0-864f-286ed48a126e:219622576 | 2025-10-19 02:35:35.224369                         | 2025-10-19 02:35:35.224369                          | 2025-12-24 10:37:08.780939                     | 2025-12-24 10:37:08.790183                   |                                                | 0000-00-00 00:00:00.000000                     | 0000-00-00 00:00:00.000000                      | 0000-00-00 00:00:00.000000                 |                                      0 |                                                    0 |                                                       | 0000-00-00 00:00:00.000000                              |                                  0 |                                                0 |                                                   | 0000-00-00 00:00:00.000000                          |
+|              |         3 |   1358155 | ON            |                 0 |                    | 0000-00-00 00:00:00.000000 | a36b6a91-5adc-11f0-864f-286ed48a126e:219622577 | 2025-10-19 02:35:35.226024                         | 2025-10-19 02:35:35.226024                          | 2025-12-24 10:37:08.780959                     | 2025-12-24 10:37:08.788361                   |                                                | 0000-00-00 00:00:00.000000                     | 0000-00-00 00:00:00.000000                      | 0000-00-00 00:00:00.000000                 |                                      0 |                                                    0 |                                                       | 0000-00-00 00:00:00.000000                              |                                  0 |                                                0 |                                                   | 0000-00-00 00:00:00.000000                          |
+|              |         4 |   1358156 | ON            |                 0 |                    | 0000-00-00 00:00:00.000000 | a36b6a91-5adc-11f0-864f-286ed48a126e:219622569 | 2025-10-19 02:35:35.202299                         | 2025-10-19 02:35:35.202299                          | 2025-12-24 10:37:08.708642                     | 2025-12-24 10:37:08.709028                   |                                                | 0000-00-00 00:00:00.000000                     | 0000-00-00 00:00:00.000000                      | 0000-00-00 00:00:00.000000                 |                                      0 |                                                    0 |                                                       | 0000-00-00 00:00:00.000000                              |                                  0 |                                                0 |                                                   | 0000-00-00 00:00:00.000000                          |
+|              |         5 |   1358157 | ON            |                 0 |                    | 0000-00-00 00:00:00.000000 | a36b6a91-5adc-11f0-864f-286ed48a126e:219622570 | 2025-10-19 02:35:35.204364                         | 2025-10-19 02:35:35.204364                          | 2025-12-24 10:37:08.708674                     | 2025-12-24 10:37:08.721487                   |                                                | 0000-00-00 00:00:00.000000                     | 0000-00-00 00:00:00.000000                      | 0000-00-00 00:00:00.000000                 |                                      0 |                                                    0 |                                                       | 0000-00-00 00:00:00.000000                              |                                  0 |                                                0 |                                                   | 0000-00-00 00:00:00.000000                          |
+|              |         6 |   1358158 | ON            |                 0 |                    | 0000-00-00 00:00:00.000000 | a36b6a91-5adc-11f0-864f-286ed48a126e:219622529 | 2025-10-19 02:35:35.057101                         | 2025-10-19 02:35:35.057101                          | 2025-12-24 10:37:08.237879                     | 2025-12-24 10:37:08.238301                   |                                                | 0000-00-00 00:00:00.000000                     | 0000-00-00 00:00:00.000000                      | 0000-00-00 00:00:00.000000                 |                                      0 |                                                    0 |                                                       | 0000-00-00 00:00:00.000000                              |                                  0 |                                                0 |                                                   | 0000-00-00 00:00:00.000000                          |
+|              |         7 |   1358159 | ON            |                 0 |                    | 0000-00-00 00:00:00.000000 | a36b6a91-5adc-11f0-864f-286ed48a126e:219622530 | 2025-10-19 02:35:35.057104                         | 2025-10-19 02:35:35.057104                          | 2025-12-24 10:37:08.237883                     | 2025-12-24 10:37:08.265305                   |                                                | 0000-00-00 00:00:00.000000                     | 0000-00-00 00:00:00.000000                      | 0000-00-00 00:00:00.000000                 |                                      0 |                                                    0 |                                                       | 0000-00-00 00:00:00.000000                              |                                  0 |                                                0 |                                                   | 0000-00-00 00:00:00.000000                          |
+|              |         8 |   1358160 | ON            |                 0 |                    | 0000-00-00 00:00:00.000000 | a36b6a91-5adc-11f0-864f-286ed48a126e:219622480 | 2025-10-19 02:35:34.875366                         | 2025-10-19 02:35:34.875366                          | 2025-12-24 10:37:08.003714                     | 2025-12-24 10:37:08.004062                   |                                                | 0000-00-00 00:00:00.000000                     | 0000-00-00 00:00:00.000000                      | 0000-00-00 00:00:00.000000                 |                                      0 |                                                    0 |                                                       | 0000-00-00 00:00:00.000000                              |                                  0 |                                                0 |                                                   | 0000-00-00 00:00:00.000000                          |
+|              |         9 |   1358161 | ON            |                 0 |                    | 0000-00-00 00:00:00.000000 | a36b6a91-5adc-11f0-864f-286ed48a126e:219622481 | 2025-10-19 02:35:34.875369                         | 2025-10-19 02:35:34.875369                          | 2025-12-24 10:37:08.003729                     | 2025-12-24 10:37:08.013201                   |                                                | 0000-00-00 00:00:00.000000                     | 0000-00-00 00:00:00.000000                      | 0000-00-00 00:00:00.000000                 |                                      0 |                                                    0 |                                                       | 0000-00-00 00:00:00.000000                              |                                  0 |                                                0 |                                                   | 0000-00-00 00:00:00.000000                          |
+|              |        10 |   1358162 | ON            |                 0 |                    | 0000-00-00 00:00:00.000000 | a36b6a91-5adc-11f0-864f-286ed48a126e:219622482 | 2025-10-19 02:35:34.876346                         | 2025-10-19 02:35:34.876346                          | 2025-12-24 10:37:08.003741                     | 2025-12-24 10:37:08.027612                   |                                                | 0000-00-00 00:00:00.000000                     | 0000-00-00 00:00:00.000000                      | 0000-00-00 00:00:00.000000                 |                                      0 |                                                    0 |                                                       | 0000-00-00 00:00:00.000000                              |                                  0 |                                                0 |                                                   | 0000-00-00 00:00:00.000000                          |
+|              |        11 |   1358163 | ON            |                 0 |                    | 0000-00-00 00:00:00.000000 | a36b6a91-5adc-11f0-864f-286ed48a126e:219622484 | 2025-10-19 02:35:34.876356                         | 2025-10-19 02:35:34.876356                          | 2025-12-24 10:37:08.004017                     | 2025-12-24 10:37:08.027543                   |                                                | 0000-00-00 00:00:00.000000                     | 0000-00-00 00:00:00.000000                      | 0000-00-00 00:00:00.000000                 |                                      0 |                                                    0 |                                                       | 0000-00-00 00:00:00.000000                              |                                  0 |                                                0 |                                                   | 0000-00-00 00:00:00.000000                          |
+|              |        12 |   1358164 | ON            |                 0 |                    | 0000-00-00 00:00:00.000000 | a36b6a91-5adc-11f0-864f-286ed48a126e:219611417 | 2025-10-19 02:34:53.349077                         | 2025-10-19 02:34:53.349077                          | 2025-12-24 10:35:51.966328                     | 2025-12-24 10:35:51.992292                   |                                                | 0000-00-00 00:00:00.000000                     | 0000-00-00 00:00:00.000000                      | 0000-00-00 00:00:00.000000                 |                                      0 |                                                    0 |                                                       | 0000-00-00 00:00:00.000000                              |                                  0 |                                                0 |                                                   | 0000-00-00 00:00:00.000000                          |
+|              |        13 |   1358165 | ON            |                 0 |                    | 0000-00-00 00:00:00.000000 | a36b6a91-5adc-11f0-864f-286ed48a126e:219611418 | 2025-10-19 02:34:53.349080                         | 2025-10-19 02:34:53.349080                          | 2025-12-24 10:35:51.966314                     | 2025-12-24 10:35:51.992032                   |                                                | 0000-00-00 00:00:00.000000                     | 0000-00-00 00:00:00.000000                      | 0000-00-00 00:00:00.000000                 |                                      0 |                                                    0 |                                                       | 0000-00-00 00:00:00.000000                              |                                  0 |                                                0 |                                                   | 0000-00-00 00:00:00.000000                          |
+|              |        14 |   1358166 | ON            |                 0 |                    | 0000-00-00 00:00:00.000000 | a36b6a91-5adc-11f0-864f-286ed48a126e:219611419 | 2025-10-19 02:34:53.349083                         | 2025-10-19 02:34:53.349083                          | 2025-12-24 10:35:51.966343                     | 2025-12-24 10:35:51.977772                   |                                                | 0000-00-00 00:00:00.000000                     | 0000-00-00 00:00:00.000000                      | 0000-00-00 00:00:00.000000                 |                                      0 |                                                    0 |                                                       | 0000-00-00 00:00:00.000000                              |                                  0 |                                                0 |                                                   | 0000-00-00 00:00:00.000000                          |
+|              |        15 |   1358167 | ON            |                 0 |                    | 0000-00-00 00:00:00.000000 | a36b6a91-5adc-11f0-864f-286ed48a126e:219607370 | 2025-10-19 02:34:38.560754                         | 2025-10-19 02:34:38.560754                          | 2025-12-24 10:35:23.469929                     | 2025-12-24 10:35:23.485376                   |                                                | 0000-00-00 00:00:00.000000                     | 0000-00-00 00:00:00.000000                      | 0000-00-00 00:00:00.000000                 |                                      0 |                                                    0 |                                                       | 0000-00-00 00:00:00.000000                              |                                  0 |                                                0 |                                                   | 0000-00-00 00:00:00.000000                          |
+|              |        16 |   1358168 | ON            |                 0 |                    | 0000-00-00 00:00:00.000000 | a36b6a91-5adc-11f0-864f-286ed48a126e:219587986 | 2025-10-19 02:33:25.558321                         | 2025-10-19 02:33:25.558321                          | 2025-12-24 10:33:13.432173                     | 2025-12-24 10:33:13.439635                   |                                                | 0000-00-00 00:00:00.000000                     | 0000-00-00 00:00:00.000000                      | 0000-00-00 00:00:00.000000                 |                                      0 |                                                    0 |                                                       | 0000-00-00 00:00:00.000000                              |                                  0 |                                                0 |                                                   | 0000-00-00 00:00:00.000000                          |
++--------------+-----------+-----------+---------------+-------------------+--------------------+----------------------------+------------------------------------------------+----------------------------------------------------+-----------------------------------------------------+------------------------------------------------+----------------------------------------------+------------------------------------------------+------------------------------------------------+-------------------------------------------------+--------------------------------------------+----------------------------------------+------------------------------------------------------+-------------------------------------------------------+---------------------------------------------------------+------------------------------------+--------------------------------------------------+---------------------------------------------------+-----------------------------------------------------+
+16 rows in set (0.00 sec)
+
+root@localhost:mysql.sock [(none)]> SHOW REPLICA STATUS\G
+*************************** 1. row ***************************
+             Replica_IO_State: Waiting for source to send event
+                  Source_Host: 10.40.10.132
+                  Source_User: repl
+                  Source_Port: 3306
+                Connect_Retry: 60
+              Source_Log_File: mysql-bin.000797
+          Read_Source_Log_Pos: 72490009
+               Relay_Log_File: relay-bin.003669
+                Relay_Log_Pos: 52621368
+        Relay_Source_Log_File: mysql-bin.000455
+           Replica_IO_Running: Yes
+          Replica_SQL_Running: Yes
+              Replicate_Do_DB:
+          Replicate_Ignore_DB:
+           Replicate_Do_Table:
+       Replicate_Ignore_Table:
+      Replicate_Wild_Do_Table:
+  Replicate_Wild_Ignore_Table:
+                   Last_Errno: 0
+                   Last_Error:
+                 Skip_Counter: 0
+          Exec_Source_Log_Pos: 52621176
+              Relay_Log_Space: 183115115424
+              Until_Condition: None
+               Until_Log_File:
+                Until_Log_Pos: 0
+           Source_SSL_Allowed: No
+           Source_SSL_CA_File:
+           Source_SSL_CA_Path:
+              Source_SSL_Cert:
+            Source_SSL_Cipher:
+               Source_SSL_Key:
+        Seconds_Behind_Source: 5731298
+Source_SSL_Verify_Server_Cert: No
+                Last_IO_Errno: 0
+                Last_IO_Error:
+               Last_SQL_Errno: 0
+               Last_SQL_Error:
+  Replicate_Ignore_Server_Ids:
+             Source_Server_Id: 132
+                  Source_UUID: a36b6a91-5adc-11f0-864f-286ed48a126e
+             Source_Info_File: mysql.slave_master_info
+                    SQL_Delay: 0
+          SQL_Remaining_Delay: NULL
+    Replica_SQL_Running_State: Waiting for dependent transaction to commit
+           Source_Retry_Count: 86400
+                  Source_Bind:
+      Last_IO_Error_Timestamp:
+     Last_SQL_Error_Timestamp:
+               Source_SSL_Crl:
+           Source_SSL_Crlpath:
+           Retrieved_Gtid_Set: a36b6a91-5adc-11f0-864f-286ed48a126e:52053:197337666-406845506
+            Executed_Gtid_Set: a36b6a91-5adc-11f0-864f-286ed48a126e:1-52052:52054-219623949,
+a52be673-5adc-11f0-85e5-286ed4894d31:1-3332
+                Auto_Position: 1
+         Replicate_Rewrite_DB:
+                 Channel_Name:
+           Source_TLS_Version:
+       Source_public_key_path:
+        Get_Source_public_key: 0
+            Network_Namespace:
+1 row in set (0.00 sec)
+
+root@localhost:mysql.sock [(none)]> SHOW REPLICA STATUS\G
+*************************** 1. row ***************************
+             Replica_IO_State: Waiting for source to send event
+                  Source_Host: 10.40.10.132
+                  Source_User: repl
+                  Source_Port: 3306
+                Connect_Retry: 60
+              Source_Log_File: mysql-bin.000797
+          Read_Source_Log_Pos: 72581174
+               Relay_Log_File: relay-bin.003669
+                Relay_Log_Pos: 52859877
+        Relay_Source_Log_File: mysql-bin.000455
+           Replica_IO_Running: Yes
+          Replica_SQL_Running: Yes
+              Replicate_Do_DB:
+          Replicate_Ignore_DB:
+           Replicate_Do_Table:
+       Replicate_Ignore_Table:
+      Replicate_Wild_Do_Table:
+  Replicate_Wild_Ignore_Table:
+                   Last_Errno: 0
+                   Last_Error:
+                 Skip_Counter: 0
+          Exec_Source_Log_Pos: 52859685
+              Relay_Log_Space: 183115206589
+              Until_Condition: None
+               Until_Log_File:
+                Until_Log_Pos: 0
+           Source_SSL_Allowed: No
+           Source_SSL_CA_File:
+           Source_SSL_CA_Path:
+              Source_SSL_Cert:
+            Source_SSL_Cipher:
+               Source_SSL_Key:
+        Seconds_Behind_Source: 5731299
+Source_SSL_Verify_Server_Cert: No
+                Last_IO_Errno: 0
+                Last_IO_Error:
+               Last_SQL_Errno: 0
+               Last_SQL_Error:
+  Replicate_Ignore_Server_Ids:
+             Source_Server_Id: 132
+                  Source_UUID: a36b6a91-5adc-11f0-864f-286ed48a126e
+             Source_Info_File: mysql.slave_master_info
+                    SQL_Delay: 0
+          SQL_Remaining_Delay: NULL
+    Replica_SQL_Running_State: Waiting for dependent transaction to commit
+           Source_Retry_Count: 86400
+                  Source_Bind:
+      Last_IO_Error_Timestamp:
+     Last_SQL_Error_Timestamp:
+               Source_SSL_Crl:
+           Source_SSL_Crlpath:
+           Retrieved_Gtid_Set: a36b6a91-5adc-11f0-864f-286ed48a126e:52053:197337666-406845615
+            Executed_Gtid_Set: a36b6a91-5adc-11f0-864f-286ed48a126e:1-52052:52054-219624163,
+a52be673-5adc-11f0-85e5-286ed4894d31:1-3332
+                Auto_Position: 1
+         Replicate_Rewrite_DB:
+                 Channel_Name:
+           Source_TLS_Version:
+       Source_public_key_path:
+        Get_Source_public_key: 0
+            Network_Namespace:
+1 row in set (0.00 sec)
+
+root@localhost:mysql.sock [(none)]> SHOW REPLICA STATUS\G
+*************************** 1. row ***************************
+             Replica_IO_State: Waiting for source to send event
+                  Source_Host: 10.40.10.132
+                  Source_User: repl
+                  Source_Port: 3306
+                Connect_Retry: 60
+              Source_Log_File: mysql-bin.000797
+          Read_Source_Log_Pos: 72813555
+               Relay_Log_File: relay-bin.003669
+                Relay_Log_Pos: 53345141
+        Relay_Source_Log_File: mysql-bin.000455
+           Replica_IO_Running: Yes
+          Replica_SQL_Running: Yes
+              Replicate_Do_DB:
+          Replicate_Ignore_DB:
+           Replicate_Do_Table:
+       Replicate_Ignore_Table:
+      Replicate_Wild_Do_Table:
+  Replicate_Wild_Ignore_Table:
+                   Last_Errno: 0
+                   Last_Error:
+                 Skip_Counter: 0
+          Exec_Source_Log_Pos: 53344949
+              Relay_Log_Space: 183115438970
+              Until_Condition: None
+               Until_Log_File:
+                Until_Log_Pos: 0
+           Source_SSL_Allowed: No
+           Source_SSL_CA_File:
+           Source_SSL_CA_Path:
+              Source_SSL_Cert:
+            Source_SSL_Cipher:
+               Source_SSL_Key:
+        Seconds_Behind_Source: 5731301
+Source_SSL_Verify_Server_Cert: No
+                Last_IO_Errno: 0
+                Last_IO_Error:
+               Last_SQL_Errno: 0
+               Last_SQL_Error:
+  Replicate_Ignore_Server_Ids:
+             Source_Server_Id: 132
+                  Source_UUID: a36b6a91-5adc-11f0-864f-286ed48a126e
+             Source_Info_File: mysql.slave_master_info
+                    SQL_Delay: 0
+          SQL_Remaining_Delay: NULL
+    Replica_SQL_Running_State: Waiting for dependent transaction to commit
+           Source_Retry_Count: 86400
+                  Source_Bind:
+      Last_IO_Error_Timestamp:
+     Last_SQL_Error_Timestamp:
+               Source_SSL_Crl:
+           Source_SSL_Crlpath:
+           Retrieved_Gtid_Set: a36b6a91-5adc-11f0-864f-286ed48a126e:52053:197337666-406845924
+            Executed_Gtid_Set: a36b6a91-5adc-11f0-864f-286ed48a126e:1-52052:52054-219624597,
+a52be673-5adc-11f0-85e5-286ed4894d31:1-3332
+                Auto_Position: 1
+         Replicate_Rewrite_DB:
+                 Channel_Name:
+           Source_TLS_Version:
+       Source_public_key_path:
+        Get_Source_public_key: 0
+            Network_Namespace:
+1 row in set (0.01 sec)
+
+root@localhost:mysql.sock [(none)]>
+
+```
+
+
+
+#效果并不明显，分析磁盘IO
+
+```bash
+从库：
+root@localhost:mysql.sock [(none)]> SHOW VARIABLES LIKE 'replica_pending_jobs_size_max';
++-------------------------------+-----------+
+| Variable_name                 | Value     |
++-------------------------------+-----------+
+| replica_pending_jobs_size_max | 134217728 |
++-------------------------------+-----------+
+1 row in set (0.00 sec)
+
+root@localhost:mysql.sock [(none)]> exit
+Bye
+[root@MHsql-db01B mysql]# iostat -x 1
+Linux 4.19.90-24.4.v2101.ky10.x86_64 (MHsql-db01B)      12/24/2025      _x86_64_        (32 CPU)
+
+avg-cpu:  %user   %nice %system %iowait  %steal   %idle
+           0.09    0.00    0.07    0.16    0.00   99.69
+
+Device            r/s     rkB/s   rrqm/s  %rrqm r_await rareq-sz     w/s     wkB/s   wrqm/s  %wrqm w_await wareq-sz     d/s     dkB/s   drqm/s  %drqm d_await dareq-sz  aqu-sz  %util
+dm-0             0.06      2.26     0.00   0.00    4.28    39.97    0.63      5.30     0.00   0.00    0.22     8.40    0.00      0.00     0.00   0.00    0.00     0.00    0.00   0.02
+dm-1             0.01      0.02     0.00   0.00    5.29     4.09    0.04      0.18     0.00   0.00    5.21     4.00    0.00      0.00     0.00   0.00    0.00     0.00    0.00   0.00
+dm-2             5.70    330.13     0.00   0.00    9.31    57.94   69.65    728.85     0.00   0.00    0.56    10.46    0.00      0.00     0.00   0.00    0.00     0.00    0.09   4.78
+dm-3             0.00      0.00     0.00   0.00    0.66     3.52    0.00      0.00     0.00   0.00    0.21    11.32    0.00      0.00     0.00   0.00    0.00     0.00    0.00   0.00
+vda              0.06      2.18     0.00   5.24    4.25    37.68    0.58      4.75     0.10  14.34    0.61     8.17    0.00      0.00     0.00   0.00    0.00     0.00    0.00   0.02
+vdb              0.00      0.10     0.00   0.66    6.15    69.46    0.07      0.23     0.01  12.15    0.83     3.47    0.00      0.00     0.00   0.00    0.00     0.00    0.00   0.00
+vdc              5.70    330.13     0.00   0.02    9.30    57.95   69.61    712.57     0.03   0.05    0.55    10.24    0.00      0.00     0.00   0.00    0.00     0.00    0.06   4.78
+
+
+avg-cpu:  %user   %nice %system %iowait  %steal   %idle
+           0.31    0.00    0.22    3.78    0.00   95.69
+
+Device            r/s     rkB/s   rrqm/s  %rrqm r_await rareq-sz     w/s     wkB/s   wrqm/s  %wrqm w_await wareq-sz     d/s     dkB/s   drqm/s  %drqm d_await dareq-sz  aqu-sz  %util
+dm-0             0.00      0.00     0.00   0.00    0.00     0.00    2.00     24.00     0.00   0.00    2.00    12.00    0.00      0.00     0.00   0.00    0.00     0.00    0.00   0.40
+dm-1             0.00      0.00     0.00   0.00    0.00     0.00    0.00      0.00     0.00   0.00    0.00     0.00    0.00      0.00     0.00   0.00    0.00     0.00    0.00   0.00
+dm-2           104.00   1664.00     0.00   0.00   11.65    16.00  631.00  13158.00     0.00   0.00    0.36    20.85    0.00      0.00     0.00   0.00    0.00     0.00    1.44  94.40
+dm-3             0.00      0.00     0.00   0.00    0.00     0.00    0.00      0.00     0.00   0.00    0.00     0.00    0.00      0.00     0.00   0.00    0.00     0.00    0.00   0.00
+vda              0.00      0.00     0.00   0.00    0.00     0.00    2.00     24.00     0.00   0.00    0.50    12.00    0.00      0.00     0.00   0.00    0.00     0.00    0.00   0.40
+vdb              0.00      0.00     0.00   0.00    0.00     0.00    0.00      0.00     0.00   0.00    0.00     0.00    0.00      0.00     0.00   0.00    0.00     0.00    0.00   0.00
+vdc            104.00   1664.00     0.00   0.00   11.74    16.00  631.00  13137.00     0.00   0.00    0.39    20.82    0.00      0.00     0.00   0.00    0.00     0.00    1.03  94.40
+
+
+avg-cpu:  %user   %nice %system %iowait  %steal   %idle
+           0.16    0.00    0.16    3.35    0.00   96.34
+
+Device            r/s     rkB/s   rrqm/s  %rrqm r_await rareq-sz     w/s     wkB/s   wrqm/s  %wrqm w_await wareq-sz     d/s     dkB/s   drqm/s  %drqm d_await dareq-sz  aqu-sz  %util
+dm-0             0.00      0.00     0.00   0.00    0.00     0.00    0.00      0.00     0.00   0.00    0.00     0.00    0.00      0.00     0.00   0.00    0.00     0.00    0.00   0.00
+dm-1             0.00      0.00     0.00   0.00    0.00     0.00    0.00      0.00     0.00   0.00    0.00     0.00    0.00      0.00     0.00   0.00    0.00     0.00    0.00   0.00
+dm-2            93.00   1488.00     0.00   0.00   13.29    16.00  104.00   2317.00     0.00   0.00    0.35    22.28    0.00      0.00     0.00   0.00    0.00     0.00    1.27  99.20
+dm-3             0.00      0.00     0.00   0.00    0.00     0.00    0.00      0.00     0.00   0.00    0.00     0.00    0.00      0.00     0.00   0.00    0.00     0.00    0.00   0.00
+vda              0.00      0.00     0.00   0.00    0.00     0.00    0.00      0.00     0.00   0.00    0.00     0.00    0.00      0.00     0.00   0.00    0.00     0.00    0.00   0.00
+vdb              0.00      0.00     0.00   0.00    0.00     0.00    0.00      0.00     0.00   0.00    0.00     0.00    0.00      0.00     0.00   0.00    0.00     0.00    0.00   0.00
+vdc             93.00   1488.00     0.00   0.00   13.15    16.00  104.00   2310.50     0.00   0.00    0.46    22.22    0.00      0.00     0.00   0.00    0.00     0.00    1.06  99.20
+
+
+avg-cpu:  %user   %nice %system %iowait  %steal   %idle
+           0.25    0.00    0.19    3.38    0.00   96.19
+
+Device            r/s     rkB/s   rrqm/s  %rrqm r_await rareq-sz     w/s     wkB/s   wrqm/s  %wrqm w_await wareq-sz     d/s     dkB/s   drqm/s  %drqm d_await dareq-sz  aqu-sz  %util
+dm-0             0.00      0.00     0.00   0.00    0.00     0.00    0.00      0.00     0.00   0.00    0.00     0.00    0.00      0.00     0.00   0.00    0.00     0.00    0.00   0.00
+dm-1             0.00      0.00     0.00   0.00    0.00     0.00    0.00      0.00     0.00   0.00    0.00     0.00    0.00      0.00     0.00   0.00    0.00     0.00    0.00   0.00
+dm-2           108.00   1728.00     0.00   0.00   11.81    16.00  129.00   2533.00     0.00   0.00    0.16    19.64    0.00      0.00     0.00   0.00    0.00     0.00    1.30  96.80
+dm-3             0.00      0.00     0.00   0.00    0.00     0.00    0.00      0.00     0.00   0.00    0.00     0.00    0.00      0.00     0.00   0.00    0.00     0.00    0.00   0.00
+vda              0.00      0.00     0.00   0.00    0.00     0.00    0.00      0.00     0.00   0.00    0.00     0.00    0.00      0.00     0.00   0.00    0.00     0.00    0.00   0.00
+vdb              0.00      0.00     0.00   0.00    0.00     0.00    0.00      0.00     0.00   0.00    0.00     0.00    0.00      0.00     0.00   0.00    0.00     0.00    0.00   0.00
+vdc            107.00   1712.00     0.00   0.00   11.88    16.00  126.00   2523.00     3.00   2.33    0.43    20.02    0.00      0.00     0.00   0.00    0.00     0.00    1.06  96.80
+
+
+avg-cpu:  %user   %nice %system %iowait  %steal   %idle
+           0.19    0.00    0.16    3.91    0.00   95.75
+
+Device            r/s     rkB/s   rrqm/s  %rrqm r_await rareq-sz     w/s     wkB/s   wrqm/s  %wrqm w_await wareq-sz     d/s     dkB/s   drqm/s  %drqm d_await dareq-sz  aqu-sz  %util
+dm-0             0.00      0.00     0.00   0.00    0.00     0.00    0.00      0.00     0.00   0.00    0.00     0.00    0.00      0.00     0.00   0.00    0.00     0.00    0.00   0.00
+dm-1             0.00      0.00     0.00   0.00    0.00     0.00    0.00      0.00     0.00   0.00    0.00     0.00    0.00      0.00     0.00   0.00    0.00     0.00    0.00   0.00
+dm-2           101.00   1616.00     0.00   0.00   13.43    16.00  105.00   2313.00     0.00   0.00    0.57    22.03    0.00      0.00     0.00   0.00    0.00     0.00    1.42  96.80
+dm-3             0.00      0.00     0.00   0.00    0.00     0.00    0.00      0.00     0.00   0.00    0.00     0.00    0.00      0.00     0.00   0.00    0.00     0.00    0.00   0.00
+vda              0.00      0.00     0.00   0.00    0.00     0.00    0.00      0.00     0.00   0.00    0.00     0.00    0.00      0.00     0.00   0.00    0.00     0.00    0.00   0.00
+vdb              0.00      0.00     0.00   0.00    0.00     0.00    0.00      0.00     0.00   0.00    0.00     0.00    0.00      0.00     0.00   0.00    0.00     0.00    0.00   0.00
+vdc            102.00   1632.00     0.00   0.00   12.77    16.00  105.00   2304.50     0.00   0.00    0.54    21.95    0.00      0.00     0.00   0.00    0.00     0.00    1.14  96.40
+
+^C
+[root@MHsql-db01B mysql]# lsblk
+NAME            MAJ:MIN RM  SIZE RO TYPE MOUNTPOINT
+fd0               2:0    1    4K  0 disk
+sr0              11:0    1 1024M  0 rom
+vda             252:0    0  100G  0 disk
+├─vda1          252:1    0    1G  0 part /boot
+└─vda2          252:2    0   99G  0 part
+  ├─rootvg-root 253:0    0  253G  0 lvm  /
+  ├─rootvg-swap 253:1    0   16G  0 lvm  [SWAP]
+  └─rootvg-home 253:3    0   30G  0 lvm  /home
+vdb             252:16   0  200G  0 disk
+└─rootvg-root   253:0    0  253G  0 lvm  /
+vdc             252:32   0  1.5T  0 disk
+└─datavg-datalv 253:2    0  1.5T  0 lvm  /data
+[root@MHsql-db01B mysql]# pwd
+/data/mysql
+[root@MHsql-db01B mysql]# cat /etc/my.cnf|grep data
+socket = /data/mysql/mysql.sock
+datadir = /data/mysql
+socket = /data/mysql/mysql.sock
+innodb_data_file_path = ibdata1:1024M:autoextend
+innodb_undo_directory = /data/mysql/mysql3306/data/undolog
+[root@MHsql-db01B mysql]#
+
+```
+
+
+
+#分析
+
+```
+结论基本明确了：现在主要瓶颈在从库的 /data 盘（vdc/dm-2）I/O 已经接近打满，而不是 CPU。
+
+iostat 里 dm-2 / vdc %util 94%~99%，r_await 11~13ms，CPU 95%+ idle → 存储 IOPS/延迟在限制回放速度
+
+SHOW PROCESSLIST 里绝大多数 worker 在等 Coordinator，只有 1 个在持续 “Applying batch … insert TB_L_APPLY_CALL_LOG …” → 事务依赖/单表热点导致并行度很低（你主库还是 COMMIT_ORDER，这会进一步限制并行）
+
+已经把最有效的“降刷盘”做了（innodb_flush_log_at_trx_commit=2、sync_binlog=0），下一步建议按下面做。
+```
+
+
+
+#建议
+
+```sql
+#从库调整参数
+SET GLOBAL replica_pending_jobs_size_max = 1024*1024*1024;
+```
+
+
+
+```
+1）把从库 replica_pending_jobs_size_max 提高（128MB 太小）
+
+这个参数太小会导致 Coordinator 队列很快满，worker 喂不饱（尤其 row event 多的时候）。
+
+从库执行即可（动态生效）：
+
+SET GLOBAL replica_pending_jobs_size_max = 1024*1024*1024;  -- 1G
+
+
+这是“低风险增益项”：主要吃内存，不改数据一致性。
+
+2）主库把依赖跟踪从 COMMIT_ORDER 改成 WRITESET（对“后续事务”很关键）
+
+你主库现在：
+
+binlog_transaction_dependency_tracking = COMMIT_ORDER
+
+transaction_write_set_extraction = XXHASH64（这个已 OK）
+
+建议在主库改成：
+
+SET PERSIST binlog_transaction_dependency_tracking = 'WRITESET';
+SET PERSIST transaction_write_set_extraction = 'XXHASH64';
+SET PERSIST binlog_transaction_dependency_history_size = 100000;
+
+FLUSH BINARY LOGS;
+
+
+这一步不会让历史两个月的 binlog 立刻变并行（历史部分仍然是 COMMIT_ORDER），但能避免“你一边追、一边新增写入又把你越拉越远”，并且对后续追赶会有帮助。
+
+3）你现在是典型“单表日志写入拖慢回放”：TB_L_APPLY_CALL_LOG
+
+TB_L_APPLY_CALL_LOG 这种日志表如果有很多二级索引/大批量 insert，回放会产生大量随机读写，I/O 就会像你看到的那样把盘打满。
+
+如果这张表在读库不关键（只是审计/流水），有一个最快的提速方案：复制过滤掉它，让其它业务表先追平。
+
+MySQL 8 支持在线改复制过滤（谨慎评估一致性需求）：
+
+STOP REPLICA;
+CHANGE REPLICATION FILTER REPLICATE_IGNORE_TABLE = (authx_log.TB_L_APPLY_CALL_LOG);
+START REPLICA;
+
+
+代价：读库这张表数据将不完整/不再更新。
+如果业务可以接受，这是“立刻见效”的方案。
+
+4）I/O 已经 99% util：再加 workers 未必更快（甚至更慢）
+
+你现在瓶颈是盘，不是 CPU。replica_parallel_workers 继续加到 32/64 可能只会让随机 I/O 更碎、更抖。
+
+更稳的做法是：
+
+先做 第 1、2 步
+
+然后观察 %util、r_await 是否下降、Executed_Gtid_Set 增长是否明显变快
+
+如果盘仍然 95%+ util 且延迟不降，说明硬件/云盘 IOPS 就到顶了，想要数量级提升只有：
+
+换更高 IOPS 的盘 / 把 datadir 放到更快存储
+
+或直接 重建从库（Clone/物理备份）跳过两个月回放
+
+5）关于你问的“从库改 2/0 会不会影响主库”
+
+不会影响主库，只影响这台从库实例本地的持久性策略。你现在读库追赶阶段这么设是合理的；追平、准备随时切主时再改回 1/1 即可。
+
+建议你现在立刻做的顺序
+
+从库：SET GLOBAL replica_pending_jobs_size_max = 1G;
+
+主库：改 binlog_transaction_dependency_tracking=WRITESET + FLUSH BINARY LOGS;
+
+观察 10 分钟：SHOW PROCESSLIST 里是否出现多个 worker 同时在 Applying（不再只有一个忙）
+
+如果还是被 TB_L_APPLY_CALL_LOG 拖死：评估是否可复制过滤，或者直接重建从库
+```
+
+
+
+#再次查看效果
+
+```sql
+root@localhost:mysql.sock [mysql]> SHOW VARIABLES LIKE 'replica_pending_jobs_size_max';
++-------------------------------+------------+
+| Variable_name                 | Value      |
++-------------------------------+------------+
+| replica_pending_jobs_size_max | 1073741824 |
++-------------------------------+------------+
+1 row in set (0.00 sec)
+
+root@localhost:mysql.sock [mysql]>  show replica status\G;
+*************************** 1. row ***************************
+             Replica_IO_State: Waiting for source to send event
+                  Source_Host: 10.40.10.132
+                  Source_User: repl
+                  Source_Port: 3306
+                Connect_Retry: 60
+              Source_Log_File: mysql-bin.000797
+          Read_Source_Log_Pos: 131577555
+               Relay_Log_File: relay-bin.003669
+                Relay_Log_Pos: 215442886
+        Relay_Source_Log_File: mysql-bin.000455
+           Replica_IO_Running: Yes
+          Replica_SQL_Running: Yes
+              Replicate_Do_DB:
+          Replicate_Ignore_DB:
+           Replicate_Do_Table:
+       Replicate_Ignore_Table:
+      Replicate_Wild_Do_Table:
+  Replicate_Wild_Ignore_Table:
+                   Last_Errno: 0
+                   Last_Error:
+                 Skip_Counter: 0
+          Exec_Source_Log_Pos: 215442694
+              Relay_Log_Space: 183174202970
+              Until_Condition: None
+               Until_Log_File:
+                Until_Log_Pos: 0
+           Source_SSL_Allowed: No
+           Source_SSL_CA_File:
+           Source_SSL_CA_Path:
+              Source_SSL_Cert:
+            Source_SSL_Cipher:
+               Source_SSL_Key:
+        Seconds_Behind_Source: 5731742
+Source_SSL_Verify_Server_Cert: No
+                Last_IO_Errno: 0
+                Last_IO_Error:
+               Last_SQL_Errno: 0
+               Last_SQL_Error:
+  Replicate_Ignore_Server_Ids:
+             Source_Server_Id: 132
+                  Source_UUID: a36b6a91-5adc-11f0-864f-286ed48a126e
+             Source_Info_File: mysql.slave_master_info
+                    SQL_Delay: 0
+          SQL_Remaining_Delay: NULL
+    Replica_SQL_Running_State: Waiting for dependent transaction to commit
+           Source_Retry_Count: 86400
+                  Source_Bind:
+      Last_IO_Error_Timestamp:
+     Last_SQL_Error_Timestamp:
+               Source_SSL_Crl:
+           Source_SSL_Crlpath:
+           Retrieved_Gtid_Set: a36b6a91-5adc-11f0-864f-286ed48a126e:52053:197337666-406917071
+            Executed_Gtid_Set: a36b6a91-5adc-11f0-864f-286ed48a126e:1-52052:52054-219776383,
+a52be673-5adc-11f0-85e5-286ed4894d31:1-3332
+                Auto_Position: 1
+         Replicate_Rewrite_DB:
+                 Channel_Name:
+           Source_TLS_Version:
+       Source_public_key_path:
+        Get_Source_public_key: 0
+            Network_Namespace:
+1 row in set (0.00 sec)
+
+ERROR:
+No query specified
+
+root@localhost:mysql.sock [mysql]>  show replica status\G;
+*************************** 1. row ***************************
+             Replica_IO_State: Waiting for source to send event
+                  Source_Host: 10.40.10.132
+                  Source_User: repl
+                  Source_Port: 3306
+                Connect_Retry: 60
+              Source_Log_File: mysql-bin.000797
+          Read_Source_Log_Pos: 131958183
+               Relay_Log_File: relay-bin.003669
+                Relay_Log_Pos: 216464585
+        Relay_Source_Log_File: mysql-bin.000455
+           Replica_IO_Running: Yes
+          Replica_SQL_Running: Yes
+              Replicate_Do_DB:
+          Replicate_Ignore_DB:
+           Replicate_Do_Table:
+       Replicate_Ignore_Table:
+      Replicate_Wild_Do_Table:
+  Replicate_Wild_Ignore_Table:
+                   Last_Errno: 0
+                   Last_Error:
+                 Skip_Counter: 0
+          Exec_Source_Log_Pos: 216464393
+              Relay_Log_Space: 183174583598
+              Until_Condition: None
+               Until_Log_File:
+                Until_Log_Pos: 0
+           Source_SSL_Allowed: No
+           Source_SSL_CA_File:
+           Source_SSL_CA_Path:
+              Source_SSL_Cert:
+            Source_SSL_Cipher:
+               Source_SSL_Key:
+        Seconds_Behind_Source: 5731745
+Source_SSL_Verify_Server_Cert: No
+                Last_IO_Errno: 0
+                Last_IO_Error:
+               Last_SQL_Errno: 0
+               Last_SQL_Error:
+  Replicate_Ignore_Server_Ids:
+             Source_Server_Id: 132
+                  Source_UUID: a36b6a91-5adc-11f0-864f-286ed48a126e
+             Source_Info_File: mysql.slave_master_info
+                    SQL_Delay: 0
+          SQL_Remaining_Delay: NULL
+    Replica_SQL_Running_State: Waiting for dependent transaction to commit
+           Source_Retry_Count: 86400
+                  Source_Bind:
+      Last_IO_Error_Timestamp:
+     Last_SQL_Error_Timestamp:
+               Source_SSL_Crl:
+           Source_SSL_Crlpath:
+           Retrieved_Gtid_Set: a36b6a91-5adc-11f0-864f-286ed48a126e:52053:197337666-406917579
+            Executed_Gtid_Set: a36b6a91-5adc-11f0-864f-286ed48a126e:1-52052:52054-219777348:219777350,
+a52be673-5adc-11f0-85e5-286ed4894d31:1-3332
+                Auto_Position: 1
+         Replicate_Rewrite_DB:
+                 Channel_Name:
+           Source_TLS_Version:
+       Source_public_key_path:
+        Get_Source_public_key: 0
+            Network_Namespace:
+1 row in set (0.00 sec)
+
+ERROR:
+No query specified
+
+root@localhost:mysql.sock [mysql]>  show replica status\G;
+*************************** 1. row ***************************
+             Replica_IO_State: Waiting for source to send event
+                  Source_Host: 10.40.10.132
+                  Source_User: repl
+                  Source_Port: 3306
+                Connect_Retry: 60
+              Source_Log_File: mysql-bin.000797
+          Read_Source_Log_Pos: 132121604
+               Relay_Log_File: relay-bin.003669
+                Relay_Log_Pos: 216783842
+        Relay_Source_Log_File: mysql-bin.000455
+           Replica_IO_Running: Yes
+          Replica_SQL_Running: Yes
+              Replicate_Do_DB:
+          Replicate_Ignore_DB:
+           Replicate_Do_Table:
+       Replicate_Ignore_Table:
+      Replicate_Wild_Do_Table:
+  Replicate_Wild_Ignore_Table:
+                   Last_Errno: 0
+                   Last_Error:
+                 Skip_Counter: 0
+          Exec_Source_Log_Pos: 216783650
+              Relay_Log_Space: 183174747019
+              Until_Condition: None
+               Until_Log_File:
+                Until_Log_Pos: 0
+           Source_SSL_Allowed: No
+           Source_SSL_CA_File:
+           Source_SSL_CA_Path:
+              Source_SSL_Cert:
+            Source_SSL_Cipher:
+               Source_SSL_Key:
+        Seconds_Behind_Source: 5731747
+Source_SSL_Verify_Server_Cert: No
+                Last_IO_Errno: 0
+                Last_IO_Error:
+               Last_SQL_Errno: 0
+               Last_SQL_Error:
+  Replicate_Ignore_Server_Ids:
+             Source_Server_Id: 132
+                  Source_UUID: a36b6a91-5adc-11f0-864f-286ed48a126e
+             Source_Info_File: mysql.slave_master_info
+                    SQL_Delay: 0
+          SQL_Remaining_Delay: NULL
+    Replica_SQL_Running_State: Waiting for dependent transaction to commit
+           Source_Retry_Count: 86400
+                  Source_Bind:
+      Last_IO_Error_Timestamp:
+     Last_SQL_Error_Timestamp:
+               Source_SSL_Crl:
+           Source_SSL_Crlpath:
+           Retrieved_Gtid_Set: a36b6a91-5adc-11f0-864f-286ed48a126e:52053:197337666-406917786
+            Executed_Gtid_Set: a36b6a91-5adc-11f0-864f-286ed48a126e:1-52052:52054-219777657,
+a52be673-5adc-11f0-85e5-286ed4894d31:1-3332
+                Auto_Position: 1
+         Replicate_Rewrite_DB:
+                 Channel_Name:
+           Source_TLS_Version:
+       Source_public_key_path:
+        Get_Source_public_key: 0
+            Network_Namespace:
+1 row in set (0.00 sec)
+
+ERROR:
+No query specified
+
+root@localhost:mysql.sock [mysql]>  show replica status\G;
+*************************** 1. row ***************************
+             Replica_IO_State: Waiting for source to send event
+                  Source_Host: 10.40.10.132
+                  Source_User: repl
+                  Source_Port: 3306
+                Connect_Retry: 60
+              Source_Log_File: mysql-bin.000797
+          Read_Source_Log_Pos: 132268399
+               Relay_Log_File: relay-bin.003669
+                Relay_Log_Pos: 217099612
+        Relay_Source_Log_File: mysql-bin.000455
+           Replica_IO_Running: Yes
+          Replica_SQL_Running: Yes
+              Replicate_Do_DB:
+          Replicate_Ignore_DB:
+           Replicate_Do_Table:
+       Replicate_Ignore_Table:
+      Replicate_Wild_Do_Table:
+  Replicate_Wild_Ignore_Table:
+                   Last_Errno: 0
+                   Last_Error:
+                 Skip_Counter: 0
+          Exec_Source_Log_Pos: 217099420
+              Relay_Log_Space: 183174893814
+              Until_Condition: None
+               Until_Log_File:
+                Until_Log_Pos: 0
+           Source_SSL_Allowed: No
+           Source_SSL_CA_File:
+           Source_SSL_CA_Path:
+              Source_SSL_Cert:
+            Source_SSL_Cipher:
+               Source_SSL_Key:
+        Seconds_Behind_Source: 5731747
+Source_SSL_Verify_Server_Cert: No
+                Last_IO_Errno: 0
+                Last_IO_Error:
+               Last_SQL_Errno: 0
+               Last_SQL_Error:
+  Replicate_Ignore_Server_Ids:
+             Source_Server_Id: 132
+                  Source_UUID: a36b6a91-5adc-11f0-864f-286ed48a126e
+             Source_Info_File: mysql.slave_master_info
+                    SQL_Delay: 0
+          SQL_Remaining_Delay: NULL
+    Replica_SQL_Running_State: Waiting for dependent transaction to commit
+           Source_Retry_Count: 86400
+                  Source_Bind:
+      Last_IO_Error_Timestamp:
+     Last_SQL_Error_Timestamp:
+               Source_SSL_Crl:
+           Source_SSL_Crlpath:
+           Retrieved_Gtid_Set: a36b6a91-5adc-11f0-864f-286ed48a126e:52053:197337666-406917983
+            Executed_Gtid_Set: a36b6a91-5adc-11f0-864f-286ed48a126e:1-52052:52054-219777972,
+a52be673-5adc-11f0-85e5-286ed4894d31:1-3332
+                Auto_Position: 1
+         Replicate_Rewrite_DB:
+                 Channel_Name:
+           Source_TLS_Version:
+       Source_public_key_path:
+        Get_Source_public_key: 0
+            Network_Namespace:
+1 row in set (0.00 sec)
+
+ERROR:
+No query specified
+
+root@localhost:mysql.sock [mysql]>  show replica status\G;
+*************************** 1. row ***************************
+             Replica_IO_State: Waiting for source to send event
+                  Source_Host: 10.40.10.132
+                  Source_User: repl
+                  Source_Port: 3306
+                Connect_Retry: 60
+              Source_Log_File: mysql-bin.000797
+          Read_Source_Log_Pos: 132448679
+               Relay_Log_File: relay-bin.003669
+                Relay_Log_Pos: 217372867
+        Relay_Source_Log_File: mysql-bin.000455
+           Replica_IO_Running: Yes
+          Replica_SQL_Running: Yes
+              Replicate_Do_DB:
+          Replicate_Ignore_DB:
+           Replicate_Do_Table:
+       Replicate_Ignore_Table:
+      Replicate_Wild_Do_Table:
+  Replicate_Wild_Ignore_Table:
+                   Last_Errno: 0
+                   Last_Error:
+                 Skip_Counter: 0
+          Exec_Source_Log_Pos: 217372675
+              Relay_Log_Space: 183175074094
+              Until_Condition: None
+               Until_Log_File:
+                Until_Log_Pos: 0
+           Source_SSL_Allowed: No
+           Source_SSL_CA_File:
+           Source_SSL_CA_Path:
+              Source_SSL_Cert:
+            Source_SSL_Cipher:
+               Source_SSL_Key:
+        Seconds_Behind_Source: 5731748
+Source_SSL_Verify_Server_Cert: No
+                Last_IO_Errno: 0
+                Last_IO_Error:
+               Last_SQL_Errno: 0
+               Last_SQL_Error:
+  Replicate_Ignore_Server_Ids:
+             Source_Server_Id: 132
+                  Source_UUID: a36b6a91-5adc-11f0-864f-286ed48a126e
+             Source_Info_File: mysql.slave_master_info
+                    SQL_Delay: 0
+          SQL_Remaining_Delay: NULL
+    Replica_SQL_Running_State: Waiting for dependent transaction to commit
+           Source_Retry_Count: 86400
+                  Source_Bind:
+      Last_IO_Error_Timestamp:
+     Last_SQL_Error_Timestamp:
+               Source_SSL_Crl:
+           Source_SSL_Crlpath:
+           Retrieved_Gtid_Set: a36b6a91-5adc-11f0-864f-286ed48a126e:52053:197337666-406918209
+            Executed_Gtid_Set: a36b6a91-5adc-11f0-864f-286ed48a126e:1-52052:52054-219778224,
+a52be673-5adc-11f0-85e5-286ed4894d31:1-3332
+                Auto_Position: 1
+         Replicate_Rewrite_DB:
+                 Channel_Name:
+           Source_TLS_Version:
+       Source_public_key_path:
+        Get_Source_public_key: 0
+            Network_Namespace:
+1 row in set (0.00 sec)
+
+ERROR:
+No query specified
+
+root@localhost:mysql.sock [mysql]>
+
+```
+
+
+
+#分析
+
+```
+现在这个现象大概率不是“卡住不动”，而是：从库在回放非常旧的事务（你 replication_applier_status_by_worker 里看到的 ...ORIGINAL_COMMIT_TIMESTAMP 是 2025-10-19），所以 Seconds_Behind_Source ≈ 5,7xx,xxx（约 66 天）会长期维持在一个很大的数，甚至还会缓慢变化——直到回放追到接近当前时间它才会明显下降。判断是否在追赶，更可靠看这几个量是否持续增长：
+
+Relay_Source_Log_File / Exec_Source_Log_Pos（你在从 mysql-bin.000455 往前推进）
+
+Executed_Gtid_Set 的尾号是否持续变大（你从 219776xxx -> 219778xxx 在涨）
+```
+
+```sql
+
+
+root@localhost:mysql.sock [mysql]>  show replica status\G;
+*************************** 1. row ***************************
+             Replica_IO_State: Waiting for source to send event
+                  Source_Host: 10.40.10.132
+                  Source_User: repl
+                  Source_Port: 3306
+                Connect_Retry: 60
+              Source_Log_File: mysql-bin.000797
+          Read_Source_Log_Pos: 199184438
+               Relay_Log_File: relay-bin.003669
+                Relay_Log_Pos: 527599258
+        Relay_Source_Log_File: mysql-bin.000455
+           Replica_IO_Running: Yes
+          Replica_SQL_Running: Yes
+              Replicate_Do_DB:
+          Replicate_Ignore_DB:
+           Replicate_Do_Table:
+       Replicate_Ignore_Table:
+      Replicate_Wild_Do_Table:
+  Replicate_Wild_Ignore_Table:
+                   Last_Errno: 0
+                   Last_Error:
+                 Skip_Counter: 0
+          Exec_Source_Log_Pos: 527599066
+              Relay_Log_Space: 183241809853
+              Until_Condition: None
+               Until_Log_File:
+                Until_Log_Pos: 0
+           Source_SSL_Allowed: No
+           Source_SSL_CA_File:
+           Source_SSL_CA_Path:
+              Source_SSL_Cert:
+            Source_SSL_Cipher:
+               Source_SSL_Key:
+        Seconds_Behind_Source: 5719406
+Source_SSL_Verify_Server_Cert: No
+                Last_IO_Errno: 0
+                Last_IO_Error:
+               Last_SQL_Errno: 0
+               Last_SQL_Error:
+  Replicate_Ignore_Server_Ids:
+             Source_Server_Id: 132
+                  Source_UUID: a36b6a91-5adc-11f0-864f-286ed48a126e
+             Source_Info_File: mysql.slave_master_info
+                    SQL_Delay: 0
+          SQL_Remaining_Delay: NULL
+    Replica_SQL_Running_State: Waiting for dependent transaction to commit
+           Source_Retry_Count: 86400
+                  Source_Bind:
+      Last_IO_Error_Timestamp:
+     Last_SQL_Error_Timestamp:
+               Source_SSL_Crl:
+           Source_SSL_Crlpath:
+           Retrieved_Gtid_Set: a36b6a91-5adc-11f0-864f-286ed48a126e:52053:197337666-406992805
+            Executed_Gtid_Set: a36b6a91-5adc-11f0-864f-286ed48a126e:1-52052:52054-220109391,
+a52be673-5adc-11f0-85e5-286ed4894d31:1-3332
+                Auto_Position: 1
+         Replicate_Rewrite_DB:
+                 Channel_Name:
+           Source_TLS_Version:
+       Source_public_key_path:
+        Get_Source_public_key: 0
+            Network_Namespace:
+1 row in set (0.00 sec)
+
+ERROR:
+No query specified
+
+root@localhost:mysql.sock [mysql]> 
+```
+
+
+
+#继续分析
+
+````bash
+你这组最新数据里，其实已经能看到**追赶在变快、并且确实在追**了——只是 `Seconds_Behind_Source` 这种指标在“落后两个月”时看起来还是很吓人而已。
+
+### 现在的追赶效果（用你贴的几次 `SHOW REPLICA STATUS` 直接算）
+
+* `Executed_Gtid_Set` 从 **219,978,996** 增到 **220,109,391**，净增加 **130,395 个事务**（而 `Retrieved_Gtid_Set` 只增加了几千），说明 **SQL 回放速度 > 新增写入速度**，在“缩小欠账”。
+* `Seconds_Behind_Source` 从 **5,725,400** 降到 **5,719,406**，下降 **5,994 秒 ≈ 1小时40分**。这说明你在“时间维度”也在往前推进（只是离当前还差 66 天左右）。
+
+所以：你把 `replica_pending_jobs_size_max` 提到 1G + 从库 `flush=2/sync_binlog=0` 这些操作是有效的。
+
+---
+
+## 但为什么还是“一堆 worker 在等 Coordinator，只看到 1 个在 Applying”？
+
+从你的 `processlist` 看，确实大部分时间只有一个 worker 在执行某张表的批量变更（TB_L_APPLY_CALL_LOG / TB_JOB_TASK_RECORD_DETAIL / TMP_* 等），其他都在等：
+
+* 这通常意味着：**当前这段 binlog 的事务依赖很强（或单表热点/大事务），天然并行不起来**；
+* 而你主库现在还是 `binlog_transaction_dependency_tracking=COMMIT_ORDER`，会让依赖判定更保守，更容易出现 `Waiting for dependent transaction to commit`。
+
+---
+
+## 接下来最推荐做的 3 件事（按收益排序）
+
+### 1）主库改成 WRITESET（让“后续 binlog”更容易并行回放）
+
+你主库已开启 `transaction_write_set_extraction=XXHASH64`，条件满足。建议在主库执行：
+
+```sql
+SET PERSIST binlog_transaction_dependency_tracking = 'WRITESET';
+SET PERSIST binlog_transaction_dependency_history_size = 100000;  -- 可选，冲突多就加大
+FLUSH BINARY LOGS;
+```
+
+> 说明：这主要提升“之后产生”的 binlog 的并行度；你现在积压的是很久以前的历史 binlog，它当时是 COMMIT_ORDER 生成的，所以并行提升不会立刻翻倍，但至少能避免“越追越被新增写入拉开”。
+
+---
+
+### 2）追赶期间继续保持“低刷盘”（你现在的值没问题）
+
+你已经是：
+
+* `innodb_flush_log_at_trx_commit=2`
+* `sync_binlog=0`
+
+追赶期间建议继续保持（追平、准备切主时再改回 1/1）。
+
+如果你还没调过这 3 个，也可以追赶期间临时降一下（同样是“追赶专用”）：
+
+```sql
+SET GLOBAL sync_relay_log = 0;
+SET GLOBAL sync_relay_log_info = 0;
+SET GLOBAL sync_master_info = 0;
+```
+
+---
+
+### 3）如果读库不需要某些“日志/流水表”，可以考虑复制过滤（立竿见影，但要评估业务）
+
+你之前明显被 `TB_L_APPLY_CALL_LOG` 这类表拖慢过。若确认读业务不依赖这些表，过滤掉会让整体追赶快很多：
+
+```sql
+STOP REPLICA;
+CHANGE REPLICATION FILTER REPLICATE_IGNORE_TABLE = (authx_log.TB_L_APPLY_CALL_LOG);
+START REPLICA;
+```
+
+> 风险：该表在从库会不完整/不更新。适合“只为读库服务、日志表不看”的场景。
+
+---
+
+## 快速自检：你到底能并行到什么程度？
+
+在从库跑这个，看看同时有多少个 worker 真正在 APPLY（非空）：
+
+```sql
+SELECT
+  SUM(APPLYING_TRANSACTION <> '') AS applying_workers,
+  COUNT(*) AS total_workers
+FROM performance_schema.replication_applier_status_by_worker;
+```
+
+* 如果 `applying_workers` 长期接近 1：说明这段历史 binlog 依赖太强/大事务/单表热点，**硬并行也没用**；
+* 如果能到 4/8/16：说明并行开始跑起来了，继续追就行。
+
+---
+
+## 最现实的提醒
+
+你现在欠账（`Retrieved` 406,xxx,xxx vs `Executed` 220,xxx,xxx）还是**1.8 亿级事务**，靠回放能追，但时间可能仍然很长；如果业务要求“尽快恢复一个接近当前的读库”，通常更快的是**物理重建/Clone**，直接跳过两个月 binlog 回放。
+
+---
+
+如果你把下面两项从库参数贴一下（各 1 行即可），我就能判断“你现在是否还在承受写 binlog 的额外 IO（双主反向通道）”，从而决定是否建议你临时关掉某条通道/调整架构来加速：
+
+```sql
+SHOW VARIABLES LIKE 'log_bin';
+SHOW VARIABLES LIKE 'log_replica_updates';
+```
+
+````
+
+#可以跳过部分表
+
+```sql
+STOP REPLICA;
+-- 忽略掉这些只写不读、或者不影响核心业务的大表
+CHANGE REPLICATION FILTER REPLICATE_IGNORE_TABLE = ('jobs_server.TB_JOB_TASK_RECORD_DETAIL', 'authx_log.TB_L_APPLY_CALL_LOG');
+START REPLICA;
+```
+
+
+
+#提高mysql的innodb_buffer_pool_size
+
+```sql
+ [root@MHsql-db01B mysql]# free -m
+
+total used free shared buff/cache available
+
+Mem: 63082 38479 11337 60 13265 23762
+
+Swap: 16383 528 15855
+
+[root@MHsql-db01B mysql]#
+
+root@localhost:mysql.sock [mysql]> SHOW VARIABLES LIKE 'innodb_buffer_pool_size';
+
++-------------------------+-------------+
+
+| Variable_name | Value |
+
++-------------------------+-------------+
+
+| innodb_buffer_pool_size | 34359738368 |
+
++-------------------------+-------------+
+
+1 row in set (0.00 sec) 
+
+root@localhost:mysql.sock [mysql]> SELECT      WORKER_ID,      LAST_APPLIED_TRANSACTION,      LAST_APPLIED_TRANSACTION_END_APPLY_TIMESTAMP  FROM performance_schema.replication_applier_status_by_worker  WHERE SERVICE_STATE = 'ON';
++-----------+------------------------------------------------+----------------------------------------------+
+| WORKER_ID | LAST_APPLIED_TRANSACTION                       | LAST_APPLIED_TRANSACTION_END_APPLY_TIMESTAMP |
++-----------+------------------------------------------------+----------------------------------------------+
+|         1 | a36b6a91-5adc-11f0-864f-286ed48a126e:221980366 | 2025-12-24 14:05:13.462772                   |
+|         2 | a36b6a91-5adc-11f0-864f-286ed48a126e:221980365 | 2025-12-24 14:05:13.453092                   |
+|         3 | a36b6a91-5adc-11f0-864f-286ed48a126e:221980353 | 2025-12-24 14:05:13.347996                   |
+|         4 | a36b6a91-5adc-11f0-864f-286ed48a126e:221980323 | 2025-12-24 14:05:13.177100                   |
+|         5 | a36b6a91-5adc-11f0-864f-286ed48a126e:221980324 | 2025-12-24 14:05:13.225087                   |
+|         6 | a36b6a91-5adc-11f0-864f-286ed48a126e:221980325 | 2025-12-24 14:05:13.174103                   |
+|         7 | a36b6a91-5adc-11f0-864f-286ed48a126e:221980283 | 2025-12-24 14:05:13.041427                   |
+|         8 | a36b6a91-5adc-11f0-864f-286ed48a126e:221980284 | 2025-12-24 14:05:13.027725                   |
+|         9 | a36b6a91-5adc-11f0-864f-286ed48a126e:221980285 | 2025-12-24 14:05:13.027258                   |
+|        10 | a36b6a91-5adc-11f0-864f-286ed48a126e:221980286 | 2025-12-24 14:05:13.055100                   |
+|        11 | a36b6a91-5adc-11f0-864f-286ed48a126e:221979628 | 2025-12-24 14:05:09.082295                   |
+|        12 | a36b6a91-5adc-11f0-864f-286ed48a126e:221979629 | 2025-12-24 14:05:09.089515                   |
+|        13 | a36b6a91-5adc-11f0-864f-286ed48a126e:221979630 | 2025-12-24 14:05:09.082300                   |
+|        14 | a36b6a91-5adc-11f0-864f-286ed48a126e:221979631 | 2025-12-24 14:05:09.082298                   |
+|        15 | a36b6a91-5adc-11f0-864f-286ed48a126e:221975949 | 2025-12-24 14:04:46.138647                   |
+|        16 | a36b6a91-5adc-11f0-864f-286ed48a126e:221975950 | 2025-12-24 14:04:46.136394                   |
++-----------+------------------------------------------------+----------------------------------------------+
+16 rows in set (0.00 sec)
+
+root@localhost:mysql.sock [mysql]> SELECT      WORKER_ID,      LAST_APPLIED_TRANSACTION,      LAST_APPLIED_TRANSACTION_END_APPLY_TIMESTAMP  FROM performance_schema.replication_applier_status_by_worker  WHERE SERVICE_STATE = 'ON';
++-----------+------------------------------------------------+----------------------------------------------+
+| WORKER_ID | LAST_APPLIED_TRANSACTION                       | LAST_APPLIED_TRANSACTION_END_APPLY_TIMESTAMP |
++-----------+------------------------------------------------+----------------------------------------------+
+|         1 | a36b6a91-5adc-11f0-864f-286ed48a126e:221982199 | 2025-12-24 14:05:24.635907                   |
+|         2 | a36b6a91-5adc-11f0-864f-286ed48a126e:221982197 | 2025-12-24 14:05:24.612519                   |
+|         3 | a36b6a91-5adc-11f0-864f-286ed48a126e:221982190 | 2025-12-24 14:05:24.562252                   |
+|         4 | a36b6a91-5adc-11f0-864f-286ed48a126e:221982176 | 2025-12-24 14:05:24.446097                   |
+|         5 | a36b6a91-5adc-11f0-864f-286ed48a126e:221982177 | 2025-12-24 14:05:24.437175                   |
+|         6 | a36b6a91-5adc-11f0-864f-286ed48a126e:221982102 | 2025-12-24 14:05:23.924501                   |
+|         7 | a36b6a91-5adc-11f0-864f-286ed48a126e:221982035 | 2025-12-24 14:05:23.498023                   |
+|         8 | a36b6a91-5adc-11f0-864f-286ed48a126e:221982009 | 2025-12-24 14:05:23.365666                   |
+|         9 | a36b6a91-5adc-11f0-864f-286ed48a126e:221981833 | 2025-12-24 14:05:22.220518                   |
+|        10 | a36b6a91-5adc-11f0-864f-286ed48a126e:221981766 | 2025-12-24 14:05:21.698550                   |
+|        11 | a36b6a91-5adc-11f0-864f-286ed48a126e:221981767 | 2025-12-24 14:05:21.698593                   |
+|        12 | a36b6a91-5adc-11f0-864f-286ed48a126e:221981768 | 2025-12-24 14:05:21.720239                   |
+|        13 | a36b6a91-5adc-11f0-864f-286ed48a126e:221981769 | 2025-12-24 14:05:21.701362                   |
+|        14 | a36b6a91-5adc-11f0-864f-286ed48a126e:221980804 | 2025-12-24 14:05:15.888659                   |
+|        15 | a36b6a91-5adc-11f0-864f-286ed48a126e:221975949 | 2025-12-24 14:04:46.138647                   |
+|        16 | a36b6a91-5adc-11f0-864f-286ed48a126e:221975950 | 2025-12-24 14:04:46.136394                   |
++-----------+------------------------------------------------+----------------------------------------------+
+16 rows in set (0.00 sec)
+
+root@localhost:mysql.sock [mysql]> SELECT      WORKER_ID,      LAST_APPLIED_TRANSACTION,      LAST_APPLIED_TRANSACTION_END_APPLY_TIMESTAMP  FROM performance_schema.replication_applier_status_by_worker  WHERE SERVICE_STATE = 'ON';
++-----------+------------------------------------------------+----------------------------------------------+
+| WORKER_ID | LAST_APPLIED_TRANSACTION                       | LAST_APPLIED_TRANSACTION_END_APPLY_TIMESTAMP |
++-----------+------------------------------------------------+----------------------------------------------+
+|         1 | a36b6a91-5adc-11f0-864f-286ed48a126e:221983838 | 2025-12-24 14:05:34.684745                   |
+|         2 | a36b6a91-5adc-11f0-864f-286ed48a126e:221983837 | 2025-12-24 14:05:34.682963                   |
+|         3 | a36b6a91-5adc-11f0-864f-286ed48a126e:221983835 | 2025-12-24 14:05:34.646444                   |
+|         4 | a36b6a91-5adc-11f0-864f-286ed48a126e:221983829 | 2025-12-24 14:05:34.492438                   |
+|         5 | a36b6a91-5adc-11f0-864f-286ed48a126e:221983798 | 2025-12-24 14:05:34.222884                   |
+|         6 | a36b6a91-5adc-11f0-864f-286ed48a126e:221983787 | 2025-12-24 14:05:34.153855                   |
+|         7 | a36b6a91-5adc-11f0-864f-286ed48a126e:221983759 | 2025-12-24 14:05:34.028270                   |
+|         8 | a36b6a91-5adc-11f0-864f-286ed48a126e:221983760 | 2025-12-24 14:05:34.015510                   |
+|         9 | a36b6a91-5adc-11f0-864f-286ed48a126e:221983761 | 2025-12-24 14:05:34.009188                   |
+|        10 | a36b6a91-5adc-11f0-864f-286ed48a126e:221983762 | 2025-12-24 14:05:34.003001                   |
+|        11 | a36b6a91-5adc-11f0-864f-286ed48a126e:221983764 | 2025-12-24 14:05:34.014489                   |
+|        12 | a36b6a91-5adc-11f0-864f-286ed48a126e:221983765 | 2025-12-24 14:05:34.004499                   |
+|        13 | a36b6a91-5adc-11f0-864f-286ed48a126e:221981769 | 2025-12-24 14:05:21.701362                   |
+|        14 | a36b6a91-5adc-11f0-864f-286ed48a126e:221980804 | 2025-12-24 14:05:15.888659                   |
+|        15 | a36b6a91-5adc-11f0-864f-286ed48a126e:221975949 | 2025-12-24 14:04:46.138647                   |
+|        16 | a36b6a91-5adc-11f0-864f-286ed48a126e:221975950 | 2025-12-24 14:04:46.136394                   |
++-----------+------------------------------------------------+----------------------------------------------+
+16 rows in set (0.00 sec)
+
+root@localhost:mysql.sock [mysql]>
+```
+
+
+
+```logs
+用 buffer pool 余量换 I/O（你机器还有内存空间）
+
+你机器 63G 内存、buffer pool 32G，free -m 里 available 还有 23G 左右。追数据这种大量索引页读写场景，适当加大 buffer pool 往往能减少随机读，缓解 /data 的读压力。
+
+可以先加到 48G 试试（别一步拉太满，避免 OS 缓存/其它进程不够）：
+
+SET GLOBAL innodb_buffer_pool_size = 51539607552;  -- 48G
+
+
+加完盯一下：
+
+swap 是否继续增长（你现在 swap 已经在用 528M 了）
+
+iostat 的 r/s、r_await 是否下降
+
+B. 别用 “Seconds_Behind_Source” 当唯一指标
+
+你现在 Seconds_Behind_Source 大约 5,6xx,xxx 秒（≈65 天），这个值在大事务/提交依赖场景下会很“钝”。更建议你用下面这种方式看“真实推进速度”：
+
+每隔 10 秒看一次 SHOW REPLICA STATUS\G：
+
+Executed_Gtid_Set 尾号是否持续增长
+
+Exec_Source_Log_Pos 是否持续增长
+
+Relay_Log_Space 是否在下降
+```
+
+
+
+```sql
+root@localhost:mysql.sock [mysql]>  SHOW VARIABLES LIKE 'innodb_buffer_pool_size';
++-------------------------+-------------+
+| Variable_name           | Value       |
++-------------------------+-------------+
+| innodb_buffer_pool_size | 51539607552 |
++-------------------------+-------------+
+1 row in set (0.01 sec)
+
+root@localhost:mysql.sock [mysql]> SELECT
+    ->     WORKER_ID,
+    ->     LAST_APPLIED_TRANSACTION,
+    ->     LAST_APPLIED_TRANSACTION_END_APPLY_TIMESTAMP
+    -> FROM performance_schema.replication_applier_status_by_worker
+    -> WHERE SERVICE_STATE = 'ON';
++-----------+------------------------------------------------+----------------------------------------------+
+| WORKER_ID | LAST_APPLIED_TRANSACTION                       | LAST_APPLIED_TRANSACTION_END_APPLY_TIMESTAMP |
++-----------+------------------------------------------------+----------------------------------------------+
+|         1 | a36b6a91-5adc-11f0-864f-286ed48a126e:222131750 | 2025-12-24 14:20:40.281114                   |
+|         2 | a36b6a91-5adc-11f0-864f-286ed48a126e:222131751 | 2025-12-24 14:20:40.300595                   |
+|         3 | a36b6a91-5adc-11f0-864f-286ed48a126e:222131753 | 2025-12-24 14:20:40.307726                   |
+|         4 | a36b6a91-5adc-11f0-864f-286ed48a126e:222131733 | 2025-12-24 14:20:40.172425                   |
+|         5 | a36b6a91-5adc-11f0-864f-286ed48a126e:222131706 | 2025-12-24 14:20:39.931858                   |
+|         6 | a36b6a91-5adc-11f0-864f-286ed48a126e:222131629 | 2025-12-24 14:20:39.157816                   |
+|         7 | a36b6a91-5adc-11f0-864f-286ed48a126e:222131544 | 2025-12-24 14:20:38.600492                   |
+|         8 | a36b6a91-5adc-11f0-864f-286ed48a126e:222131347 | 2025-12-24 14:20:37.161863                   |
+|         9 | a36b6a91-5adc-11f0-864f-286ed48a126e:222131348 | 2025-12-24 14:20:37.161476                   |
+|        10 | a36b6a91-5adc-11f0-864f-286ed48a126e:222131349 | 2025-12-24 14:20:37.157331                   |
+|        11 | a36b6a91-5adc-11f0-864f-286ed48a126e:222131350 | 2025-12-24 14:20:37.173273                   |
+|        12 | a36b6a91-5adc-11f0-864f-286ed48a126e:222131351 | 2025-12-24 14:20:37.173333                   |
+|        13 | a36b6a91-5adc-11f0-864f-286ed48a126e:222130291 | 2025-12-24 14:20:30.160315                   |
+|        14 | a36b6a91-5adc-11f0-864f-286ed48a126e:222130297 | 2025-12-24 14:20:30.169004                   |
+|        15 | a36b6a91-5adc-11f0-864f-286ed48a126e:222130293 | 2025-12-24 14:20:30.160640                   |
+|        16 | a36b6a91-5adc-11f0-864f-286ed48a126e:222130114 | 2025-12-24 14:20:29.322598                   |
++-----------+------------------------------------------------+----------------------------------------------+
+16 rows in set (0.00 sec)
+
+root@localhost:mysql.sock [mysql]> SELECT      WORKER_ID,      LAST_APPLIED_TRANSACTION,      LAST_APPLIED_TRANSACTION_END_APPLY_TIMESTAMP  FROM performance_schema.replication_applier_status_by_worker  WHERE SERVICE_STATE = 'ON';
++-----------+------------------------------------------------+----------------------------------------------+
+| WORKER_ID | LAST_APPLIED_TRANSACTION                       | LAST_APPLIED_TRANSACTION_END_APPLY_TIMESTAMP |
++-----------+------------------------------------------------+----------------------------------------------+
+|         1 | a36b6a91-5adc-11f0-864f-286ed48a126e:222133451 | 2025-12-24 14:20:49.945897                   |
+|         2 | a36b6a91-5adc-11f0-864f-286ed48a126e:222133452 | 2025-12-24 14:20:49.951879                   |
+|         3 | a36b6a91-5adc-11f0-864f-286ed48a126e:222133453 | 2025-12-24 14:20:49.960011                   |
+|         4 | a36b6a91-5adc-11f0-864f-286ed48a126e:222133426 | 2025-12-24 14:20:49.829213                   |
+|         5 | a36b6a91-5adc-11f0-864f-286ed48a126e:222133427 | 2025-12-24 14:20:49.829772                   |
+|         6 | a36b6a91-5adc-11f0-864f-286ed48a126e:222133225 | 2025-12-24 14:20:48.540283                   |
+|         7 | a36b6a91-5adc-11f0-864f-286ed48a126e:222133209 | 2025-12-24 14:20:48.507921                   |
+|         8 | a36b6a91-5adc-11f0-864f-286ed48a126e:222133210 | 2025-12-24 14:20:48.507934                   |
+|         9 | a36b6a91-5adc-11f0-864f-286ed48a126e:222133211 | 2025-12-24 14:20:48.501597                   |
+|        10 | a36b6a91-5adc-11f0-864f-286ed48a126e:222132380 | 2025-12-24 14:20:43.183043                   |
+|        11 | a36b6a91-5adc-11f0-864f-286ed48a126e:222132372 | 2025-12-24 14:20:43.187443                   |
+|        12 | a36b6a91-5adc-11f0-864f-286ed48a126e:222132373 | 2025-12-24 14:20:43.183353                   |
+|        13 | a36b6a91-5adc-11f0-864f-286ed48a126e:222132374 | 2025-12-24 14:20:43.175915                   |
+|        14 | a36b6a91-5adc-11f0-864f-286ed48a126e:222132375 | 2025-12-24 14:20:43.175817                   |
+|        15 | a36b6a91-5adc-11f0-864f-286ed48a126e:222132376 | 2025-12-24 14:20:43.184955                   |
+|        16 | a36b6a91-5adc-11f0-864f-286ed48a126e:222132377 | 2025-12-24 14:20:43.180540                   |
++-----------+------------------------------------------------+----------------------------------------------+
+16 rows in set (0.00 sec)
+
+root@localhost:mysql.sock [mysql]> SELECT      WORKER_ID,      LAST_APPLIED_TRANSACTION,      LAST_APPLIED_TRANSACTION_END_APPLY_TIMESTAMP  FROM performance_schema.replication_applier_status_by_worker  WHERE SERVICE_STATE = 'ON';
++-----------+------------------------------------------------+----------------------------------------------+
+| WORKER_ID | LAST_APPLIED_TRANSACTION                       | LAST_APPLIED_TRANSACTION_END_APPLY_TIMESTAMP |
++-----------+------------------------------------------------+----------------------------------------------+
+|         1 | a36b6a91-5adc-11f0-864f-286ed48a126e:222135315 | 2025-12-24 14:21:00.237409                   |
+|         2 | a36b6a91-5adc-11f0-864f-286ed48a126e:222135318 | 2025-12-24 14:21:00.238452                   |
+|         3 | a36b6a91-5adc-11f0-864f-286ed48a126e:222135319 | 2025-12-24 14:21:00.238362                   |
+|         4 | a36b6a91-5adc-11f0-864f-286ed48a126e:222135320 | 2025-12-24 14:21:00.238439                   |
+|         5 | a36b6a91-5adc-11f0-864f-286ed48a126e:222135302 | 2025-12-24 14:21:00.175021                   |
+|         6 | a36b6a91-5adc-11f0-864f-286ed48a126e:222135246 | 2025-12-24 14:20:59.854063                   |
+|         7 | a36b6a91-5adc-11f0-864f-286ed48a126e:222135247 | 2025-12-24 14:20:59.837903                   |
+|         8 | a36b6a91-5adc-11f0-864f-286ed48a126e:222135204 | 2025-12-24 14:20:59.648933                   |
+|         9 | a36b6a91-5adc-11f0-864f-286ed48a126e:222134858 | 2025-12-24 14:20:57.822037                   |
+|        10 | a36b6a91-5adc-11f0-864f-286ed48a126e:222134859 | 2025-12-24 14:20:57.824399                   |
+|        11 | a36b6a91-5adc-11f0-864f-286ed48a126e:222134860 | 2025-12-24 14:20:57.820954                   |
+|        12 | a36b6a91-5adc-11f0-864f-286ed48a126e:222134861 | 2025-12-24 14:20:57.817649                   |
+|        13 | a36b6a91-5adc-11f0-864f-286ed48a126e:222134862 | 2025-12-24 14:20:57.841690                   |
+|        14 | a36b6a91-5adc-11f0-864f-286ed48a126e:222134865 | 2025-12-24 14:20:57.817655                   |
+|        15 | a36b6a91-5adc-11f0-864f-286ed48a126e:222133528 | 2025-12-24 14:20:50.166323                   |
+|        16 | a36b6a91-5adc-11f0-864f-286ed48a126e:222133529 | 2025-12-24 14:20:50.164050                   |
++-----------+------------------------------------------------+----------------------------------------------+
+16 rows in set (0.00 sec)
+
+root@localhost:mysql.sock [mysql]>
+
+```
+
+
+
+```sql
+给你一套更好用的“测速 SQL”（建议直接用这个）
+3.1 看 10 秒内推进了多少 GTID（推荐）
+SELECT
+  NOW(6) AS ts,
+  MAX(CAST(SUBSTRING_INDEX(LAST_APPLIED_TRANSACTION, ':', -1) AS UNSIGNED)) AS max_gtid
+FROM performance_schema.replication_applier_status_by_worker
+WHERE SERVICE_STATE='ON';
+-- 等 10 秒再执行一次，max_gtid 的差值 / 10 就是 tps
+
+
+如果你想“一条 SQL 自动算 10 秒速率”，用这个：
+
+SELECT
+  a.max_gtid AS gtid_0,
+  SLEEP(10) AS t,
+  (SELECT MAX(CAST(SUBSTRING_INDEX(LAST_APPLIED_TRANSACTION, ':', -1) AS UNSIGNED))
+   FROM performance_schema.replication_applier_status_by_worker
+   WHERE SERVICE_STATE='ON') AS gtid_10,
+  ((SELECT MAX(CAST(SUBSTRING_INDEX(LAST_APPLIED_TRANSACTION, ':', -1) AS UNSIGNED))
+    FROM performance_schema.replication_applier_status_by_worker
+    WHERE SERVICE_STATE='ON') - a.max_gtid) / 10 AS tps
+FROM (
+  SELECT MAX(CAST(SUBSTRING_INDEX(LAST_APPLIED_TRANSACTION, ':', -1) AS UNSIGNED)) AS max_gtid
+  FROM performance_schema.replication_applier_status_by_worker
+  WHERE SERVICE_STATE='ON'
+) a;
+
+3.2 同时看 “relay 是否在变少”（能否追平的关键）
+
+每隔一段时间看一次：
+
+SHOW REPLICA STATUS\G
+
+
+重点盯：
+
+Relay_Log_Space：持续下降 = 在消化积压（非常关键）
+
+Executed_Gtid_Set 尾号：持续上升
+
+Seconds_Behind_Source：只当参考（大延迟时很钝）
+```
+
+```logs
+
+root@localhost:mysql.sock [mysql]> SELECT
+    ->   NOW(6) AS ts,
+    ->   MAX(CAST(SUBSTRING_INDEX(LAST_APPLIED_TRANSACTION, ':', -1) AS UNSIGNED)) AS max_gtid
+    -> FROM performance_schema.replication_applier_status_by_worker
+    -> WHERE SERVICE_STATE='ON';
++----------------------------+-----------+
+| ts                         | max_gtid  |
++----------------------------+-----------+
+| 2025-12-24 14:22:40.812751 | 222152636 |
++----------------------------+-----------+
+1 row in set (0.00 sec)
+
+root@localhost:mysql.sock [mysql]> SELECT   NOW(6) AS ts,   MAX(CAST(SUBSTRING_INDEX(LAST_APPLIED_TRANSACTION, ':', -1) AS UNSIGNED)) AS max_gtid FROM performance_schema.replication_applier_status_by_worker WHERE SERVICE_STATE='ON';
++----------------------------+-----------+
+| ts                         | max_gtid  |
++----------------------------+-----------+
+| 2025-12-24 14:22:52.136475 | 222154369 |
++----------------------------+-----------+
+1 row in set (0.00 sec)
+
+root@localhost:mysql.sock [mysql]> SELECT   NOW(6) AS ts,   MAX(CAST(SUBSTRING_INDEX(LAST_APPLIED_TRANSACTION, ':', -1) AS UNSIGNED)) AS max_gtid FROM performance_schema.replication_applier_status_by_worker WHERE SERVICE_STATE='ON';
++----------------------------+-----------+
+| ts                         | max_gtid  |
++----------------------------+-----------+
+| 2025-12-24 14:23:01.041782 | 222155889 |
++----------------------------+-----------+
+1 row in set (0.00 sec)
+
+root@localhost:mysql.sock [mysql]> SELECT
+   WHERE SERVICE_STATE='ON') AS gtid_10,
+    ->   a.max_gtid AS gtid_0,
+    ->   SLEEP(10) AS t,
+    ->   (SELECT MAX(CAST(SUBSTRING_INDEX(LAST_APPLIED_TRANSACTION, ':', -1) AS UNSIGNED))
+    ->    FROM performance_schema.replication_applier_status_by_worker
+    ->    WHERE SERVICE_STATE='ON') AS gtid_10,
+    ->   ((SELECT MAX(CAST(SUBSTRING_INDEX(LAST_APPLIED_TRANSACTION, ':', -1) AS UNSIGNED))
+    ->     FROM performance_schema.replication_applier_status_by_worker
+    WHERE SERVICE_STATE='O    -> N') - a.max_gtid) / 10 AS tps
+FROM (
+  SELECT MAX(CAST(SUBSTRING_INDEX(LAST_APPLIED_TRANSACTION, ':', -1) AS UNSIGNED)) AS max_gtid
+    WHERE SERVICE_STATE='ON') - a.max_gtid) / 10 AS tps
+    -> FROM (
+    ->   SELECT MAX(CAST(SUBSTRING_INDEX(LAST_APPLIED_TRANSACTION, ':', -1) AS UNSIGNED)) AS max_gtid
+    ->   FROM performance_schema.replication_applier_status_by_worker
+    ->   WHERE SERVICE_STATE='ON'
+    -> ) a;
++-----------+---+-----------+----------+
+| gtid_0    | t | gtid_10   | tps      |
++-----------+---+-----------+----------+
+| 222158872 | 0 | 222160605 | 173.5000 |
++-----------+---+-----------+----------+
+1 row in set (10.00 sec)
+
+root@localhost:mysql.sock [mysql]> SELECT   a.max_gtid AS gtid_0,   SLEEP(10) AS t,   (SELECT MAX(CAST(SUBSTRING_INDEX(LAST_APPLIED_TRANSACTION, ':', -1) AS UNSIGNED))    FROM performance_schema.replication_applier_status_by_worker    WHERE SERVICE_STATE='ON') AS gtid_10,   ((SELECT MAX(CAST(SUBSTRING_INDEX(LAST_APPLIED_TRANSACTION, ':', -1) AS UNSIGNED))     FROM performance_schema.replication_applier_status_by_worker     WHERE SERVICE_STATE='ON') - a.max_gtid) / 10 AS tps FROM (   SELECT MAX(CAST(SUBSTRING_INDEX(LAST_APPLIED_TRANSACTION, ':', -1) AS UNSIGNED)) AS max_gtid   FROM performance_schema.replication_applier_status_by_worker   WHERE SERVICE_STATE='ON' ) a;
++-----------+---+-----------+----------+
+| gtid_0    | t | gtid_10   | tps      |
++-----------+---+-----------+----------+
+| 222169582 | 0 | 222171218 | 163.6000 |
++-----------+---+-----------+----------+
+1 row in set (10.00 sec)
+
+root@localhost:mysql.sock [mysql]> SELECT   a.max_gtid AS gtid_0,   SLEEP(10) AS t,   (SELECT MAX(CAST(SUBSTRING_INDEX(LAST_APPLIED_TRANSACTION, ':', -1) AS UNSIGNED))    FROM performance_schema.replication_applier_status_by_worker    WHERE SERVICE_STATE='ON') AS gtid_10,   ((SELECT MAX(CAST(SUBSTRING_INDEX(LAST_APPLIED_TRANSACTION, ':', -1) AS UNSIGNED))     FROM performance_schema.replication_applier_status_by_worker     WHERE SERVICE_STATE='ON') - a.max_gtid) / 10 AS tps FROM (   SELECT MAX(CAST(SUBSTRING_INDEX(LAST_APPLIED_TRANSACTION, ':', -1) AS UNSIGNED)) AS max_gtid   FROM performance_schema.replication_applier_status_by_worker   WHERE SERVICE_STATE='ON' ) a;
++-----------+---+-----------+----------+
+| gtid_0    | t | gtid_10   | tps      |
++-----------+---+-----------+----------+
+| 222172731 | 0 | 222174498 | 176.7000 |
++-----------+---+-----------+----------+
+1 row in set (10.00 sec)
+
+root@localhost:mysql.sock [mysql]>
+
+```
+
+
+
+```bash
+
+avg-cpu:  %user   %nice %system %iowait  %steal   %idle
+           0.16    0.00    0.09    3.95    0.00   95.80
+
+Device            r/s     rkB/s   rrqm/s  %rrqm r_await rareq-sz     w/s     wkB/s   wrqm/s  %wrqm w_await wareq-sz     d/s     dkB/s   drqm/s  %drqm d_await dareq-sz  aqu-sz  %util
+dm-0             0.00      0.00     0.00   0.00    0.00     0.00    0.00      0.00     0.00   0.00    0.00     0.00    0.00      0.00     0.00   0.00    0.00     0.00    0.00   0.00
+dm-1             0.00      0.00     0.00   0.00    0.00     0.00    0.00      0.00     0.00   0.00    0.00     0.00    0.00      0.00     0.00   0.00    0.00     0.00    0.00   0.00
+dm-2           102.00   1632.00     0.00   0.00   13.06    16.00  147.00   6352.00     0.00   0.00    0.79    43.21    0.00      0.00     0.00   0.00    0.00     0.00    1.45  95.60
+dm-3             0.00      0.00     0.00   0.00    0.00     0.00    0.00      0.00     0.00   0.00    0.00     0.00    0.00      0.00     0.00   0.00    0.00     0.00    0.00   0.00
+vda              0.00      0.00     0.00   0.00    0.00     0.00    0.00      0.00     0.00   0.00    0.00     0.00    0.00      0.00     0.00   0.00    0.00     0.00    0.00   0.00
+vdb              0.00      0.00     0.00   0.00    0.00     0.00    0.00      0.00     0.00   0.00    0.00     0.00    0.00      0.00     0.00   0.00    0.00     0.00    0.00   0.00
+vdc            104.00   1664.00     0.00   0.00   12.66    16.00  147.00   6340.00     0.00   0.00    0.75    43.13    0.00      0.00     0.00   0.00    0.00     0.00    1.15  95.60
+
+
+avg-cpu:  %user   %nice %system %iowait  %steal   %idle
+           0.47    0.00    0.22    4.25    0.00   95.07
+
+Device            r/s     rkB/s   rrqm/s  %rrqm r_await rareq-sz     w/s     wkB/s   wrqm/s  %wrqm w_await wareq-sz     d/s     dkB/s   drqm/s  %drqm d_await dareq-sz  aqu-sz  %util
+dm-0             0.00      0.00     0.00   0.00    0.00     0.00    0.00      0.00     0.00   0.00    0.00     0.00    0.00      0.00     0.00   0.00    0.00     0.00    0.00   0.00
+dm-1             0.00      0.00     0.00   0.00    0.00     0.00    0.00      0.00     0.00   0.00    0.00     0.00    0.00      0.00     0.00   0.00    0.00     0.00    0.00   0.00
+dm-2           131.00   2096.00     0.00   0.00   11.08    16.00  636.00  13232.00     0.00   0.00    0.39    20.81    0.00      0.00     0.00   0.00    0.00     0.00    1.70  95.60
+dm-3             0.00      0.00     0.00   0.00    0.00     0.00    0.00      0.00     0.00   0.00    0.00     0.00    0.00      0.00     0.00   0.00    0.00     0.00    0.00   0.00
+vda              0.00      0.00     0.00   0.00    0.00     0.00    0.00      0.00     0.00   0.00    0.00     0.00    0.00      0.00     0.00   0.00    0.00     0.00    0.00   0.00
+vdb              0.00      0.00     0.00   0.00    0.00     0.00    0.00      0.00     0.00   0.00    0.00     0.00    0.00      0.00     0.00   0.00    0.00     0.00    0.00   0.00
+vdc            131.00   2096.00     0.00   0.00   10.94    16.00  636.00  13204.00     0.00   0.00    0.36    20.76    0.00      0.00     0.00   0.00    0.00     0.00    1.21  95.60
+
+^C
+[root@MHsql-db01B mysql]# free -m
+              total        used        free      shared  buff/cache   available
+Mem:          63082       40637        8596          60       13848       21604
+Swap:         16383         528       15855
+[root@MHsql-db01B mysql]#
+
+```
+
+
+
+
+
 
 
 #### 7、压测
