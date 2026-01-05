@@ -5147,11 +5147,53 @@ SET sql_log_bin = 1;
 
 
 START REPLICA SQL_THREAD;
+
+
+
+-- 跳过报错的GTID
+STOP REPLICA;
+
+SET GTID_NEXT='0f76fa28-5f74-11ef-be67-fefcfe4ed56d:468373884';
+BEGIN; COMMIT;
+SET GTID_NEXT='AUTOMATIC';
+
+START REPLICA;
+
 ```
 
 
 
 ##### 11) 从库落后主库太多，追赶慢
+
+#临时参数调整
+
+```sql
+#追数据阶段：临时降低从库“落盘/刷盘”开销（吞吐提升通常很明显）
+
+#这招对“回放慢”特别有效，因为回放本质是不断 COMMIT。
+
+#在从库执行（追赶期间临时调，追平后再改回去）：
+
+SHOW VARIABLES LIKE 'innodb_flush_log_at_trx_commit';
+SHOW VARIABLES LIKE 'sync_binlog';
+
+SET GLOBAL innodb_flush_log_at_trx_commit = 2;
+SET GLOBAL sync_binlog = 0;
+
+
+#innodb_flush_log_at_trx_commit=2：每秒刷一次日志（崩溃可能丢 1 秒内事务，但这是从库回放，通常可接受）
+
+#sync_binlog=0：binlog 不强制每次刷盘（如果你的从库还开着 binlog / log_replica_updates，这个很关键）
+
+#追平后建议恢复更稳的值（按你们的可靠性要求）：
+
+SET GLOBAL innodb_flush_log_at_trx_commit = 1;
+SET GLOBAL sync_binlog = 1;
+```
+
+
+
+#分析过程
 
 ```
 mysql双主模式，但是只有一路主数据库进行写入操作，另一路作为从库，进行读操作。当前从库在同步报错后，进行了人工修复后恢复双主模式，但是一直落后于当前的主数据库。有没有提高同步效率的办法？
@@ -5434,9 +5476,6 @@ root@localhost:mysql.sock [(none)]> SHOW VARIABLES LIKE 'replica_preserve_commit
 | replica_preserve_commit_order | OFF   |
 +-------------------------------+-------+
 1 row in set (0.00 sec)
-
-root@localhost:mysql.sock [(none)]> SHOW VARIABLES LIKE 'innodb_flush_log_at_trx_commit ';
-Empty set (0.00 sec)
 
 root@localhost:mysql.sock [(none)]> SHOW VARIABLES LIKE 'innodb_flush_log_at_trx_commit';
 +--------------------------------+-------+
@@ -6958,7 +6997,7 @@ root@localhost:mysql.sock [mysql]> SHOW VARIABLES LIKE 'innodb_buffer_pool_size'
 
 1 row in set (0.00 sec) 
 
-root@localhost:mysql.sock [mysql]> SELECT      WORKER_ID,      LAST_APPLIED_TRANSACTION,      LAST_APPLIED_TRANSACTION_END_APPLY_TIMESTAMP  FROM performance_schema.replication_applier_status_by_worker  WHERE SERVICE_STATE = 'ON';
+root@localhost:mysql.sock [mysql]>  SELECT  WORKER_ID,  LAST_APPLIED_TRANSACTION,  LAST_APPLIED_TRANSACTION_END_APPLY_TIMESTAMP  FROM performance_schema.replication_applier_status_by_worker  WHERE SERVICE_STATE = 'ON';
 +-----------+------------------------------------------------+----------------------------------------------+
 | WORKER_ID | LAST_APPLIED_TRANSACTION                       | LAST_APPLIED_TRANSACTION_END_APPLY_TIMESTAMP |
 +-----------+------------------------------------------------+----------------------------------------------+

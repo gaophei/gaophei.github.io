@@ -557,7 +557,7 @@ systemctl enable oracle-database.service
 ### 14.2. CDB/PDB mode
 ```bash
 # Create startup trigger for PDBs (as oracle user)
-sqlplus / as sysdba << EOF
+sqlplus / as sysdba << ‘EOF’
 CREATE OR REPLACE TRIGGER open_all_pdbs
   AFTER STARTUP 
   ON DATABASE
