@@ -490,14 +490,107 @@ kubectl apply -f calico.yaml
 NAME       STATUS   ROLES                  AGE    VERSION
 master01   Ready    control-plane,master   2d5h   v1.21.7
 ```
-### 六、工作节点加入集群
+### 六、工作节点配置
+#### 1、加入集群
 #工作节点执行上面第一至第三的步骤，然后执行下面语句加入集群
 ```bash
 kubeadm join 192.168.1.225:6443 --token abcdef.0123456789abcdef \
 	--discovery-token-ca-cert-hash sha256:fd3e962a3a3f1642d7dd540947e6296c0b05478262f4a615ca280fba45a57f3a
 ```
+
+#### 2、从集群中删除并清理
+
+##### 2.1、工作节点彻底退出集群并清空所有 K8s 容器
+
+#适用于工作节点不再作为 k8s worker 使用，或准备重装/回收。
+
+1）先停 kubelet（关键：不然会被拉起）
+
+```bash
+systemctl stop kubelet
+systemctl disable kubelet
+```
+
+2）停并删所有容器 + Pod sandbox
+
+```bash
+# 容器
+crictl ps -a -q | xargs -r crictl stop
+crictl ps -a -q | xargs -r crictl rm
+
+# Pod sandbox
+crictl pods -q | xargs -r crictl stop
+crictl pods -q | xargs -r crictl rm
+```
+
+3）清理镜像（可选）
+
+```bash
+# 清理未被使用的镜像
+crictl rmi --prune
+```
+
+4）重置 kubeadm（把节点从集群痕迹里洗掉）
+
+```bash
+kubeadm reset -f
+```
+
+5）删残留目录（CNI/kubelet/证书等）
+
+```bash
+rm -rf /etc/kubernetes \
+       /var/lib/kubelet \
+       /var/lib/cni \
+       /etc/cni \
+       /opt/cni
+```
+
+6）如果你想连 containerd 数据一起清空（最干净，可选）
+
+> 会把本机 containerd 的所有镜像/快照缓存一起清掉。
+
+```bash
+systemctl stop containerd
+rm -rf /var/lib/containerd /run/containerd
+systemctl start containerd
+```
+
+------
+
+##### 2.2、只想立刻停掉孤儿容器，但保留 kubeadm 环境
+```bash
+systemctl stop kubelet
+
+crictl ps -a -q | xargs -r crictl stop
+crictl ps -a -q | xargs -r crictl rm
+crictl pods -a -q | xargs -r crictl stopp
+crictl pods -a -q | xargs -r crictl rmp
+```
+
+------
+
+#验证清理结果
+
+```bash
+crictl ps -a
+crictl pods
+crictl images
+```
+
+前两个应当为空（或至少没有你原来那些业务容器/Pod sandbox）。
+
+------
+
+
+
+
+
+
 ### 七、集群检查
+
 #master节点
+
 ```bash
 kubectl get nodes
 kubectl get pod -A -owide
