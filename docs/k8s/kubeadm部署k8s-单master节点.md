@@ -500,6 +500,14 @@ kubeadm join 192.168.1.225:6443 --token abcdef.0123456789abcdef \
 
 #### 2、从集群中删除并清理
 
+```bash
+kubectl delete nodes k8s-node03
+
+kubectl delete nodes k8s-node04
+```
+
+
+
 ##### 2.1、工作节点彻底退出集群并清空所有 K8s 容器
 
 #适用于工作节点不再作为 k8s worker 使用，或准备重装/回收。

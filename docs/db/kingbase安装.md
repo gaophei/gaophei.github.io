@@ -1120,6 +1120,30 @@ done
   \sv[+]  VIEWNAME       show a view's definition
   \z      [PATTERN]      same as \dp
 
+
+#跨库访问部分表
+#将数据库 formflow 中 schema public 下的视图 v_view1 授权给用户 powerjob 可访问（只读）
+
+#在 formflow 库中执行的授权语句
+#请使用拥有对象权限的账号（如视图所属用户 formflow 或超级用户）连接到数据库 formflow 后执行以下 SQL
+
+-- 1) 允许 powerjob 连接到 formflow 数据库（如尚未允许）
+GRANT CONNECT ON DATABASE formflow TO powerjob;
+
+-- 2) 允许 powerjob 使用 schema public
+GRANT USAGE ON SCHEMA public TO powerjob;
+
+-- 3) 授予对视图的查询权限
+GRANT SELECT ON TABLE public.v_view1 TO powerjob;
+
+#验证
+#powerjob 用户身份进入 formflow 数据库进行测试
+
+-- 尝试访问授权的视图（应当成功）
+SELECT * FROM public.v_view1 LIMIT 10;
+
+-- 尝试访问其他表（应当报错：permission denied）
+SELECT * FROM public.other_table LIMIT 10;
 ```
 
 
