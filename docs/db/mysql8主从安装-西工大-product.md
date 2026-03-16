@@ -10038,3 +10038,35 @@ firewall-cmd --info-ipset=mysql_allowed
 echo "================================"
 ```
 
+
+
+#single machine
+
+#增加IP的访问
+
+```bash
+for ip in 10.66.3.{81..86} 10.66.3.90 10.66.3.96 10.66.3.99; do
+  firewall-cmd --permanent --zone=public \
+    --add-rich-rule="rule family=ipv4 source address=${ip}/32 port protocol=tcp port=3306 accept"
+done && \
+firewall-cmd --permanent --zone=public --remove-port=3306/tcp && \
+firewall-cmd --reload && \
+firewall-cmd --zone=public --list-all
+```
+
+
+
+#恢复3306全体访问
+
+```bash
+
+
+for ip in 10.66.3.{81..86} 10.66.3.90 10.66.3.96 10.66.3.99; do
+  firewall-cmd --permanent --zone=public \
+    --remove-rich-rule="rule family=ipv4 source address=${ip}/32 port protocol=tcp port=3306 accept"
+done
+
+firewall-cmd --permanent --zone=public --add-port=3306/tcp
+firewall-cmd --reload
+```
+

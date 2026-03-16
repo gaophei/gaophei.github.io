@@ -2965,7 +2965,76 @@ find $rman_dir -name 'rmanfullbak_*.log' -mtime +7 -exec rm {} \;
 echo `date ` >> $rman_dir/rmanrun.log
 ```
 
+
+
+#增量备份
+```rman
+-- 在RMAN中配置，确保保留完整的备份周期
+CONFIGURE RETENTION POLICY TO RECOVERY WINDOW OF 14 DAYS;
+-- 或者按冗余度
+CONFIGURE RETENTION POLICY TO REDUNDANCY 2;
+```
+
+```bash
+#!/bin/bash
+time=$(date +"%Y%m%d")
+rman_dir=/home/oracle/backup
+day_of_week=$(date +%u)  # 1=周一, 2=周二, ..., 7=周日
+
+if [ -f $HOME/.bash_profile ]; then
+    . $HOME/.bash_profile
+elif [ -f $HOME/.profile ]; then
+    . $HOME/.profile
+fi
+
+echo `date` > $rman_dir/rmanrun.log
+
+# 根据星期判断备份级别
+if [ $day_of_week -eq 7 ]; then
+    # 周日执行 Level 0 全备份
+    backup_level=0
+    log_prefix="rman_level0"
+    echo "执行 Level 0 全备份" >> $rman_dir/rmanrun.log
+else
+    # 周一至周六执行 Level 1 增量备份
+    backup_level=1
+    log_prefix="rman_level1"
+    echo "执行 Level 1 增量备份" >> $rman_dir/rmanrun.log
+fi
+
+rman target / log=$rman_dir/${log_prefix}_$time.log append <<EOF
+run{
+   CONFIGURE CONTROLFILE AUTOBACKUP ON;
+   CONFIGURE BACKUP OPTIMIZATION ON;
+   allocate channel c1 type disk;
+   allocate channel c2 type disk;
+   allocate channel c3 type disk;
+   allocate channel c4 type disk;
+   sql 'alter system archive log current';
+   backup as compressed backupset incremental level $backup_level database plus archivelog delete all input;
+   sql 'alter system archive log current';
+   backup archivelog all;
+   crosscheck backup;
+   delete noprompt obsolete;
+   delete noprompt expired backup;
+   release channel c1;
+   release channel c2;
+   release channel c3;
+   release channel c4;
+}
+exit;
+EOF
+ >> $rman_dir/rmanrun.log
+
+# 删除7天前的日志
+find $rman_dir -name 'rman_level*.log' -mtime +7 -exec rm {} \;
+echo `date` >> $rman_dir/rmanrun.log
+```
+
+
+
 #设置调度任务
+
 ```bash
 crontab -e
 

@@ -1814,6 +1814,73 @@ FROM
 ORDER BY
   pg_database_size(datname) DESC;
   
+
+SELECT
+  d.datname                                        AS db_name,
+  sys_database_size(d.datname)                     AS size_bytes,
+  sys_size_pretty(sys_database_size(d.datname))    AS size_pretty
+FROM sys_database d
+ORDER BY size_bytes DESC;
+
+
+#排除某些库
+SELECT
+  d.datname                                     AS db_name,
+  sys_database_size(d.datname)                  AS size_bytes,
+  sys_size_pretty(sys_database_size(d.datname)) AS size_pretty
+FROM sys_database d
+WHERE d.datistemplate = 'f'
+  AND d.datallowconn = 't'
+ORDER BY size_bytes DESC;
+
+
+#所有数据库大小总和（汇总）
+SELECT
+  sys_size_pretty(SUM(sys_database_size(datname))) AS total_size
+FROM sys_database
+WHERE datistemplate = 'f'
+  AND datallowconn = 't';
+
+#带占比的“大小列表 + 数据汇总”
+WITH db AS (
+  SELECT
+    datname,
+    sys_database_size(datname) AS bytes
+  FROM sys_database
+  WHERE datistemplate = 'f'
+    AND datallowconn = 't'
+),
+tot AS (
+  SELECT SUM(bytes) AS total_bytes FROM db
+)
+SELECT
+  db.datname                               AS db_name,
+  sys_size_pretty(db.bytes)                AS size_pretty,
+  db.bytes                                 AS size_bytes,
+  ROUND(db.bytes * 100.0 / tot.total_bytes, 2) AS pct_of_total
+FROM db, tot
+ORDER BY db.bytes DESC;
+
+#一行汇总信息
+WITH db AS (
+  SELECT
+    datname,
+    sys_database_size(datname) AS bytes
+  FROM sys_database
+  WHERE datistemplate = 'f'
+    AND datallowconn = 't'
+)
+SELECT
+  COUNT(*)                               AS db_count,
+  sys_size_pretty(SUM(bytes))            AS total_size,
+  sys_size_pretty(AVG(bytes))            AS avg_size,
+  (SELECT datname FROM db ORDER BY bytes DESC LIMIT 1) AS largest_db,
+  sys_size_pretty(MAX(bytes))            AS largest_size
+FROM db;
+
+
+
+  
 #查看某个表的大小
 SELECT
   relname AS table_name,
