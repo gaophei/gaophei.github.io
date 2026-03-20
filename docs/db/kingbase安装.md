@@ -1060,6 +1060,85 @@ done
 
 ```
 
+#通过sys_dump/sys_restore
+
+```bash
+#源数据库导出
+sys_dump -h <源IP> -p <源端口> -U <源用户> -d virtualhuman_test -Fc -f DB_2026-02-27_13_58_28.dmp
+
+sys_dump \
+  -h 127.0.0.1 \
+  -p 54321 \
+  -U kingbase \
+  -d virtualhuman_test \
+  -Fc \
+  -Z 0 \
+  -v \
+  -f DB_$(date +%Y-%m-%d_%H_%M_%S).dmp
+  
+  
+sys_dump \
+  -h 127.0.0.1 \
+  -p 54321 \
+  -U kingbase \
+  -d virtualhuman_test \
+  -Fc \
+  -Z 5 \               # 开启压缩，节省空间（0-9，5为均衡点）
+  -j 4 \               # 并行导出（-Fd目录格式才支持，-Fc单文件忽略此参数）
+  -n virtualhuman_test \ # 只导出业务schema，排除 performance_schema
+  -v \
+  -f virtualhuman_test_$(date +%Y-%m-%d_%H_%M_%S).dmp \
+  2>&1 | tee dump_$(date +%F).log
+  
+  
+# 目录格式 + 并行（适合大库）
+sys_dump \
+  -h 127.0.0.1 \
+  -p 54321 \
+  -U kingbase \
+  -d virtualhuman_test \
+  -Fd \
+  -Z 5 \
+  -j 4 \
+  -n virtualhuman_test \
+  -v \
+  -f /backup/virtualhuman_test_$(date +%Y-%m-%d_%H_%M_%S)/
+
+
+#新库
+su - kingbase
+
+mkdir /data/tbs/xiaomei
+
+
+create user xiaomei connection limit -1 password 'authxuser123';
+
+create tablespace xiaomei owner xiaomei location '/data/tbs/xiaomei';
+
+create database xiaomei with owner xiaomei tablespace xiaomei encoding utf8;
+
+
+alter user xiaomei superuser;
+
+#导入
+
+sys_restore -h 127.0.0.1 -p 54321 -U xiaomei -d xiaomei \
+  -c --if-exists -O -x --no-tablespaces -j 1 -v \
+  DB_2026-02-27_13_58_28.dmp \
+  2>&1 | tee restore_$(date +%F_%H%M%S).log
+  
+  
+  # 输出同时保存日志
+  
+  -- 导入完成后执行
+ALTER USER xiaomei SET search_path TO virtualhuman_test, public;
+
+-- 或在应用连接串中指定
+jdbc:kingbase8://127.0.0.1:54321/xiaomei?currentSchema=virtualhuman_test
+
+
+```
+
 
 
 ### 6.常用sql
