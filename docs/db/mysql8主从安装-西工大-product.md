@@ -9374,12 +9374,137 @@ root@localhost:mysql.sock [(none)]>
 #主从库均做backup服务器的免ssh登录
 
 ```bash
+#rsa
 ssh-keygen
 
 ssh-copy-id root@10.20.12.129
 
 ssh root@10.20.12.129
 ```
+
+```bash
+#ed25519
+ssh-keygen -t ed25519 -f /root/.ssh/id_rsa_mysqlbak -N ''
+ssh-copy-id -i /root/.ssh/id_rsa_mysqlbak.pub -p 22 root@192.168.100.100
+ssh -i /root/.ssh/id_rsa_mysqlbak root@192.168.100.100 'echo ok'   # 必须能直接打印 ok
+```
+
+```bash
+# 在 192.168.100.100 上
+chmod +x /usr/local/bin/remote_cleanup.sh
+crontab -e
+# 每天凌晨 5 点清理（错开备份/同步时段）
+0 5 * * * /usr/local/bin/remote_cleanup.sh
+```
+
+#远端清理脚本
+
+```bash
+#!/bin/bash
+#
+# 异地备份清理脚本
+# 部署在远端备份机 192.168.100.100 上，由该机自身 cron 定期执行。
+# 只删除 $BACKUP_ROOT_DIR 下形如 20xx-xx-xx 的日期目录中、
+# 超过保留数量的最旧者，避免撑爆磁盘。
+#
+set -o pipefail
+
+export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+# =========================
+# 配置
+# =========================
+# 备份接收根目录（与主脚本 REMOTE_DIR 对应）
+BACKUP_ROOT_DIR="/data/mysqlbak"
+
+# 异地通常比本地多留几份；按磁盘容量调整
+KEEP_BACKUP_COUNT=14
+
+# 额外的磁盘水位保护：使用率超过该百分比时，
+# 即使未超过 KEEP_BACKUP_COUNT，也从最旧开始多删，直到降到水位以下
+# 设为 0 表示不启用该保护
+DISK_USAGE_LIMIT=85
+
+LOG_FILE="/var/log/mysqlbak_cleanup.log"
+
+# =========================
+# 并发锁
+# =========================
+exec 9>/var/run/mysqlbak_cleanup.lock
+flock -n 9 || { echo "cleanup already running"; exit 0; }
+
+log() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" >> "$LOG_FILE"
+}
+
+log "==== cleanup start, root=$BACKUP_ROOT_DIR keep=$KEEP_BACKUP_COUNT limit=${DISK_USAGE_LIMIT}% ===="
+
+if [ ! -d "$BACKUP_ROOT_DIR" ]; then
+    log "ERROR: backup root not found: $BACKUP_ROOT_DIR"
+    exit 1
+fi
+
+# 当前磁盘使用率（百分比，去掉 %）
+disk_usage() {
+    df -P "$BACKUP_ROOT_DIR" | awk 'NR==2 {gsub("%","",$5); print $5}'
+}
+
+# 按修改时间从新到旧排列的日期目录
+mapfile -t BACKUP_DIRS < <(ls -dt "$BACKUP_ROOT_DIR"/20??-??-??/ 2>/dev/null)
+COUNT=${#BACKUP_DIRS[@]}
+log "found $COUNT dated backup dirs"
+
+if [ "$COUNT" -eq 0 ]; then
+    log "nothing to clean"
+    log "==== cleanup done ===="
+    exit 0
+fi
+
+# =========================
+# 第一步：按保留数量删除超量的最旧目录
+# =========================
+if [ "$COUNT" -gt "$KEEP_BACKUP_COUNT" ]; then
+    for ((i=KEEP_BACKUP_COUNT; i<COUNT; i++)); do
+        log "Removing old backup dir (over keep count): ${BACKUP_DIRS[$i]}"
+        rm -rf "${BACKUP_DIRS[$i]}"
+    done
+    # 重新读取剩余目录
+    mapfile -t BACKUP_DIRS < <(ls -dt "$BACKUP_ROOT_DIR"/20??-??-??/ 2>/dev/null)
+    COUNT=${#BACKUP_DIRS[@]}
+fi
+
+# =========================
+# 第二步：磁盘水位保护（可选）
+# 从最旧开始继续删，直到使用率达标或仅剩 1 份
+# =========================
+if [ "$DISK_USAGE_LIMIT" -gt 0 ]; then
+    USAGE=$(disk_usage)
+    log "current disk usage: ${USAGE}%"
+
+    # 从数组末尾（最旧）向前删
+    while [ "${USAGE:-0}" -gt "$DISK_USAGE_LIMIT" ] && [ "$COUNT" -gt 1 ]; do
+        OLDEST="${BACKUP_DIRS[$((COUNT-1))]}"
+        log "Removing old backup dir (disk usage ${USAGE}% > ${DISK_USAGE_LIMIT}%): $OLDEST"
+        rm -rf "$OLDEST"
+        unset 'BACKUP_DIRS[$((COUNT-1))]'
+        COUNT=$((COUNT-1))
+        USAGE=$(disk_usage)
+    done
+
+    if [ "${USAGE:-0}" -gt "$DISK_USAGE_LIMIT" ]; then
+        log "WARNING: disk still at ${USAGE}% with only $COUNT backup(s) left; not deleting the last copy. Check disk."
+    fi
+fi
+
+log "==== cleanup done, remaining $COUNT backup dir(s), usage $(disk_usage)% ===="
+
+```
+
+
+
+
+
+
 
 #主库配置备份脚本
 
@@ -9429,8 +9554,8 @@ scp $gzDumpFile 10.20.12.129:/data/mysql117bak/
 scpendTime=`date +"%Y年%m月%d日 %H:%M:%S"`
 echo scp结束:$scpendTime succ >> $logFile
 
-sync
-echo 1 > /proc/sys/vm/drop_caches
+#sync
+#echo 1 > /proc/sys/vm/drop_caches
 
 backupendTime=`date +"%Y年%m月%d日 %H:%M:%S"`
 echo backup结束:$backupendTime succ >> $logFile
@@ -9445,6 +9570,635 @@ EOF
 
 ```bash
 watch -n 1 "iostat -dx 1 2; mysqladmin ext | grep -E 'Innodb_buffer_pool_reads|Innodb_pages_read'"
+```
+
+#分开每库单独备份+异地备份
+
+```bash
+#!/bin/bash
+# =====================================================================
+# MySQL 分库备份脚本(rsync 异地版 v3)
+#   - 分库 dump:每库独立短事务快照,避免全库单事务长快照拖垮主库内存/undo
+#   - dump+zip 在【本地】落地并保留 N 份(LOCAL_KEEP_COUNT)
+#   - 不再 cp 到本地挂载 NFS;改用【rsync over SSH】把每个 zip 推到异地服务器
+#   - GTID 复制环境:去掉 --source-data=2,不触发 FTWRL,杜绝 1205 锁等待
+#   - 本地按【份数】保留;异地按【容量】保留(留 REMOTE_MIN_FREE_PERCENT% 空余)+ 最少份数下限
+#   - nice/ionice 降优先级;--quick 流式;大日志表只导结构;凭据走临时 0600 选项文件
+#   - flock 防叠跑;任一库失败/异地不可达 -> 退出码非 0(便于监控)
+#
+# ★ 上线前一次性准备(在本机以运行该脚本的用户执行):
+#     ssh-keygen -t ed25519 -f /root/.ssh/id_backup -N ''       # 生成专用密钥
+#     ssh-copy-id -i /root/.ssh/id_backup.pub root@192.168.100.100
+#     ssh -i /root/.ssh/id_backup root@192.168.100.100 'echo ok' # 验证免密
+#   并把下面 REMOTE_SSH_KEY 指向 /root/.ssh/id_backup
+# =====================================================================
+set -o pipefail
+source /etc/profile
+[ -f ~/.bash_profile ] && source ~/.bash_profile
+export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+# ---------- 并发锁(必须在任何日志/目录初始化之前) ----------
+exec 9>/var/run/mysql_backup.lock
+flock -n 9 || { echo "already running"; exit 0; }
+
+# =========================
+# 基本配置(按需修改)
+# =========================
+DB_USER="root"
+DB_PASS="xxxxxxx"
+# 通过 VIP 连接,保证始终备份"当前活动主库";若想强制走本机 socket 置空即可
+DB_HOST="222.204.70.86"
+DB_PORT="3306"
+
+# 本地备份根目录(本地落地 + 保留 N 份)
+LOCAL_ROOT="/data/backup"
+# 本地保留份数(按"日期目录"计,建议 5~7)
+LOCAL_KEEP_COUNT=7
+
+# ---------- 异地(rsync over SSH)----------
+REMOTE_HOST="192.168.100.100"
+REMOTE_USER="root"
+REMOTE_PORT="22"
+# 异地存放根目录(尾部不要带斜杠;脚本会自动创建当天日期子目录)
+REMOTE_ROOT="/data/mysql_backup/70.86"
+# 免密登录使用的私钥
+REMOTE_SSH_KEY="/root/.ssh/id_backup"
+# 异地保留策略:从最旧开始删,直到异地可用空间 >= REMOTE_MIN_FREE_PERCENT%
+REMOTE_MIN_FREE_PERCENT=20
+# 异地最少保留份数(安全下限,防止远端 df 异常时误删到太少)
+REMOTE_MIN_KEEP_COUNT=7
+# rsync 限速(KB/s);0=不限速。担心占满异地链路可设,例如 51200 = 50MB/s
+REMOTE_BWLIMIT=0
+
+# 单次运行前本地可用空间预检(GB),不足直接退出,避免写半截
+MIN_FREE_GB=20
+
+# 压缩密码
+ZIP_PASSWORD="7bXNvTCgnQ3sdTvgaR5e"
+
+# 整库排除(连结构带数据都不备),空格分隔
+EXCLUDE_DATABASES=""
+# 整库仅导结构,空格分隔
+STRUCTURE_ONLY_DATABASES=""
+# 只导结构、跳过数据的"表"(库.表)——大日志表放这里:保留结构、不备数据
+STRUCTURE_ONLY_TABLES="authx_log.tb_l_apply_call_log authx_log.tb_l_online_log authx_log.tb_l_authentication_log authx_log.tb_l_service_access_log authx_log.tb_l_pers_operate_log authx_log.tb_l_pers_operate_detail_log cas_server.tb_service_access_log cas_server.tb_authentication_log cas_server.tb_sso_log user.tb_b_sys_log qywx_sync.blade_log_usual qywx_sync.link_url_config portal_timesync.job_log_detail_xshd_cms portal_timesync.job_log_detail_xshd_rcn"
+# 完全排除的"表"(库.表)——结构和数据都不要
+FULL_IGNORE_TABLES="transaction.app_copy user.bks2024"
+
+# =========================
+# 初始化
+# =========================
+umask 077
+DATE=$(date '+%Y-%m-%d')
+LOCAL_DIR="$LOCAL_ROOT/$DATE"
+REMOTE_DIR="$REMOTE_ROOT/$DATE"
+
+# 日志:本地为主,收尾再 rsync 一份到异地
+LOG_FILE="$LOCAL_ROOT/backup_log_$DATE.txt"
+ERR_LOG="$LOCAL_ROOT/backup_error_$DATE.log"
+
+mkdir -p "$LOCAL_DIR" 2>/dev/null
+
+START_TIMEALL=$(date +%s)
+FAIL_COUNT=0
+
+echo "Backup started at $(date)"      >  "$LOG_FILE"
+echo "Error log started at $(date)"   >  "$ERR_LOG"
+
+log() { echo "[$(date '+%F %T')] $*"        >> "$LOG_FILE"; }
+err() { echo "[$(date '+%F %T')] ERROR: $*" >> "$LOG_FILE"; FAIL_COUNT=$((FAIL_COUNT+1)); }
+
+contains_word() { local t="$1"; shift; local i; for i in "$@"; do [ "$i" = "$t" ] && return 0; done; return 1; }
+
+# SSH / rsync 公共参数
+SSH=(ssh -i "$REMOTE_SSH_KEY" -p "$REMOTE_PORT" -o BatchMode=yes -o ConnectTimeout=15 -o StrictHostKeyChecking=accept-new "$REMOTE_USER@$REMOTE_HOST")
+RSYNC_RSH="ssh -i $REMOTE_SSH_KEY -p $REMOTE_PORT -o BatchMode=yes -o ConnectTimeout=15 -o StrictHostKeyChecking=accept-new"
+# 注意:成品是 .zip 已压缩,rsync 不再加 -z(白费 CPU);-t 保留 mtime 便于断点续传/幂等
+RSYNC_OPTS=(-t --partial --timeout=600)
+[ "${REMOTE_BWLIMIT:-0}" -gt 0 ] && RSYNC_OPTS+=(--bwlimit="$REMOTE_BWLIMIT")
+
+# 删除本地某个日期目录,并连带删除该日期对应的日志文件
+remove_local_date_dir() {
+    local dir="$1" d
+    d=$(basename "$dir")
+    rm -rf "$dir"
+    rm -f "$LOCAL_ROOT/backup_log_${d}.txt" "$LOCAL_ROOT/backup_error_${d}.log"
+}
+
+# 删除异地某个日期目录,并连带删除该日期对应的日志文件
+remove_remote_date_dir() {
+    local dir="$1" d
+    d=$(basename "$dir")
+    "${SSH[@]}" "rm -rf '$dir'; rm -f '$REMOTE_ROOT/backup_log_${d}.txt' '$REMOTE_ROOT/backup_error_${d}.log'" 2>>"$ERR_LOG"
+}
+
+# 读取异地存放目录所在文件系统的已用百分比
+remote_used_pct() {
+    "${SSH[@]}" "df -Pk $REMOTE_ROOT 2>/dev/null | awk 'NR==2{gsub(/%/,\"\",\$5); print \$5}'" 2>>"$ERR_LOG"
+}
+
+# =========================
+# 命令检查
+# =========================
+for c in mysql mysqldump zip rsync ssh; do
+    command -v "$c" >/dev/null 2>&1 || { err "$c command not found"; echo "$c not found"; exit 1; }
+done
+
+# =========================
+# 凭据:临时 0600 选项文件,避免密码出现在 ps / 命令行
+# =========================
+CRED_FILE=$(mktemp /tmp/.mybak.XXXXXX) || { err "mktemp failed"; exit 1; }
+chmod 600 "$CRED_FILE"
+{
+    echo "[client]"
+    echo "user=$DB_USER"
+    echo "password=$DB_PASS"
+    [ -n "$DB_HOST" ] && echo "host=$DB_HOST"
+    echo "port=$DB_PORT"
+} > "$CRED_FILE"
+cleanup() { rm -f "$CRED_FILE"; }
+trap cleanup EXIT INT TERM
+
+MYSQL=(mysql --defaults-extra-file="$CRED_FILE")
+
+run_mysqldump() {
+    if command -v ionice >/dev/null 2>&1; then
+        ionice -c2 -n7 nice -n 19 mysqldump --defaults-extra-file="$CRED_FILE" "$@"
+    else
+        nice -n 19 mysqldump --defaults-extra-file="$CRED_FILE" "$@"
+    fi
+}
+
+# rsync 推送单个文件到异地(降优先级,降低对本机的影响)
+push_remote() {
+    local src="$1"
+    if command -v ionice >/dev/null 2>&1; then
+        ionice -c2 -n7 nice -n 19 rsync "${RSYNC_OPTS[@]}" -e "$RSYNC_RSH" "$src" "$REMOTE_USER@$REMOTE_HOST:$REMOTE_DIR/" 2>>"$ERR_LOG"
+    else
+        nice -n 19 rsync "${RSYNC_OPTS[@]}" -e "$RSYNC_RSH" "$src" "$REMOTE_USER@$REMOTE_HOST:$REMOTE_DIR/" 2>>"$ERR_LOG"
+    fi
+}
+
+table_exists() {
+    "${MYSQL[@]}" --batch --skip-column-names -e \
+        "SELECT 1 FROM information_schema.tables WHERE table_schema='$1' AND table_name='$2' LIMIT 1;" \
+        2>>"$ERR_LOG" | grep -q 1
+}
+
+# GTID 复制环境:--single-transaction 单独工作即可拿到一致性快照,纯 InnoDB 不需要 FTWRL。
+# 已移除 --source-data=2(会强制 FTWRL,易被业务长事务堵到 1205;GTID 复制也用不上 file/pos)。
+DUMP_COMMON_OPTS=(
+    --quick
+    --single-transaction
+    --set-gtid-purged=OFF
+    --routines --events --triggers
+    --max-allowed-packet=512M
+)
+
+# =========================
+# 本地可用空间预检
+# =========================
+AVAIL_KB=$(df -Pk "$LOCAL_ROOT" 2>/dev/null | awk 'NR==2{print $4}')
+if [ -n "$AVAIL_KB" ] && [ "$AVAIL_KB" -lt $((MIN_FREE_GB*1024*1024)) ]; then
+    err "LOCAL $LOCAL_ROOT free < ${MIN_FREE_GB}GB (avail ${AVAIL_KB}KB), abort"
+    echo "local low on space"; exit 1
+fi
+
+# =========================
+# 异地连通性预检 + 创建当天目录(同时验证免密 SSH 是否可用)
+# =========================
+if ! "${SSH[@]}" "mkdir -p '$REMOTE_DIR'" 2>>"$ERR_LOG"; then
+    err "cannot reach remote $REMOTE_HOST (or mkdir failed). check ssh key / network, abort"
+    echo "remote unreachable"; exit 1
+fi
+
+# =========================
+# 获取数据库列表
+# =========================
+DB_LIST_FILE="$LOCAL_DIR/.db_list_$$"
+if ! "${MYSQL[@]}" --batch --skip-column-names -e "SHOW DATABASES;" > "$DB_LIST_FILE" 2>>"$ERR_LOG"; then
+    err "Failed to get database list"; rm -f "$DB_LIST_FILE"; exit 1
+fi
+DB_NAMES=$(grep -Ev '^(information_schema|performance_schema|sys)$' "$DB_LIST_FILE")
+rm -f "$DB_LIST_FILE"
+[ -z "$DB_NAMES" ] && { err "No database found"; exit 1; }
+
+# =========================
+# 逐库备份
+# =========================
+for db_name in $DB_NAMES; do
+    log "==> Backing up database: $db_name"
+
+    if contains_word "$db_name" $EXCLUDE_DATABASES; then
+        log "Skip (excluded db): $db_name"; continue
+    fi
+
+    BACKUP_FILE="$LOCAL_DIR/${db_name}-$(date '+%Y-%m-%d-%H-%M-%S').sql"
+    ZIP_FILE="$BACKUP_FILE.zip"
+    START_TIME=$(date +%s)
+    DUMP_OK=1
+
+    IGNORE_OPTS=()
+    for ft in $STRUCTURE_ONLY_TABLES $FULL_IGNORE_TABLES; do
+        case "$ft" in
+            "$db_name".*) IGNORE_OPTS+=(--ignore-table="$ft");;
+        esac
+    done
+
+    if [ "$db_name" = "mysql" ]; then
+        run_mysqldump "${DUMP_COMMON_OPTS[@]}" \
+            --ignore-table=mysql.event --ignore-table=mysql.general_log --ignore-table=mysql.slow_log \
+            --databases "$db_name" > "$BACKUP_FILE" 2>>"$ERR_LOG" \
+            || { DUMP_OK=0; err "mysqldump failed: $db_name"; }
+
+    elif contains_word "$db_name" $STRUCTURE_ONLY_DATABASES; then
+        run_mysqldump "${DUMP_COMMON_OPTS[@]}" --no-data --databases "$db_name" \
+            > "$BACKUP_FILE" 2>>"$ERR_LOG" \
+            || { DUMP_OK=0; err "mysqldump structure-only db failed: $db_name"; }
+
+    else
+        run_mysqldump "${DUMP_COMMON_OPTS[@]}" "${IGNORE_OPTS[@]}" --databases "$db_name" \
+            > "$BACKUP_FILE" 2>>"$ERR_LOG" \
+            || { DUMP_OK=0; err "mysqldump failed: $db_name"; }
+
+        if [ "$DUMP_OK" -eq 1 ]; then
+            for ft in $STRUCTURE_ONLY_TABLES; do
+                case "$ft" in
+                    "$db_name".*)
+                        t="${ft#*.}"
+                        if ! table_exists "$db_name" "$t"; then
+                            log "Skip structure-only (not found): $db_name.$t"; continue
+                        fi
+                        log "Dump structure only: $db_name.$t"
+                        run_mysqldump --set-gtid-purged=OFF --no-data "$db_name" "$t" \
+                            >> "$BACKUP_FILE" 2>>"$ERR_LOG" \
+                            || { DUMP_OK=0; err "structure-only table failed: $db_name.$t"; }
+                        ;;
+                esac
+            done
+        fi
+    fi
+
+    ELAPSED_DUMP=$(( $(date +%s) - START_TIME ))
+
+    if [ "$DUMP_OK" -ne 1 ] || [ ! -s "$BACKUP_FILE" ]; then
+        err "Invalid dump, keep for check: $BACKUP_FILE (dump ${ELAPSED_DUMP}s)"
+        continue
+    fi
+
+    # 压缩(带密码),成功后删 .sql,本地保留 .zip
+    START_ZIP=$(date +%s)
+    if zip -q -j -P "$ZIP_PASSWORD" "$ZIP_FILE" "$BACKUP_FILE" 2>>"$ERR_LOG" && [ -s "$ZIP_FILE" ]; then
+        rm -f "$BACKUP_FILE"
+    else
+        err "zip failed, keep sql: $BACKUP_FILE"; continue
+    fi
+    ELAPSED_ZIP=$(( $(date +%s) - START_ZIP ))
+
+    # rsync 推送到异地(本地副本保留;逐个推送,网络压力分散到整个备份窗口)
+    START_RSYNC=$(date +%s)
+    if push_remote "$ZIP_FILE"; then
+        ELAPSED_RSYNC=$(( $(date +%s) - START_RSYNC ))
+        log "OK $db_name : dump ${ELAPSED_DUMP}s, zip ${ELAPSED_ZIP}s, rsync ${ELAPSED_RSYNC}s -> local:$ZIP_FILE | remote:$REMOTE_HOST:$REMOTE_DIR/$(basename "$ZIP_FILE")"
+    else
+        err "rsync to remote failed (local copy kept): $ZIP_FILE"
+    fi
+done
+
+# =========================
+# 保留策略 1:本地按【份数】保留最近 LOCAL_KEEP_COUNT 个日期目录
+# =========================
+mapfile -t LDIRS < <(ls -d "$LOCAL_ROOT"/20??-??-??/ 2>/dev/null | sort)   # 升序,最旧在前
+LCOUNT=${#LDIRS[@]}
+if [ "$LCOUNT" -gt "$LOCAL_KEEP_COUNT" ]; then
+    REMOVE_N=$((LCOUNT - LOCAL_KEEP_COUNT))
+    for ((i=0; i<REMOVE_N; i++)); do
+        log "Remove old LOCAL backup dir: ${LDIRS[$i]}"
+        remove_local_date_dir "${LDIRS[$i]}"
+    done
+fi
+
+# =========================
+# 保留策略 2:异地按【容量】保留——从最旧开始删,直到异地可用空间 >= REMOTE_MIN_FREE_PERCENT%
+#            并保证至少保留 REMOTE_MIN_KEEP_COUNT 份
+# =========================
+REMOTE_TARGET_USED=$((100 - REMOTE_MIN_FREE_PERCENT))   # 例:留 20% 空余 => 用量需 <= 80%
+while :; do
+    mapfile -t RDIRS < <("${SSH[@]}" "ls -d $REMOTE_ROOT/20??-??-??/ 2>/dev/null | sort" 2>>"$ERR_LOG")
+    [ "${#RDIRS[@]}" -le "$REMOTE_MIN_KEEP_COUNT" ] && break
+    USED=$(remote_used_pct)
+    [ -z "$USED" ] && { err "cannot read remote usage, skip remote cleanup"; break; }
+    [ "$USED" -le "$REMOTE_TARGET_USED" ] && break
+    OLDEST="${RDIRS[0]}"
+    log "REMOTE used ${USED}% > ${REMOTE_TARGET_USED}%, remove oldest: $OLDEST"
+    remove_remote_date_dir "$OLDEST"
+done
+
+log "Backup finished in $(( $(date +%s) - START_TIMEALL ))s, failures=$FAIL_COUNT"
+
+# 收尾:把本次日志 rsync 一份到异地
+nice -n 19 rsync "${RSYNC_OPTS[@]}" -e "$RSYNC_RSH" "$LOG_FILE" "$ERR_LOG" "$REMOTE_USER@$REMOTE_HOST:$REMOTE_ROOT/" 2>/dev/null
+
+# 任一库失败 / 异地推送失败则非 0 退出,便于 cron / 监控捕获
+[ "$FAIL_COUNT" -eq 0 ] || exit 2
+exit 0
+
+```
+
+
+
+#本地挂载磁盘备份/opt/nfs/70.86
+
+```bash
+#!/bin/bash
+# =====================================================================
+# MySQL 分库备份脚本(优化版 v2)
+#   - 分库 dump:每库独立短事务快照,避免全库单事务长快照拖垮主库内存/undo
+#   - dump+zip 在【本地】落地并保留一份;再 cp(不再 mv)复制一份到 NFS
+#   - GTID 复制环境:去掉 --source-data=2,不再触发 FTWRL,杜绝 1205 锁等待
+#   - 本地按【份数】保留(LOCAL_KEEP_COUNT);NFS 按【容量】保留(留 NFS_MIN_FREE_PERCENT% 空余)
+#   - nice/ionice 降优先级;--quick 流式;大日志表只导结构;凭据走临时 0600 选项文件
+#   - flock 防叠跑;目标盘空间预检;任一库失败 -> 退出码非 0(便于监控)
+# =====================================================================
+set -o pipefail
+source /etc/profile
+[ -f ~/.bash_profile ] && source ~/.bash_profile
+export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+# ---------- 并发锁(必须在任何日志/目录初始化之前) ----------
+exec 9>/var/run/mysql_backup.lock
+flock -n 9 || { echo "already running"; exit 0; }
+
+# =========================
+# 基本配置(按需修改)
+# =========================
+DB_USER="root"
+DB_PASS="xxxxxxx"
+# 通过 VIP 连接,保证始终备份"当前活动主库";若想强制走本机 socket 置空即可
+DB_HOST="222.204.70.86"
+DB_PORT="3306"
+
+# 本地备份根目录(本地落地 + 长期保留 N 份)
+LOCAL_ROOT="/data/backup"
+# NFS 备份根目录(复制一份;尾部不要带斜杠)
+NFS_ROOT="/opt/nfs/70.86"
+
+# 本地保留份数(按"日期目录"计,建议 5~7)
+LOCAL_KEEP_COUNT=7
+
+# NFS 保留策略:从最旧开始删,直到可用空间 >= NFS_MIN_FREE_PERCENT%
+NFS_MIN_FREE_PERCENT=20
+# NFS 最少保留份数(安全下限,防止 df 异常时误删到太少)
+NFS_MIN_KEEP_COUNT=7
+
+# 单次运行前的可用空间预检(GB):本地与 NFS 任一不足则直接退出,避免写半截
+MIN_FREE_GB=20
+
+# 压缩密码
+ZIP_PASSWORD="7bXNvTCgnQ3sdTvgaR5e"
+
+# 整库排除(连结构带数据都不备),空格分隔。例:EXCLUDE_DATABASES="testdb"
+EXCLUDE_DATABASES=""
+
+# 整库仅导结构,空格分隔
+STRUCTURE_ONLY_DATABASES=""
+
+# 只导结构、跳过数据的"表"(库.表)——大日志表放这里:保留结构、不备数据
+STRUCTURE_ONLY_TABLES="authx_log.tb_l_apply_call_log authx_log.tb_l_online_log authx_log.tb_l_authentication_log authx_log.tb_l_service_access_log authx_log.tb_l_pers_operate_log authx_log.tb_l_pers_operate_detail_log cas_server.tb_service_access_log cas_server.tb_authentication_log cas_server.tb_sso_log user.tb_b_sys_log qywx_sync.blade_log_usual qywx_sync.link_url_config portal_timesync.job_log_detail_xshd_cms portal_timesync.job_log_detail_xshd_rcn"
+
+# 完全排除的"表"(库.表)——结构和数据都不要
+FULL_IGNORE_TABLES="transaction.app_copy user.bks2024"
+
+# =========================
+# 初始化
+# =========================
+umask 077
+DATE=$(date '+%Y-%m-%d')
+LOCAL_DIR="$LOCAL_ROOT/$DATE"
+NFS_DIR="$NFS_ROOT/$DATE"
+
+# 日志:本地为主,收尾再 cp 一份到 NFS
+LOG_FILE="$LOCAL_ROOT/backup_log_$DATE.txt"
+ERR_LOG="$LOCAL_ROOT/backup_error_$DATE.log"
+
+mkdir -p "$LOCAL_DIR" "$NFS_DIR" 2>/dev/null
+
+START_TIMEALL=$(date +%s)
+FAIL_COUNT=0
+
+echo "Backup started at $(date)"      >  "$LOG_FILE"
+echo "Error log started at $(date)"   >  "$ERR_LOG"
+
+log() { echo "[$(date '+%F %T')] $*"        >> "$LOG_FILE"; }
+err() { echo "[$(date '+%F %T')] ERROR: $*" >> "$LOG_FILE"; FAIL_COUNT=$((FAIL_COUNT+1)); }
+
+contains_word() { local t="$1"; shift; local i; for i in "$@"; do [ "$i" = "$t" ] && return 0; done; return 1; }
+
+# 删除某个日期目录,并连带删除该日期对应的日志文件
+remove_date_dir() {
+    local root="$1" dir="$2" d
+    d=$(basename "$dir")    # 形如 2026-06-04
+    rm -rf "$dir"
+    rm -f "$root/backup_log_${d}.txt" "$root/backup_error_${d}.log"
+}
+
+# =========================
+# 命令检查
+# =========================
+for c in mysql mysqldump zip; do
+    command -v "$c" >/dev/null 2>&1 || { err "$c command not found"; echo "$c not found"; exit 1; }
+done
+
+# =========================
+# 凭据:临时 0600 选项文件,避免密码出现在 ps / 命令行
+# =========================
+CRED_FILE=$(mktemp /tmp/.mybak.XXXXXX) || { err "mktemp failed"; exit 1; }
+chmod 600 "$CRED_FILE"
+{
+    echo "[client]"
+    echo "user=$DB_USER"
+    echo "password=$DB_PASS"
+    [ -n "$DB_HOST" ] && echo "host=$DB_HOST"
+    echo "port=$DB_PORT"
+} > "$CRED_FILE"
+cleanup() { rm -f "$CRED_FILE"; }
+trap cleanup EXIT INT TERM
+
+MYSQL=(mysql --defaults-extra-file="$CRED_FILE")
+
+run_mysqldump() {
+    # 降低备份对业务的 CPU / IO 影响(本台存储长期卡顿,务必降优先级)
+    if command -v ionice >/dev/null 2>&1; then
+        ionice -c2 -n7 nice -n 19 mysqldump --defaults-extra-file="$CRED_FILE" "$@"
+    else
+        nice -n 19 mysqldump --defaults-extra-file="$CRED_FILE" "$@"
+    fi
+}
+
+table_exists() {
+    "${MYSQL[@]}" --batch --skip-column-names -e \
+        "SELECT 1 FROM information_schema.tables WHERE table_schema='$1' AND table_name='$2' LIMIT 1;" \
+        2>>"$ERR_LOG" | grep -q 1
+}
+
+# GTID 复制环境:--single-transaction 单独工作即可拿到一致性快照,纯 InnoDB 不需要 FTWRL。
+# 已移除 --source-data=2(它会强制 FLUSH TABLES WITH READ LOCK,易被业务长事务堵到 1205;
+# 且分库各记位点彼此不一致、GTID 复制也用不上 file/pos)。
+DUMP_COMMON_OPTS=(
+    --quick
+    --single-transaction
+    --set-gtid-purged=OFF
+    --routines --events --triggers
+    --max-allowed-packet=512M
+)
+
+# =========================
+# 目标盘可用空间预检(本地 + NFS)
+# =========================
+check_free() {
+    local path="$1" name="$2" avail_kb
+    avail_kb=$(df -Pk "$path" 2>/dev/null | awk 'NR==2{print $4}')
+    if [ -n "$avail_kb" ] && [ "$avail_kb" -lt $((MIN_FREE_GB*1024*1024)) ]; then
+        err "$name $path free < ${MIN_FREE_GB}GB (avail ${avail_kb}KB), abort"
+        echo "$name low on space"; exit 1
+    fi
+}
+check_free "$LOCAL_ROOT" "LOCAL"
+check_free "$NFS_ROOT"   "NFS"
+
+# =========================
+# 获取数据库列表
+# =========================
+DB_LIST_FILE="$LOCAL_DIR/.db_list_$$"
+if ! "${MYSQL[@]}" --batch --skip-column-names -e "SHOW DATABASES;" > "$DB_LIST_FILE" 2>>"$ERR_LOG"; then
+    err "Failed to get database list"; rm -f "$DB_LIST_FILE"; exit 1
+fi
+DB_NAMES=$(grep -Ev '^(information_schema|performance_schema|sys)$' "$DB_LIST_FILE")
+rm -f "$DB_LIST_FILE"
+[ -z "$DB_NAMES" ] && { err "No database found"; exit 1; }
+
+# =========================
+# 逐库备份
+# =========================
+for db_name in $DB_NAMES; do
+    log "==> Backing up database: $db_name"
+
+    if contains_word "$db_name" $EXCLUDE_DATABASES; then
+        log "Skip (excluded db): $db_name"; continue
+    fi
+
+    BACKUP_FILE="$LOCAL_DIR/${db_name}-$(date '+%Y-%m-%d-%H-%M-%S').sql"
+    ZIP_FILE="$BACKUP_FILE.zip"
+    START_TIME=$(date +%s)
+    DUMP_OK=1
+
+    # 组装本库的 --ignore-table:结构-only 表 + 完全排除表 都要忽略数据
+    IGNORE_OPTS=()
+    for ft in $STRUCTURE_ONLY_TABLES $FULL_IGNORE_TABLES; do
+        case "$ft" in
+            "$db_name".*) IGNORE_OPTS+=(--ignore-table="$ft");;
+        esac
+    done
+
+    if [ "$db_name" = "mysql" ]; then
+        run_mysqldump "${DUMP_COMMON_OPTS[@]}" \
+            --ignore-table=mysql.event --ignore-table=mysql.general_log --ignore-table=mysql.slow_log \
+            --databases "$db_name" > "$BACKUP_FILE" 2>>"$ERR_LOG" \
+            || { DUMP_OK=0; err "mysqldump failed: $db_name"; }
+
+    elif contains_word "$db_name" $STRUCTURE_ONLY_DATABASES; then
+        run_mysqldump "${DUMP_COMMON_OPTS[@]}" --no-data --databases "$db_name" \
+            > "$BACKUP_FILE" 2>>"$ERR_LOG" \
+            || { DUMP_OK=0; err "mysqldump structure-only db failed: $db_name"; }
+
+    else
+        # 主备份:导出本库,忽略大日志表/排除表的数据
+        run_mysqldump "${DUMP_COMMON_OPTS[@]}" "${IGNORE_OPTS[@]}" --databases "$db_name" \
+            > "$BACKUP_FILE" 2>>"$ERR_LOG" \
+            || { DUMP_OK=0; err "mysqldump failed: $db_name"; }
+
+        # 追加:被忽略的大日志表,单独补一份"只有结构"(FULL_IGNORE 的表不补)
+        if [ "$DUMP_OK" -eq 1 ]; then
+            for ft in $STRUCTURE_ONLY_TABLES; do
+                case "$ft" in
+                    "$db_name".*)
+                        t="${ft#*.}"
+                        if ! table_exists "$db_name" "$t"; then
+                            log "Skip structure-only (not found): $db_name.$t"; continue
+                        fi
+                        log "Dump structure only: $db_name.$t"
+                        run_mysqldump --set-gtid-purged=OFF --no-data "$db_name" "$t" \
+                            >> "$BACKUP_FILE" 2>>"$ERR_LOG" \
+                            || { DUMP_OK=0; err "structure-only table failed: $db_name.$t"; }
+                        ;;
+                esac
+            done
+        fi
+    fi
+
+    ELAPSED_DUMP=$(( $(date +%s) - START_TIME ))
+
+    if [ "$DUMP_OK" -ne 1 ] || [ ! -s "$BACKUP_FILE" ]; then
+        err "Invalid dump, keep for check: $BACKUP_FILE (dump ${ELAPSED_DUMP}s)"
+        continue
+    fi
+
+    # 压缩(带密码),成功后删 .sql,本地保留 .zip
+    START_ZIP=$(date +%s)
+    if zip -q -j -P "$ZIP_PASSWORD" "$ZIP_FILE" "$BACKUP_FILE" 2>>"$ERR_LOG" && [ -s "$ZIP_FILE" ]; then
+        rm -f "$BACKUP_FILE"
+    else
+        err "zip failed, keep sql: $BACKUP_FILE"; continue
+    fi
+    ELAPSED_ZIP=$(( $(date +%s) - START_ZIP ))
+
+    # 复制一份到 NFS(本地副本保留;逐个复制,分散 NFS 写入压力)
+    if cp -f "$ZIP_FILE" "$NFS_DIR/" 2>>"$ERR_LOG"; then
+        log "OK $db_name : dump ${ELAPSED_DUMP}s, zip ${ELAPSED_ZIP}s -> local:$ZIP_FILE | nfs:$NFS_DIR/$(basename "$ZIP_FILE")"
+    else
+        err "copy to NFS failed (local copy kept): $ZIP_FILE"
+    fi
+done
+
+# =========================
+# 保留策略 1:本地按【份数】保留最近 LOCAL_KEEP_COUNT 个日期目录
+# =========================
+mapfile -t LDIRS < <(ls -d "$LOCAL_ROOT"/20??-??-??/ 2>/dev/null | sort)   # 升序,最旧在前
+LCOUNT=${#LDIRS[@]}
+if [ "$LCOUNT" -gt "$LOCAL_KEEP_COUNT" ]; then
+    REMOVE_N=$((LCOUNT - LOCAL_KEEP_COUNT))
+    for ((i=0; i<REMOVE_N; i++)); do
+        log "Remove old LOCAL backup dir: ${LDIRS[$i]}"
+        remove_date_dir "$LOCAL_ROOT" "${LDIRS[$i]}"
+    done
+fi
+
+# =========================
+# 保留策略 2:NFS 按【容量】保留——从最旧开始删,直到可用空间 >= NFS_MIN_FREE_PERCENT%
+#            并保证至少保留 NFS_MIN_KEEP_COUNT 份
+# =========================
+nfs_used_pct() { df -Pk "$NFS_ROOT" 2>/dev/null | awk 'NR==2{gsub(/%/,"",$5); print $5}'; }
+TARGET_USED=$((100 - NFS_MIN_FREE_PERCENT))   # 例:留 20% 空余 => 用量需 <= 80%
+while :; do
+    mapfile -t NDIRS < <(ls -d "$NFS_ROOT"/20??-??-??/ 2>/dev/null | sort)  # 升序,最旧在前
+    [ "${#NDIRS[@]}" -le "$NFS_MIN_KEEP_COUNT" ] && break
+    USED=$(nfs_used_pct)
+    [ -z "$USED" ] && { err "cannot read NFS usage, skip NFS cleanup"; break; }
+    [ "$USED" -le "$TARGET_USED" ] && break
+    OLDEST="${NDIRS[0]}"
+    log "NFS used ${USED}% > ${TARGET_USED}%, remove oldest: $OLDEST"
+    remove_date_dir "$NFS_ROOT" "$OLDEST"
+done
+
+log "Backup finished in $(( $(date +%s) - START_TIMEALL ))s, failures=$FAIL_COUNT"
+
+# 收尾:把本次日志复制一份到 NFS
+cp -f "$LOG_FILE" "$ERR_LOG" "$NFS_ROOT/" 2>/dev/null
+
+# 任一库失败则非 0 退出,便于 cron / 监控捕获
+[ "$FAIL_COUNT" -eq 0 ] || exit 2
+exit 0
+
 ```
 
 
