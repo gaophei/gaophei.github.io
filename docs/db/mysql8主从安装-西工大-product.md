@@ -9564,6 +9564,84 @@ EOF
 
 ```
 
+#排查部分日志表
+
+```bash
+#!/bin/bash
+# mysql 数据库全量备份（排除大日志表数据，仅保留其表结构）
+username="root"
+mypasswd="xxxxxx"
+beginTime=`date +"%Y年%m月%d日 %H:%M:%S"`
+bakDir=/data/backup
+logFile=/data/backup/bak.log
+nowDate=`date +%Y%m%d`
+dumpFile="mysql_${nowDate}.sql"
+gzDumpFile="mysql_${nowDate}.sql.tgz"
+
+# 需要排除数据的大日志表（格式：库名.表名）
+ignoreTables=(
+    "authx_service.tb_l_online_log"
+    "authx_service.tb_l_apply_call_log"
+    "authx_service.tb_l_service_access_log"
+    "cas_server.tb_service_access_log"
+)
+
+# 组装 --ignore-table 参数
+ignoreArgs=""
+for t in "${ignoreTables[@]}"; do
+    ignoreArgs="${ignoreArgs} --ignore-table=${t}"
+done
+
+cd $bakDir
+
+# 第一步：全量备份，排除上述大表（数据 + 结构都不导出）
+/usr/bin/mysqldump -u${username} -p${mypasswd} --quick --events --all-databases \
+    --master-data=2 --single-transaction --set-gtid-purged=OFF \
+    ${ignoreArgs} > $dumpFile
+dumpStatus=$?
+
+# 备份失败则终止，不打包、不删旧备份、不写 succ
+if [ $dumpStatus -ne 0 ]; then
+    endTime=`date +"%Y年%m月%d日 %H:%M:%S"`
+    echo "开始:$beginTime 结束:$endTime mysqldump 失败(exit=$dumpStatus)，本次备份终止" >> $logFile
+    /usr/bin/rm -f $dumpFile
+    exit 1
+fi
+
+# 第二步：把这些大表的“表结构”单独追加进来（只要结构，不要数据）
+# 注意：单表 dump 默认不带 USE 语句，必须手动补 USE，否则恢复时建到错误的库里
+for t in "${ignoreTables[@]}"; do
+    db="${t%%.*}"
+    tbl="${t##*.}"
+    # 先确认该表确实存在，不存在就跳过（保证脚本在不同机器上的通用性）
+    exists=$(/usr/bin/mysql -u${username} -p${mypasswd} -N -B -e \
+        "SELECT COUNT(*) FROM information_schema.tables \
+         WHERE table_schema='${db}' AND table_name='${tbl}';" 2>/dev/null)
+    if [ "$exists" = "1" ]; then
+        echo "USE \`${db}\`;" >> $dumpFile
+        /usr/bin/mysqldump -u${username} -p${mypasswd} --no-data \
+            --set-gtid-purged=OFF "$db" "$tbl" >> $dumpFile
+    else
+        echo "  跳过不存在的表: ${db}.${tbl}" >> $logFile
+    fi
+done
+
+# 打包
+/usr/bin/tar -zcf $gzDumpFile $dumpFile
+/usr/bin/rm $dumpFile
+endTime=`date +"%Y年%m月%d日 %H:%M:%S"`
+echo "开始:$beginTime 结束:$endTime $gzDumpFile succ" >> $logFile
+
+# 备份完成后：分析所有库的表，更新优化器统计信息
+echo "===== mysqlcheck -Aa 开始: `date +"%Y-%m-%d %H:%M:%S"` =====" >> $logFile
+/usr/bin/mysqlcheck -Aa -u${username} -p${mypasswd} >> $logFile 2>&1
+echo "===== mysqlcheck -Aa 结束: `date +"%Y-%m-%d %H:%M:%S"` =====" >> $logFile
+
+# 删除过期备份
+find $bakDir -name 'mysql*.sql.tgz' -mtime +7 -exec rm {} \;
+
+```
+
 
 
 #
