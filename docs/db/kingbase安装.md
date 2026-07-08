@@ -967,6 +967,9 @@ vi /home/kingbase/.kbpass
 chmod 0600 /home/kingbase/.kbpass
 chown kingbase:kingbase /home/kingbase/.kbpass
 
+echo "kingbase" >> /etc/cron.allow
+
+
 su - kingbase
 
 ssh-keygen
