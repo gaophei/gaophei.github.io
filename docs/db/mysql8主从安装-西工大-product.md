@@ -9583,7 +9583,10 @@ ignoreTables=(
     "authx_service.tb_l_online_log"
     "authx_service.tb_l_apply_call_log"
     "authx_service.tb_l_service_access_log"
-    "cas_server.tb_service_access_log"
+    "authx_log.tb_l_authentication_log"
+    "cas_server.tb_authentication_log "
+    "qywx_sync.link_url_config"
+    "qywx_sync.blade_log_usual"
 )
 
 # 组装 --ignore-table 参数
@@ -10901,4 +10904,1158 @@ done
 firewall-cmd --permanent --zone=public --add-port=3306/tcp
 firewall-cmd --reload
 ```
+
+
+
+### 八、mysql双主单写备份方案
+
+整体设计是：
+
+- **周一到周六**：跑“分库备份 + 大日志表只导结构 + 异地同步”。
+- **周日**：跑“全实例一致性备份 + 异地同步”，作为跨库一致的周级恢复基线。
+- 双主场景：**双主单写，只在 VIP 所在主机写入**。
+- 备份目标：本地 `/data/backup/mysql/`，异地 `backup@10.4.1.2:/home/backup/mysql/`。
+
+---
+
+## 1. 备份策略
+
+### 1.1 每日分库备份
+
+执行时间：**周一到周六 01:30**
+
+特点：
+
+- 每个数据库单独生成一个 `.sql.gz` 文件。
+- 大日志表只导出表结构，不导出数据。
+- 备份完成后逐个 rsync 到异地。
+- 本地保留 7 天。
+- 异地保留 15 天。
+- 适合日常快速恢复单库、单表、误删数据等场景。
+
+### 1.2 每周全实例一致性备份
+
+执行时间：**每周日 01:30**
+
+特点：
+
+- 使用一次 `mysqldump --all-databases --single-transaction`。
+- 所有库在一个事务快照中完成，跨库一致性比每日分库备份更好。
+- 不排除日志表，是真正的全实例逻辑备份。
+- 本地保留 4 周。
+- 异地保留 8 周。
+- 适合作为灾难恢复、跨库一致性恢复基线。
+
+------
+
+# 2. 目录规划
+
+本地：
+
+```bash
+/data/backup/mysql/
+├── conf/
+├── scripts/
+├── daily/
+│   └── 2026-07-16/
+├── weekly/
+│   └── 2026-07-19/
+└── logs/
+```
+
+异地：
+
+```bash
+/home/backup/mysql/
+├── daily/
+│   └── 2026-07-16/
+├── weekly/
+│   └── 2026-07-19/
+└── logs/
+```
+
+------
+
+# 3. 实施步骤
+
+## 3.1 创建本地目录
+
+```bash
+mkdir -p /data/backup/mysql/{conf,scripts,daily,weekly,logs}
+chmod 700 /data/backup/mysql
+chmod 700 /data/backup/mysql/conf
+chmod 700 /data/backup/mysql/scripts
+```
+
+## 3.2 创建 MySQL 连接配置文件
+
+建议不要把 MySQL 密码直接写到脚本里。
+
+创建：
+
+```bash
+vi /root/.my_backup.cnf
+```
+
+内容如下，密码改成现场真实密码：
+
+```ini
+[client]
+user=root
+password=Abc123!@#
+host=222.204.70.86
+port=3306
+```
+
+授权：
+
+```bash
+chmod 600 /root/.my_backup.cnf
+```
+
+测试：
+
+```bash
+mysql --defaults-extra-file=/root/.my_backup.cnf -e "SELECT @@hostname, @@server_id, @@server_uuid, @@read_only, @@super_read_only;"
+```
+
+正常情况下，VIP 所在主库应该满足：
+
+```text
+@@read_only = 0
+@@super_read_only = 0
+```
+
+如果这里显示只读，说明 VIP 当前可能没有漂移到写主，脚本会中止，避免备错节点。
+
+------
+
+## 3.3 准备异地目录
+
+```bash
+ssh backup@10.4.1.2 "mkdir -p /home/backup/mysql/{daily,weekly,logs}"
+```
+
+测试写入权限：
+
+```bash
+ssh backup@10.4.1.2 "echo ok > /home/backup/mysql/write_test.txt && cat /home/backup/mysql/write_test.txt && rm -f /home/backup/mysql/write_test.txt"
+```
+
+测试 rsync：
+
+```bash
+echo test > /tmp/rsync_test.txt
+rsync -t --partial /tmp/rsync_test.txt backup@10.4.1.2:/home/backup/mysql/
+ssh backup@10.4.1.2 "ls -l /home/backup/mysql/rsync_test.txt && rm -f /home/backup/mysql/rsync_test.txt"
+rm -f /tmp/rsync_test.txt
+```
+
+------
+
+# 4. 公共配置文件
+
+创建：
+
+```bash
+vi /data/backup/mysql/conf/mysql_backup.conf
+```
+
+内容如下：
+
+```bash
+# MySQL 备份公共配置
+
+# MySQL 连接配置文件
+MYSQL_CNF="/root/.my_backup.cnf"
+
+# 本地目录
+LOCAL_BASE="/data/backup/mysql"
+LOCAL_DAILY_ROOT="${LOCAL_BASE}/daily"
+LOCAL_WEEKLY_ROOT="${LOCAL_BASE}/weekly"
+LOCAL_LOG_ROOT="${LOCAL_BASE}/logs"
+
+# 异地目录
+REMOTE_USER="backup"
+REMOTE_HOST="10.4.1.2"
+REMOTE_PORT="22"
+REMOTE_BASE="/home/backup/mysql"
+REMOTE_DAILY_ROOT="${REMOTE_BASE}/daily"
+REMOTE_WEEKLY_ROOT="${REMOTE_BASE}/weekly"
+REMOTE_LOG_ROOT="${REMOTE_BASE}/logs"
+
+# 如果使用专用私钥，填写路径；如果使用默认免密，保持空
+REMOTE_SSH_KEY=""
+
+# rsync 限速，单位 KB/s；0 表示不限速
+REMOTE_BWLIMIT=0
+
+# 本地空间最低要求，单位 GB
+MIN_FREE_GB=30
+
+# 每日分库备份保留策略
+DAILY_LOCAL_KEEP_DAYS=7
+DAILY_REMOTE_KEEP_DAYS=15
+
+# 每周全实例备份保留策略
+WEEKLY_LOCAL_KEEP_WEEKS=4
+WEEKLY_REMOTE_KEEP_WEEKS=8
+
+# 是否强制要求 VIP 当前连接实例为可写主库
+# 双主单写场景建议保持 1
+REQUIRE_WRITABLE=1
+
+# 完全排除的库，空格分隔
+EXCLUDE_DATABASES=""
+
+# 只导结构的库，空格分隔
+STRUCTURE_ONLY_DATABASES=""
+
+# 只导结构、不导数据的表
+# 这里保留你当前脚本中的清单；如不需要某些表，可直接从这里删除
+STRUCTURE_ONLY_TABLES="authx_log.tb_l_apply_call_log authx_log.tb_l_online_log authx_log.tb_l_authentication_log authx_log.tb_l_service_access_log authx_log.tb_l_pers_operate_log authx_log.tb_l_pers_operate_detail_log cas_server.tb_service_access_log cas_server.tb_authentication_log cas_server.tb_sso_log user.tb_b_sys_log qywx_sync.blade_log_usual qywx_sync.link_url_config portal_timesync.job_log_detail_xshd_cms portal_timesync.job_log_detail_xshd_rcn"
+
+# 完全排除的表，结构和数据都不备
+FULL_IGNORE_TABLES="transaction.app_copy user.bks2024"
+```
+
+授权：
+
+```bash
+chmod 600 /data/backup/mysql/conf/mysql_backup.conf
+```
+
+------
+
+# 5. 每日分库备份脚本
+
+创建：
+
+```bash
+vi /data/backup/mysql/scripts/mysql_daily_split_backup.sh
+```
+
+内容如下：
+
+```bash
+#!/bin/bash
+# MySQL 双主单写 - 每日分库备份 + 大日志表只导结构 + rsync 异地备份
+
+set -o pipefail
+export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+umask 077
+
+CONF_FILE="/data/backup/mysql/conf/mysql_backup.conf"
+[ -f "$CONF_FILE" ] || { echo "config not found: $CONF_FILE"; exit 1; }
+source "$CONF_FILE"
+
+DATE=$(date '+%Y-%m-%d')
+LOCAL_DIR="${LOCAL_DAILY_ROOT}/${DATE}"
+REMOTE_DIR="${REMOTE_DAILY_ROOT}/${DATE}"
+LOG_FILE="${LOCAL_LOG_ROOT}/daily_backup_${DATE}.log"
+ERR_LOG="${LOCAL_LOG_ROOT}/daily_backup_${DATE}.err"
+
+mkdir -p "$LOCAL_DIR" "$LOCAL_LOG_ROOT" || {
+    echo "create local dir failed"
+    exit 1
+}
+
+exec 9>/var/run/mysql_backup_global.lock
+flock -n 9 || {
+    echo "mysql backup already running"
+    exit 0
+}
+
+FAIL_COUNT=0
+START_TIME_ALL=$(date +%s)
+
+log() {
+    echo "[$(date '+%F %T')] $*" >> "$LOG_FILE"
+}
+
+err() {
+    echo "[$(date '+%F %T')] ERROR: $*" >> "$LOG_FILE"
+    echo "[$(date '+%F %T')] ERROR: $*" >> "$ERR_LOG"
+    FAIL_COUNT=$((FAIL_COUNT+1))
+}
+
+contains_word() {
+    local target="$1"
+    shift
+    local item
+    for item in "$@"; do
+        [ "$item" = "$target" ] && return 0
+    done
+    return 1
+}
+
+safe_abs_path() {
+    local p="$1"
+    case "$p" in
+        ""|"/"|"/home"|"/data"|"/tmp"|"/var"|"/usr")
+            return 1
+            ;;
+        /*)
+            return 0
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
+is_date_name() {
+    local d="$1"
+    [[ "$d" =~ ^20[0-9][0-9]-[0-1][0-9]-[0-3][0-9]$ ]]
+}
+
+build_ssh() {
+    SSH_BASE=(ssh -p "$REMOTE_PORT" -o BatchMode=yes -o ConnectTimeout=15 -o StrictHostKeyChecking=accept-new)
+    if [ -n "${REMOTE_SSH_KEY:-}" ]; then
+        SSH_BASE+=(-i "$REMOTE_SSH_KEY")
+    fi
+    SSH=("${SSH_BASE[@]}" "${REMOTE_USER}@${REMOTE_HOST}")
+
+    if [ -n "${REMOTE_SSH_KEY:-}" ]; then
+        RSYNC_RSH="ssh -i ${REMOTE_SSH_KEY} -p ${REMOTE_PORT} -o BatchMode=yes -o ConnectTimeout=15 -o StrictHostKeyChecking=accept-new"
+    else
+        RSYNC_RSH="ssh -p ${REMOTE_PORT} -o BatchMode=yes -o ConnectTimeout=15 -o StrictHostKeyChecking=accept-new"
+    fi
+
+    RSYNC_OPTS=(-t --partial --timeout=600)
+    if [ "${REMOTE_BWLIMIT:-0}" -gt 0 ]; then
+        RSYNC_OPTS+=(--bwlimit="$REMOTE_BWLIMIT")
+    fi
+}
+
+run_mysqldump() {
+    if command -v ionice >/dev/null 2>&1; then
+        ionice -c2 -n7 nice -n 19 mysqldump --defaults-extra-file="$MYSQL_CNF" "$@"
+    else
+        nice -n 19 mysqldump --defaults-extra-file="$MYSQL_CNF" "$@"
+    fi
+}
+
+push_remote() {
+    local src="$1"
+    if command -v ionice >/dev/null 2>&1; then
+        ionice -c2 -n7 nice -n 19 rsync "${RSYNC_OPTS[@]}" -e "$RSYNC_RSH" "$src" "${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_DIR}/" 2>>"$ERR_LOG"
+    else
+        nice -n 19 rsync "${RSYNC_OPTS[@]}" -e "$RSYNC_RSH" "$src" "${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_DIR}/" 2>>"$ERR_LOG"
+    fi
+}
+
+table_exists() {
+    local db="$1"
+    local tb="$2"
+    mysql --defaults-extra-file="$MYSQL_CNF" --batch --skip-column-names -e \
+        "SELECT 1 FROM information_schema.tables WHERE table_schema='${db}' AND table_name='${tb}' LIMIT 1;" \
+        2>>"$ERR_LOG" | grep -q 1
+}
+
+check_commands() {
+    local c
+    for c in mysql mysqldump gzip rsync ssh flock df awk; do
+        command -v "$c" >/dev/null 2>&1 || {
+            echo "$c command not found"
+            exit 1
+        }
+    done
+}
+
+check_safe_paths() {
+    safe_abs_path "$LOCAL_DAILY_ROOT" || { echo "dangerous LOCAL_DAILY_ROOT: $LOCAL_DAILY_ROOT"; exit 1; }
+    safe_abs_path "$REMOTE_DAILY_ROOT" || { echo "dangerous REMOTE_DAILY_ROOT: $REMOTE_DAILY_ROOT"; exit 1; }
+}
+
+check_local_space() {
+    local avail_kb
+    avail_kb=$(df -Pk "$LOCAL_BASE" 2>/dev/null | awk 'NR==2{print $4}')
+    if [ -n "$avail_kb" ] && [ "$avail_kb" -lt $((MIN_FREE_GB*1024*1024)) ]; then
+        err "local free space < ${MIN_FREE_GB}GB, avail=${avail_kb}KB"
+        exit 1
+    fi
+}
+
+check_mysql_writable_vip() {
+    local info ro sro
+    info=$(mysql --defaults-extra-file="$MYSQL_CNF" --batch --skip-column-names -e \
+        "SELECT @@hostname, @@server_id, @@server_uuid, @@read_only, @@super_read_only;" 2>>"$ERR_LOG") || {
+        err "cannot connect mysql by MYSQL_CNF"
+        exit 1
+    }
+
+    log "mysql instance: ${info}"
+
+    ro=$(echo "$info" | awk -F '\t' '{print $4}')
+    sro=$(echo "$info" | awk -F '\t' '{print $5}')
+
+    if [ "${REQUIRE_WRITABLE:-1}" -eq 1 ]; then
+        if [ "$ro" != "0" ] || [ "$sro" != "0" ]; then
+            err "current VIP mysql is not writable, read_only=${ro}, super_read_only=${sro}, abort"
+            exit 1
+        fi
+    fi
+}
+
+record_replication_status() {
+    {
+        echo ""
+        echo "===== MySQL backup start status: $(date '+%F %T') ====="
+        mysql --defaults-extra-file="$MYSQL_CNF" -e "SELECT NOW() AS now_time, @@hostname, @@server_id, @@server_uuid, @@gtid_mode, @@read_only, @@super_read_only;"
+        mysql --defaults-extra-file="$MYSQL_CNF" -e "SHOW MASTER STATUS;"
+        mysql --defaults-extra-file="$MYSQL_CNF" -e "SHOW SLAVE STATUS\G"
+        echo "===== End MySQL status ====="
+        echo ""
+    } >> "$LOG_FILE" 2>>"$ERR_LOG"
+}
+
+cleanup_local_daily() {
+    find "$LOCAL_DAILY_ROOT" -maxdepth 1 -type d -name '20??-??-??' -mtime +"$DAILY_LOCAL_KEEP_DAYS" -print | sort | while read -r dir; do
+        d=$(basename "$dir")
+        if is_date_name "$d"; then
+            log "remove old local daily dir: $dir"
+            rm -rf "$dir"
+        else
+            err "skip invalid local daily dir: $dir"
+        fi
+    done
+
+    find "$LOCAL_LOG_ROOT" -maxdepth 1 -type f -name 'daily_backup_20??-??-??.*' -mtime +"$DAILY_LOCAL_KEEP_DAYS" -print -delete >> "$LOG_FILE" 2>>"$ERR_LOG"
+}
+
+cleanup_remote_daily() {
+    "${SSH[@]}" "find '$REMOTE_DAILY_ROOT' -maxdepth 1 -type d -name '20??-??-??' -mtime +$DAILY_REMOTE_KEEP_DAYS -print" 2>>"$ERR_LOG" | while read -r dir; do
+        d=$(basename "$dir")
+        if is_date_name "$d"; then
+            log "remove old remote daily dir: $dir"
+            "${SSH[@]}" "rm -rf '$dir'" 2>>"$ERR_LOG" || err "remove remote daily dir failed: $dir"
+        else
+            err "skip invalid remote daily dir: $dir"
+        fi
+    done
+}
+
+log "daily split backup started"
+
+check_commands
+check_safe_paths
+build_ssh
+check_local_space
+check_mysql_writable_vip
+
+if ! "${SSH[@]}" "mkdir -p '$REMOTE_DIR' '$REMOTE_LOG_ROOT'" 2>>"$ERR_LOG"; then
+    err "remote mkdir failed: ${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_DIR}"
+    exit 1
+fi
+
+record_replication_status
+
+DUMP_COMMON_OPTS=(
+    --quick
+    --single-transaction
+    --set-gtid-purged=OFF
+    --routines
+    --events
+    --triggers
+    --max-allowed-packet=512M
+)
+
+DB_LIST_FILE="${LOCAL_DIR}/.db_list_$$"
+
+if ! mysql --defaults-extra-file="$MYSQL_CNF" --batch --skip-column-names -e "SHOW DATABASES;" > "$DB_LIST_FILE" 2>>"$ERR_LOG"; then
+    err "failed to get database list"
+    rm -f "$DB_LIST_FILE"
+    exit 1
+fi
+
+DB_NAMES=$(grep -Ev '^(information_schema|performance_schema|sys)$' "$DB_LIST_FILE")
+rm -f "$DB_LIST_FILE"
+
+if [ -z "$DB_NAMES" ]; then
+    err "no database found"
+    exit 1
+fi
+
+for db_name in $DB_NAMES; do
+    log "==> backing up database: $db_name"
+
+    if contains_word "$db_name" $EXCLUDE_DATABASES; then
+        log "skip excluded database: $db_name"
+        continue
+    fi
+
+    BACKUP_FILE="${LOCAL_DIR}/${db_name}-$(date '+%Y-%m-%d-%H-%M-%S').sql"
+    GZ_FILE="${BACKUP_FILE}.gz"
+    START_TIME=$(date +%s)
+    DUMP_OK=1
+
+    IGNORE_OPTS=()
+    for ft in $STRUCTURE_ONLY_TABLES $FULL_IGNORE_TABLES; do
+        case "$ft" in
+            "$db_name".*)
+                IGNORE_OPTS+=(--ignore-table="$ft")
+                ;;
+        esac
+    done
+
+    if [ "$db_name" = "mysql" ]; then
+        run_mysqldump "${DUMP_COMMON_OPTS[@]}" \
+            --ignore-table=mysql.event \
+            --ignore-table=mysql.general_log \
+            --ignore-table=mysql.slow_log \
+            --databases "$db_name" > "$BACKUP_FILE" 2>>"$ERR_LOG" \
+            || { DUMP_OK=0; err "mysqldump failed: $db_name"; }
+
+    elif contains_word "$db_name" $STRUCTURE_ONLY_DATABASES; then
+        run_mysqldump "${DUMP_COMMON_OPTS[@]}" --no-data --databases "$db_name" > "$BACKUP_FILE" 2>>"$ERR_LOG" \
+            || { DUMP_OK=0; err "mysqldump structure-only database failed: $db_name"; }
+
+    else
+        run_mysqldump "${DUMP_COMMON_OPTS[@]}" "${IGNORE_OPTS[@]}" --databases "$db_name" > "$BACKUP_FILE" 2>>"$ERR_LOG" \
+            || { DUMP_OK=0; err "mysqldump failed: $db_name"; }
+
+        if [ "$DUMP_OK" -eq 1 ]; then
+            for ft in $STRUCTURE_ONLY_TABLES; do
+                case "$ft" in
+                    "$db_name".*)
+                        tb="${ft#*.}"
+                        if ! table_exists "$db_name" "$tb"; then
+                            log "skip structure-only table not found: $db_name.$tb"
+                            continue
+                        fi
+
+                        log "append structure only: $db_name.$tb"
+                        run_mysqldump \
+                            --set-gtid-purged=OFF \
+                            --no-data \
+                            --skip-lock-tables \
+                            --triggers \
+                            --max-allowed-packet=512M \
+                            "$db_name" "$tb" >> "$BACKUP_FILE" 2>>"$ERR_LOG" \
+                            || { DUMP_OK=0; err "structure-only table failed: $db_name.$tb"; }
+                        ;;
+                esac
+            done
+        fi
+    fi
+
+    ELAPSED_DUMP=$(( $(date +%s) - START_TIME ))
+
+    if [ "$DUMP_OK" -ne 1 ] || [ ! -s "$BACKUP_FILE" ]; then
+        err "invalid dump, keep sql for check: $BACKUP_FILE, dump_seconds=${ELAPSED_DUMP}"
+        continue
+    fi
+
+    START_GZIP=$(date +%s)
+    if gzip -1 "$BACKUP_FILE" 2>>"$ERR_LOG" && [ -s "$GZ_FILE" ]; then
+        ELAPSED_GZIP=$(( $(date +%s) - START_GZIP ))
+    else
+        err "gzip failed: $BACKUP_FILE"
+        continue
+    fi
+
+    START_RSYNC=$(date +%s)
+    if push_remote "$GZ_FILE"; then
+        ELAPSED_RSYNC=$(( $(date +%s) - START_RSYNC ))
+        log "OK $db_name : dump=${ELAPSED_DUMP}s gzip=${ELAPSED_GZIP}s rsync=${ELAPSED_RSYNC}s local=$GZ_FILE remote=${REMOTE_HOST}:${REMOTE_DIR}/$(basename "$GZ_FILE")"
+    else
+        err "rsync failed: $GZ_FILE"
+    fi
+done
+
+record_replication_status
+
+cleanup_local_daily
+cleanup_remote_daily
+
+nice -n 19 rsync "${RSYNC_OPTS[@]}" -e "$RSYNC_RSH" "$LOG_FILE" "$ERR_LOG" "${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_LOG_ROOT}/" 2>/dev/null
+
+log "daily split backup finished, total_seconds=$(( $(date +%s) - START_TIME_ALL )), failures=$FAIL_COUNT"
+
+[ "$FAIL_COUNT" -eq 0 ] || exit 2
+exit 0
+```
+
+授权：
+
+```bash
+chmod 700 /data/backup/mysql/scripts/mysql_daily_split_backup.sh
+```
+
+------
+
+# 6. 每周全实例一致性备份脚本
+
+创建：
+
+```bash
+vi /data/backup/mysql/scripts/mysql_weekly_full_consistent_backup.sh
+```
+
+内容如下：
+
+```bash
+#!/bin/bash
+# MySQL 双主单写 - 每周全实例一致性备份 + rsync 异地备份
+
+set -o pipefail
+export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+umask 077
+
+CONF_FILE="/data/backup/mysql/conf/mysql_backup.conf"
+[ -f "$CONF_FILE" ] || { echo "config not found: $CONF_FILE"; exit 1; }
+source "$CONF_FILE"
+
+DATE=$(date '+%Y-%m-%d')
+LOCAL_DIR="${LOCAL_WEEKLY_ROOT}/${DATE}"
+REMOTE_DIR="${REMOTE_WEEKLY_ROOT}/${DATE}"
+LOG_FILE="${LOCAL_LOG_ROOT}/weekly_full_backup_${DATE}.log"
+ERR_LOG="${LOCAL_LOG_ROOT}/weekly_full_backup_${DATE}.err"
+
+mkdir -p "$LOCAL_DIR" "$LOCAL_LOG_ROOT" || {
+    echo "create local dir failed"
+    exit 1
+}
+
+exec 9>/var/run/mysql_backup_global.lock
+flock -n 9 || {
+    echo "mysql backup already running"
+    exit 0
+}
+
+FAIL_COUNT=0
+START_TIME_ALL=$(date +%s)
+
+log() {
+    echo "[$(date '+%F %T')] $*" >> "$LOG_FILE"
+}
+
+err() {
+    echo "[$(date '+%F %T')] ERROR: $*" >> "$LOG_FILE"
+    echo "[$(date '+%F %T')] ERROR: $*" >> "$ERR_LOG"
+    FAIL_COUNT=$((FAIL_COUNT+1))
+}
+
+safe_abs_path() {
+    local p="$1"
+    case "$p" in
+        ""|"/"|"/home"|"/data"|"/tmp"|"/var"|"/usr")
+            return 1
+            ;;
+        /*)
+            return 0
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
+is_date_name() {
+    local d="$1"
+    [[ "$d" =~ ^20[0-9][0-9]-[0-1][0-9]-[0-3][0-9]$ ]]
+}
+
+build_ssh() {
+    SSH_BASE=(ssh -p "$REMOTE_PORT" -o BatchMode=yes -o ConnectTimeout=15 -o StrictHostKeyChecking=accept-new)
+    if [ -n "${REMOTE_SSH_KEY:-}" ]; then
+        SSH_BASE+=(-i "$REMOTE_SSH_KEY")
+    fi
+    SSH=("${SSH_BASE[@]}" "${REMOTE_USER}@${REMOTE_HOST}")
+
+    if [ -n "${REMOTE_SSH_KEY:-}" ]; then
+        RSYNC_RSH="ssh -i ${REMOTE_SSH_KEY} -p ${REMOTE_PORT} -o BatchMode=yes -o ConnectTimeout=15 -o StrictHostKeyChecking=accept-new"
+    else
+        RSYNC_RSH="ssh -p ${REMOTE_PORT} -o BatchMode=yes -o ConnectTimeout=15 -o StrictHostKeyChecking=accept-new"
+    fi
+
+    RSYNC_OPTS=(-t --partial --timeout=600)
+    if [ "${REMOTE_BWLIMIT:-0}" -gt 0 ]; then
+        RSYNC_OPTS+=(--bwlimit="$REMOTE_BWLIMIT")
+    fi
+}
+
+run_mysqldump() {
+    if command -v ionice >/dev/null 2>&1; then
+        ionice -c2 -n7 nice -n 19 mysqldump --defaults-extra-file="$MYSQL_CNF" "$@"
+    else
+        nice -n 19 mysqldump --defaults-extra-file="$MYSQL_CNF" "$@"
+    fi
+}
+
+check_commands() {
+    local c
+    for c in mysql mysqldump gzip rsync ssh flock df awk; do
+        command -v "$c" >/dev/null 2>&1 || {
+            echo "$c command not found"
+            exit 1
+        }
+    done
+}
+
+check_safe_paths() {
+    safe_abs_path "$LOCAL_WEEKLY_ROOT" || { echo "dangerous LOCAL_WEEKLY_ROOT: $LOCAL_WEEKLY_ROOT"; exit 1; }
+    safe_abs_path "$REMOTE_WEEKLY_ROOT" || { echo "dangerous REMOTE_WEEKLY_ROOT: $REMOTE_WEEKLY_ROOT"; exit 1; }
+}
+
+check_local_space() {
+    local avail_kb
+    avail_kb=$(df -Pk "$LOCAL_BASE" 2>/dev/null | awk 'NR==2{print $4}')
+    if [ -n "$avail_kb" ] && [ "$avail_kb" -lt $((MIN_FREE_GB*1024*1024)) ]; then
+        err "local free space < ${MIN_FREE_GB}GB, avail=${avail_kb}KB"
+        exit 1
+    fi
+}
+
+check_mysql_writable_vip() {
+    local info ro sro
+    info=$(mysql --defaults-extra-file="$MYSQL_CNF" --batch --skip-column-names -e \
+        "SELECT @@hostname, @@server_id, @@server_uuid, @@read_only, @@super_read_only;" 2>>"$ERR_LOG") || {
+        err "cannot connect mysql by MYSQL_CNF"
+        exit 1
+    }
+
+    log "mysql instance: ${info}"
+
+    ro=$(echo "$info" | awk -F '\t' '{print $4}')
+    sro=$(echo "$info" | awk -F '\t' '{print $5}')
+
+    if [ "${REQUIRE_WRITABLE:-1}" -eq 1 ]; then
+        if [ "$ro" != "0" ] || [ "$sro" != "0" ]; then
+            err "current VIP mysql is not writable, read_only=${ro}, super_read_only=${sro}, abort"
+            exit 1
+        fi
+    fi
+}
+
+record_replication_status() {
+    {
+        echo ""
+        echo "===== MySQL full backup status: $(date '+%F %T') ====="
+        mysql --defaults-extra-file="$MYSQL_CNF" -e "SELECT NOW() AS now_time, @@hostname, @@server_id, @@server_uuid, @@gtid_mode, @@read_only, @@super_read_only;"
+        mysql --defaults-extra-file="$MYSQL_CNF" -e "SHOW MASTER STATUS;"
+        mysql --defaults-extra-file="$MYSQL_CNF" -e "SHOW SLAVE STATUS\G"
+        echo "===== End MySQL status ====="
+        echo ""
+    } >> "$LOG_FILE" 2>>"$ERR_LOG"
+}
+
+record_non_innodb_tables() {
+    {
+        echo ""
+        echo "===== Non-InnoDB tables check ====="
+        mysql --defaults-extra-file="$MYSQL_CNF" -e "
+SELECT table_schema, table_name, engine
+FROM information_schema.tables
+WHERE table_type='BASE TABLE'
+  AND table_schema NOT IN ('mysql','information_schema','performance_schema','sys')
+  AND engine <> 'InnoDB'
+ORDER BY table_schema, table_name;"
+        echo "===== End Non-InnoDB check ====="
+        echo ""
+    } >> "$LOG_FILE" 2>>"$ERR_LOG"
+}
+
+cleanup_local_weekly() {
+    find "$LOCAL_WEEKLY_ROOT" -maxdepth 1 -type d -name '20??-??-??' -mtime +$((WEEKLY_LOCAL_KEEP_WEEKS*7)) -print | sort | while read -r dir; do
+        d=$(basename "$dir")
+        if is_date_name "$d"; then
+            log "remove old local weekly dir: $dir"
+            rm -rf "$dir"
+        else
+            err "skip invalid local weekly dir: $dir"
+        fi
+    done
+
+    find "$LOCAL_LOG_ROOT" -maxdepth 1 -type f -name 'weekly_full_backup_20??-??-??.*' -mtime +$((WEEKLY_LOCAL_KEEP_WEEKS*7)) -print -delete >> "$LOG_FILE" 2>>"$ERR_LOG"
+}
+
+cleanup_remote_weekly() {
+    "${SSH[@]}" "find '$REMOTE_WEEKLY_ROOT' -maxdepth 1 -type d -name '20??-??-??' -mtime +$((WEEKLY_REMOTE_KEEP_WEEKS*7)) -print" 2>>"$ERR_LOG" | while read -r dir; do
+        d=$(basename "$dir")
+        if is_date_name "$d"; then
+            log "remove old remote weekly dir: $dir"
+            "${SSH[@]}" "rm -rf '$dir'" 2>>"$ERR_LOG" || err "remove remote weekly dir failed: $dir"
+        else
+            err "skip invalid remote weekly dir: $dir"
+        fi
+    done
+}
+
+log "weekly full consistent backup started"
+
+check_commands
+check_safe_paths
+build_ssh
+check_local_space
+check_mysql_writable_vip
+
+if ! "${SSH[@]}" "mkdir -p '$REMOTE_DIR' '$REMOTE_LOG_ROOT'" 2>>"$ERR_LOG"; then
+    err "remote mkdir failed: ${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_DIR}"
+    exit 1
+fi
+
+record_replication_status
+record_non_innodb_tables
+
+BACKUP_FILE="${LOCAL_DIR}/mysql_full_${DATE}.sql"
+GZ_FILE="${BACKUP_FILE}.gz"
+
+DUMP_OPTS=(
+    --quick
+    --single-transaction
+    --set-gtid-purged=OFF
+    --routines
+    --events
+    --triggers
+    --all-databases
+    --max-allowed-packet=512M
+)
+
+START_DUMP=$(date +%s)
+
+if run_mysqldump "${DUMP_OPTS[@]}" 2>>"$ERR_LOG" | gzip -1 > "$GZ_FILE"; then
+    :
+else
+    err "weekly full mysqldump or gzip failed"
+    rm -f "$GZ_FILE"
+    exit 1
+fi
+
+ELAPSED_DUMP=$(( $(date +%s) - START_DUMP ))
+
+if [ ! -s "$GZ_FILE" ]; then
+    err "weekly full backup file is empty: $GZ_FILE"
+    exit 1
+fi
+
+log "weekly full dump finished: $GZ_FILE, seconds=$ELAPSED_DUMP"
+
+START_RSYNC=$(date +%s)
+if nice -n 19 rsync "${RSYNC_OPTS[@]}" -e "$RSYNC_RSH" "$GZ_FILE" "${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_DIR}/" 2>>"$ERR_LOG"; then
+    ELAPSED_RSYNC=$(( $(date +%s) - START_RSYNC ))
+    log "weekly full rsync OK: remote=${REMOTE_HOST}:${REMOTE_DIR}/$(basename "$GZ_FILE"), seconds=$ELAPSED_RSYNC"
+else
+    err "weekly full rsync failed: $GZ_FILE"
+fi
+
+record_replication_status
+
+cleanup_local_weekly
+cleanup_remote_weekly
+
+nice -n 19 rsync "${RSYNC_OPTS[@]}" -e "$RSYNC_RSH" "$LOG_FILE" "$ERR_LOG" "${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_LOG_ROOT}/" 2>/dev/null
+
+log "weekly full consistent backup finished, total_seconds=$(( $(date +%s) - START_TIME_ALL )), failures=$FAIL_COUNT"
+
+[ "$FAIL_COUNT" -eq 0 ] || exit 2
+exit 0
+```
+
+授权：
+
+```bash
+chmod 700 /data/backup/mysql/scripts/mysql_weekly_full_consistent_backup.sh
+```
+
+------
+
+# 7. 配置 crontab
+
+建议周一到周六跑每日分库备份，周日跑全实例一致性备份。
+
+```bash
+crontab -e
+```
+
+加入：
+
+```cron
+30 1 * * 1-6 /usr/bin/bash /data/backup/mysql/scripts/mysql_daily_split_backup.sh >/dev/null 2>&1
+30 1 * * 0 /usr/bin/bash /data/backup/mysql/scripts/mysql_weekly_full_consistent_backup.sh >/dev/null 2>&1
+```
+
+查看确认：
+
+```bash
+crontab -l
+```
+
+如果你坚持“周日也跑每日分库备份 + 周日再跑全实例备份”，可以改成：
+
+```cron
+30 1 * * * /usr/bin/bash /data/backup/mysql/scripts/mysql_daily_split_backup.sh >/dev/null 2>&1
+30 4 * * 0 /usr/bin/bash /data/backup/mysql/scripts/mysql_weekly_full_consistent_backup.sh >/dev/null 2>&1
+```
+
+但我不建议这样做，周日压力会比较大。
+
+------
+
+# 8. 上线前检查
+
+## 8.1 检查脚本语法
+
+```bash
+bash -n /data/backup/mysql/scripts/mysql_daily_split_backup.sh
+bash -n /data/backup/mysql/scripts/mysql_weekly_full_consistent_backup.sh
+```
+
+## 8.2 检查依赖命令
+
+```bash
+which mysql mysqldump gzip rsync ssh flock df awk
+```
+
+缺哪个装哪个，例如 CentOS/RHEL：
+
+```bash
+yum install -y rsync gzip util-linux
+```
+
+## 8.3 检查 VIP 当前连接实例
+
+```bash
+mysql --defaults-extra-file=/root/.my_backup.cnf -e "
+SELECT @@hostname, @@server_id, @@server_uuid, @@read_only, @@super_read_only, @@gtid_mode;
+SHOW MASTER STATUS;
+SHOW SLAVE STATUS\G
+"
+```
+
+确认：
+
+```text
+read_only = 0
+super_read_only = 0
+```
+
+## 8.4 检查只导结构表是否存在
+
+```bash
+mysql --defaults-extra-file=/root/.my_backup.cnf -e "
+SELECT table_schema, table_name, engine
+FROM information_schema.tables
+WHERE CONCAT(table_schema,'.',table_name) IN (
+'authx_log.tb_l_apply_call_log',
+'authx_log.tb_l_online_log',
+'authx_log.tb_l_authentication_log',
+'authx_log.tb_l_service_access_log',
+'authx_log.tb_l_pers_operate_log',
+'authx_log.tb_l_pers_operate_detail_log',
+'cas_server.tb_service_access_log',
+'cas_server.tb_authentication_log',
+'cas_server.tb_sso_log',
+'user.tb_b_sys_log',
+'qywx_sync.blade_log_usual',
+'qywx_sync.link_url_config',
+'portal_timesync.job_log_detail_xshd_cms',
+'portal_timesync.job_log_detail_xshd_rcn'
+)
+ORDER BY table_schema, table_name;
+"
+```
+
+------
+
+# 9. 手工测试
+
+## 9.1 手工跑每日分库备份
+
+```bash
+/usr/bin/bash /data/backup/mysql/scripts/mysql_daily_split_backup.sh
+echo $?
+```
+
+查看日志：
+
+```bash
+tail -n 100 /data/backup/mysql/logs/daily_backup_$(date +%F).log
+tail -n 100 /data/backup/mysql/logs/daily_backup_$(date +%F).err
+```
+
+查看本地文件：
+
+```bash
+find /data/backup/mysql/daily/$(date +%F) -type f -name '*.sql.gz' -lh
+```
+
+查看异地文件：
+
+```bash
+ssh backup@10.4.1.2 "find /home/backup/mysql/daily/$(date +%F) -type f -name '*.sql.gz' -ls"
+```
+
+## 9.2 验证日志表只有结构、没有数据
+
+以 `authx_log.tb_l_apply_call_log` 为例：
+
+```bash
+gunzip -c /data/backup/mysql/daily/$(date +%F)/authx_log-*.sql.gz | grep -E "CREATE TABLE \`tb_l_apply_call_log\`"
+```
+
+正常应该有输出。
+
+检查是否有数据：
+
+```bash
+gunzip -c /data/backup/mysql/daily/$(date +%F)/authx_log-*.sql.gz | grep -E "INSERT INTO \`tb_l_apply_call_log\`"
+```
+
+正常应该没有输出。
+
+## 9.3 手工跑每周全实例备份
+
+建议先在低峰期执行：
+
+```bash
+/usr/bin/bash /data/backup/mysql/scripts/mysql_weekly_full_consistent_backup.sh
+echo $?
+```
+
+查看日志：
+
+```bash
+tail -n 100 /data/backup/mysql/logs/weekly_full_backup_$(date +%F).log
+tail -n 100 /data/backup/mysql/logs/weekly_full_backup_$(date +%F).err
+```
+
+查看本地文件：
+
+```bash
+ls -lh /data/backup/mysql/weekly/$(date +%F)/
+```
+
+查看异地文件：
+
+```bash
+ssh backup@10.4.1.2 "ls -lh /home/backup/mysql/weekly/$(date +%F)/"
+```
+
+------
+
+# 10. 恢复方法
+
+## 10.1 每日分库备份恢复单库
+
+例如恢复 `cas_server`：
+
+```bash
+gunzip -c /data/backup/mysql/daily/2026-07-16/cas_server-*.sql.gz | mysql -uroot -p
+```
+
+## 10.2 每日分库备份恢复全部库
+
+```bash
+for f in /data/backup/mysql/daily/2026-07-16/*.sql.gz; do
+    echo "restore $f"
+    gunzip -c "$f" | mysql -uroot -p
+done
+```
+
+## 10.3 每周全实例一致性备份恢复
+
+```bash
+gunzip -c /data/backup/mysql/weekly/2026-07-19/mysql_full_2026-07-19.sql.gz | mysql -uroot -p
+```
+
+## 10.4 从异地恢复
+
+先拉回本地：
+
+```bash
+rsync -av backup@10.4.1.2:/home/backup/mysql/weekly/2026-07-19/ /data/restore/weekly_2026-07-19/
+```
+
+再恢复：
+
+```bash
+gunzip -c /data/restore/weekly_2026-07-19/mysql_full_2026-07-19.sql.gz | mysql -uroot -p
+```
+
+------
+
+# 11. 监控建议
+
+每天检查最近一次日志是否成功：
+
+```bash
+grep -E "finished|ERROR|failures=" /data/backup/mysql/logs/daily_backup_$(date +%F).log
+```
+
+周一检查周日全备：
+
+```bash
+ls -lh /data/backup/mysql/weekly/
+ssh backup@10.4.1.2 "ls -lh /home/backup/mysql/weekly/"
+```
+
+检查最近 7 天本地每日备份：
+
+```bash
+find /data/backup/mysql/daily -maxdepth 2 -type f -name '*.sql.gz' -mtime -7 -ls
+```
+
+检查最近 15 天异地每日备份：
+
+```bash
+ssh backup@10.4.1.2 "find /home/backup/mysql/daily -maxdepth 2 -type f -name '*.sql.gz' -mtime -15 -ls"
+```
+
+------
+
+# 12. 重要注意事项
+
+## 12.1 每日分库备份不是全局一致时间点
+
+每日分库备份是：
+
+```text
+库 A 一个快照
+库 B 一个快照
+库 C 一个快照
+```
+
+每个库内部一致，但多个库之间不是同一个时间点。
+
+所以它适合日常恢复，但不适合作为严格跨库一致恢复基线。
+
+## 12.2 周日全实例备份才是跨库一致基线
+
+周日脚本使用一个 `mysqldump --all-databases --single-transaction`，所有 InnoDB 表在同一个事务快照下导出。
+
+如果存在非 InnoDB 表，例如 MyISAM、MEMORY 等，`--single-transaction` 不能保证这些表的数据一致性。脚本会把非 InnoDB 表记录到日志中，建议后续重点检查。
+
+## 12.3 双主单写前提必须长期保持
+
+这个方案成立的前提是：
+
+```text
+业务只写 VIP 当前所在主机
+另一台主机不直接承接业务写入
+```
+
+如果后续变成双主双写，那么这个备份方案要调整：要么统一写入口，要么两台主机分别备份并处理复制一致性问题。
+
+------
+
+# 13. 最终建议
+
+正式上线采用以下 crontab：
+
+```cron
+30 1 * * 1-6 /usr/bin/bash /data/backup/mysql/scripts/mysql_daily_split_backup.sh >/dev/null 2>&1
+30 1 * * 0 /usr/bin/bash /data/backup/mysql/scripts/mysql_weekly_full_consistent_backup.sh >/dev/null 2>&1
+```
+
+上线后第一周建议每天检查：
+
+```bash
+tail -n 50 /data/backup/mysql/logs/daily_backup_$(date +%F).log
+ssh backup@10.4.1.2 "find /home/backup/mysql -type f -mtime -2 -ls"
+```
+
+并且至少做一次恢复演练。
+**没有恢复演练的备份，只能算文件归档，不能算真正可用的备份方案。**
 
