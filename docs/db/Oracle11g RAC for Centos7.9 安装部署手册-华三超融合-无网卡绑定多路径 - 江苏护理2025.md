@@ -939,7 +939,30 @@ KERNEL=="sdf", SUBSYSTEM=="block", PROGRAM=="/usr/lib/udev/scsi_id -g -u -d /dev
 KERNEL=="sdg", SUBSYSTEM=="block", PROGRAM=="/usr/lib/udev/scsi_id -g -u -d /dev/$name",RESULT=="3600e000000967ad9e777a56a4417a484", OWNER="grid",GROUP="asmadmin", MODE="0660"
 EOF
 ```
+
+
+#升级，不要具体盘符
+
+```bash
+# 两个节点都要做，先备份
+cp /etc/udev/rules.d/99-oracle-asmdevices.rules{,.bak_20260818}
+
+cat > /etc/udev/rules.d/99-oracle-asmdevices.rules <<'EOF'
+KERNEL=="sd*", SUBSYSTEM=="block", ENV{DEVTYPE}=="disk", PROGRAM=="/usr/lib/udev/scsi_id -g -u -d /dev/$name", RESULT=="36000c29cab9f05183d3af0fc44e8022f", OWNER="grid", GROUP="asmadmin", MODE="0660"
+KERNEL=="sd*", SUBSYSTEM=="block", ENV{DEVTYPE}=="disk", PROGRAM=="/usr/lib/udev/scsi_id -g -u -d /dev/$name", RESULT=="36000c29aa1f89b4a2054f787a381ec5f", OWNER="grid", GROUP="asmadmin", MODE="0660"
+KERNEL=="sd*", SUBSYSTEM=="block", ENV{DEVTYPE}=="disk", PROGRAM=="/usr/lib/udev/scsi_id -g -u -d /dev/$name", RESULT=="36000c293eb6bd488a57530ba68d59381", OWNER="grid", GROUP="asmadmin", MODE="0660"
+KERNEL=="sd*", SUBSYSTEM=="block", ENV{DEVTYPE}=="disk", PROGRAM=="/usr/lib/udev/scsi_id -g -u -d /dev/$name", RESULT=="36000c29e32ff47627698b21515cc5682", OWNER="grid", GROUP="asmadmin", MODE="0660"
+KERNEL=="sd*", SUBSYSTEM=="block", ENV{DEVTYPE}=="disk", PROGRAM=="/usr/lib/udev/scsi_id -g -u -d /dev/$name", RESULT=="36000c29b4a664efab3f02294bb39f75c", OWNER="grid", GROUP="asmadmin", MODE="0660"
+EOF
+
+udevadm control --reload-rules
+udevadm trigger --type=devices --action=change
+```
+
+
+
 #启动udev
+
 ```bash
 /usr/sbin/partprobe
 
