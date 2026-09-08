@@ -803,7 +803,7 @@ CREATE TABLESPACE idc_data_swopwork OWNER dataassets LOCATION '/data/tbs/dataass
 CREATE TABLESPACE idc_data_ods OWNER dataassets LOCATION '/data/tbs/dataassets_kingbase/idc_data_ods';
 CREATE TABLESPACE idc_data_job OWNER dataassets LOCATION '/data/tbs/dataassets_kingbase/idc_data_job';
 CREATE TABLESPACE idc_data_collect OWNER dataassets LOCATION '/data/tbs/dataassets_kingbase/idc_data_collect';
-
+CREATE TABLESPACE idc_data_collect OWNER dataassets LOCATION '/data/tbs/dataassets_kingbase/idc_data_collect';
 
 
 
