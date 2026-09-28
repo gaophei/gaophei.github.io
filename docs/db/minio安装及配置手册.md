@@ -35,17 +35,13 @@ minio集群服务器：KylinSec OS arm64位，cpu8 ，内存 16G，存储4TB
 ```shell
 # 创建minio使用目录
 # 存放minio可执行文件
-mkdir -p /opt/minio/bin
+mkdir -p /data/minio/bin
 # 存放minio日志文件夹
-mkdir -p /opt/minio/log
+mkdir -p /data/minio/log
 # 挂载盘路径
-mkdir -p /opt/minio/mnt
+mkdir -p /data/minio/mnt
 # 挂载盘数据存放路径
-mkdir -p /opt/minio/mnt/data1
-mkdir -p /opt/minio/mnt/data2
-mkdir -p /opt/minio/mnt/data3
-mkdir -p /opt/minio/mnt/data4
-
+mkdir -p /data/minio/mnt/data{1..4}
 ```
 
 ### 3.2、上传可执行文件
@@ -53,10 +49,11 @@ mkdir -p /opt/minio/mnt/data4
 #minio server可执行文件
 
 ```bash
-cd /opt/minio/bin/
-
-wget https://dl.min.io/server/minio/release/linux-arm64/archive/minio.RELEASE.2021-08-25T00-41-18Z
-mv minio.RELEASE.2021-08-25T00-41-18Z minio
+cd /data/minio/bin/
+#从公司钉钉下载
+#https://github.com/minio
+#wget https://dl.min.io/server/minio/release/linux-arm64/archive/minio.RELEASE.2021-08-25T00-41-18Z
+#mv minio.RELEASE.2021-08-25T00-41-18Z minio
 chmod a+x minio
 ```
 
@@ -81,27 +78,27 @@ mkfs.xfs /dev/sdd
 mkfs.xfs /dev/sde
 
 # 挂载
-mount /dev/sdb /opt/minio/mnt/data1
-mount /dev/sdc /opt/minio/mnt/data2
-mount /dev/sdd /opt/minio/mnt/data3
-mount /dev/sde /opt/minio/mnt/data4
+mount /dev/sdb /data/minio/mnt/data1
+mount /dev/sdc /data/minio/mnt/data2
+mount /dev/sdd /data/minio/mnt/data3
+mount /dev/sde /data/minio/mnt/data4
 
 #写入/etc/fstab
 cat >> /etc/fstab <<EOF
-/dev/sdb /opt/minio/mnt/data1 defaults 0 0
-/dev/sdc /opt/minio/mnt/data2 defaults 0 0
-/dev/sdd /opt/minio/mnt/data3 defaults 0 0
-/dev/sde /opt/minio/mnt/data4 defaults 0 0
+/dev/sdb /data/minio/mnt/data1 defaults 0 0
+/dev/sdc /data/minio/mnt/data2 defaults 0 0
+/dev/sdd /data/minio/mnt/data3 defaults 0 0
+/dev/sde /data/minio/mnt/data4 defaults 0 0
 EOF
 ```
 
 #最新版minio，非独占分区时的errer log
 
 ```log
-Unable to use the drive http://192.168.106.55:9000/opt/minio/mnt/data1: drive is part of root drive, will not be used
-Unable to use the drive http://192.168.106.55:9000/opt/minio/mnt/data2: drive is part of root drive, will not be used
-Unable to use the drive http://192.168.106.55:9000/opt/minio/mnt/data3: drive is part of root drive, will not be used
-Unable to use the drive http://192.168.106.55:9000/opt/minio/mnt/data4: drive is part of root drive, will not be used
+Unable to use the drive http://192.168.106.55:9000/data/minio/mnt/data1: drive is part of root drive, will not be used
+Unable to use the drive http://192.168.106.55:9000/data/minio/mnt/data2: drive is part of root drive, will not be used
+Unable to use the drive http://192.168.106.55:9000/data/minio/mnt/data3: drive is part of root drive, will not be used
+Unable to use the drive http://192.168.106.55:9000/data/minio/mnt/data4: drive is part of root drive, will not be used
 
 API: SYSTEM.internal
 Time: 02:45:40 UTC 05/20/2024
@@ -122,7 +119,7 @@ Waiting for a minimum of 8 drives to come online (elapsed 20s)
 
 API: SYSTEM.storage
 Time: 02:45:41 UTC 05/20/2024
-Error: Drive http://192.168.106.55:9000/opt/minio/mnt/data2 returned an unexpected error: m
+Error: Drive http://192.168.106.55:9000/data/minio/mnt/data2 returned an unexpected error: m
 ajor: 253: minor: 0: drive is part of root drive, will not be used, please investigate - dr
 ive will be offline (*fmt.wrapError)
        6: internal/logger/logonce.go:118:logger.(*logOnceType).logOnceIf()
@@ -156,7 +153,7 @@ mc alias set myminio/ http://MINIO-SERVER MYUSER MYPASSWORD
 ```bash
 #MINIO_ROOT_USER=admin MINIO_ROOT_PASSWORD=password ./minio server /mnt/data --console-address ":9001"
 
-nohup MINIO_ROOT_USER=minioadmin MINIO_ROOT_PASSWORD=Supwisdom@321 /opt/minio /bin/minio server   --console-address=":9001" http://192.168.106.{52...55}/opt/minio/mnt/data{1...4} > /opt/minio/log/minio.log 2>&1 &
+nohup MINIO_ROOT_USER=minioadmin MINIO_ROOT_PASSWORD=Supwisdom@321 /data/minio /bin/minio server   --console-address=":9001" http://192.168.106.{52...55}/data/minio/mnt/data{1...4} > /data/minio/log/minio.log 2>&1 &
 ```
 
 
@@ -164,19 +161,19 @@ nohup MINIO_ROOT_USER=minioadmin MINIO_ROOT_PASSWORD=Supwisdom@321 /opt/minio /b
 #启动脚本startup_minio_cluster.sh
 
 ```shell
-cat > /opt/minio/startup_minio_cluster.sh <<'EOF'
+cat > /data/minio/startup_minio_cluster.sh <<'EOF'
 #!/bin/bash
 export MINIO_ROOT_USER=minioadmin
 export MINIO_ROOT_PASSWORD=Supwisdom@321
-MINIO_HOME=/opt/minio
+MINIO_HOME=/data/minio
 
 ${MINIO_HOME}/bin/minio server   --console-address=":9001" \
-http://192.168.106.{52...55}/opt/minio/mnt/data{1...4} \
+http://192.168.106.{52...55}/data/minio/mnt/data{1...4} \
 >${MINIO_HOME}/log/minio.log
 
 EOF
 
-chmod a+x /opt/minio/startup_minio_cluster.sh
+chmod a+x /data/minio/startup_minio_cluster.sh
 ```
 
 **说明：**
@@ -187,12 +184,12 @@ chmod a+x /opt/minio/startup_minio_cluster.sh
 
 **3、脚本中的IP地址要换成 minio集群服务器的地址**
 
-修改后的启动脚本上传至服务器(所有集群服务器)目录/opt/minio
+修改后的启动脚本上传至服务器(所有集群服务器)目录/data/minio
 
-### 3.4、执行启动脚本
+### 3.4、执行启动脚本---4台虚拟机都执行
 
 ```shell
-cd /opt/minio
+cd /data/minio
 # 启动minio
 sh startup_minio_cluster.sh
 # 查看运行日志
@@ -209,8 +206,8 @@ Description=Minio service
 Documentation=https://docs.minio.io/
 
 [Service]
-WorkingDirectory=/opt/minio
-ExecStart=/opt/minio/startup_minio_cluster.sh
+WorkingDirectory=/data/minio
+ExecStart=/data/minio/startup_minio_cluster.sh
 
 Restart=on-failure
 RestartSec=5
@@ -419,9 +416,275 @@ nginx自启动可以参考连接：https://www.cnblogs.com/downey-blog/p/1047393
 
 
 
+## 5. 服务器IP地址不连续时，走hostname
+
+```bash
+#!/bin/bash
+
+export MINIO_ROOT_USER=minioadmin
+export MINIO_ROOT_PASSWORD='Supwisdom@321'
+
+MINIO_HOME=/data/minio
+
+nohup ${MINIO_HOME}/bin/minio server \
+  --console-address=":9001" \
+  http://192.168.99.54/data/minio/mnt/data{1...4} \
+  http://192.168.99.43/data/minio/mnt/data{1...4} \
+  http://192.168.99.41/data/minio/mnt/data{1...4} \
+  http://192.168.99.42/data/minio/mnt/data{1...4} \
+  >${MINIO_HOME}/log/minio.log 2>&1 &
+```
 
 
 
+
+
+这组主机名正好适合直接用 MinIO 的 `{1...4}` 展开语法，比直接写 4 个 IP 更方便。MinIO 官方文档也支持用连续 hostname 定义分布式集群，并要求每个节点使用**完全相同的 server 命令**。[MinIO AIStor Documentation](https://docs.min.io/aistor/reference/aistor-server/?utm_source=chatgpt.com)
+
+建议先在 **4 台机器的 `/etc/hosts` 都配置相同内容**：
+
+```
+192.168.99.54 ecs-minio-0001
+192.168.99.43 ecs-minio-0002
+192.168.99.41 ecs-minio-0003
+192.168.99.42 ecs-minio-0004
+```
+
+然后确认互相能解析：
+
+```
+ping -c 2 ecs-minio-0001
+ping -c 2 ecs-minio-0002
+ping -c 2 ecs-minio-0003
+ping -c 2 ecs-minio-0004
+```
+
+启动脚本就可以写成：
+
+```
+cat > /data/minio/startup_minio_cluster.sh <<'EOF'
+#!/bin/bash
+
+export MINIO_ROOT_USER=minioadmin
+export MINIO_ROOT_PASSWORD='tfb0LtEO8aD0cIqW'
+
+MINIO_HOME=/data/minio
+
+nohup ${MINIO_HOME}/bin/minio server \
+  --console-address=":9001" \
+  http://ecs-minio-000{1...4}/data/minio/mnt/data{1...4} \
+  >${MINIO_HOME}/log/minio.log 2>&1 &
+EOF
+
+chmod a+x /data/minio/startup_minio_cluster.sh
+```
+
+这个表达式会展开成：
+
+```
+ecs-minio-0001:
+  /data/minio/mnt/data1
+  /data/minio/mnt/data2
+  /data/minio/mnt/data3
+  /data/minio/mnt/data4
+
+ecs-minio-0002:
+  /data/minio/mnt/data1
+  /data/minio/mnt/data2
+  /data/minio/mnt/data3
+  /data/minio/mnt/data4
+
+ecs-minio-0003:
+  /data/minio/mnt/data1
+  /data/minio/mnt/data2
+  /data/minio/mnt/data3
+  /data/minio/mnt/data4
+
+ecs-minio-0004:
+  /data/minio/mnt/data1
+  /data/minio/mnt/data2
+  /data/minio/mnt/data3
+  /data/minio/mnt/data4
+```
+
+即 **4 个节点 × 每节点 4 个数据目录 = 16 个 endpoint**。MinIO 的 hostname 和目录都支持 `{x...y}` 展开。[MinIO AIStor Documentation](https://docs.min.io/aistor/reference/aistor-server/?utm_source=chatgpt.com)
+
+四台机器：
+
+```
+192.168.99.54 ecs-minio-0001
+192.168.99.43 ecs-minio-0002
+192.168.99.41 ecs-minio-0003
+192.168.99.42 ecs-minio-0004
+```
+
+**全部运行同一份脚本**，不要根据本机 hostname 修改 endpoint。
+
+启动之前，我建议每台执行：
+
+```
+mkdir -p /data/minio/log
+mkdir -p /data/minio/mnt/data{1..4}
+```
+
+注意这里有个容易混淆的地方：
+
+```
+# Bash 创建目录
+/data/minio/mnt/data{1..4}
+
+# MinIO endpoint 展开
+/data/minio/mnt/data{1...4}
+```
+
+另外检查 9000 端口互通，例如在任意节点：
+
+```
+for host in ecs-minio-000{1..4}; do
+    echo "===== $host ====="
+    ping -c 1 $host
+done
+```
+
+如果 MinIO 还没启动，`9000` 暂时当然不会通；启动后可以检查：
+
+```
+for host in ecs-minio-000{1..4}; do
+    nc -zv $host 9000
+done
+```
+
+然后查看本机日志：
+
+```
+tail -100f /data/minio/log/minio.log
+```
+
+最终你的部署关系就是：
+
+```
+                    MinIO Cluster
+                         │
+        ┌────────────────┼────────────────┐
+        │                │                │
+ecs-minio-0001    ecs-minio-0002   ecs-minio-0003   ecs-minio-0004
+192.168.99.54     192.168.99.43    192.168.99.41    192.168.99.42
+        │                │                │                │
+    data1~4          data1~4          data1~4          data1~4
+```
+
+所以，你目前这套环境，我建议最终直接使用这一条核心命令：
+
+```
+${MINIO_HOME}/bin/minio server \
+  --console-address=":9001" \
+  http://ecs-minio-000{1...4}/data/minio/mnt/data{1...4}
+```
+
+而不是继续使用 IP 地址。以后即使 IP 发生变化，只需要维护 DNS 或 `/etc/hosts`，MinIO 启动脚本无需修改。
+
+
+
+## 6.自动启动
+
+
+
+在 `ecs-minio-0004`：
+
+```
+systemctl stop minio
+
+rm -f /usr/lib/systemd/system/minio.service
+
+mkdir -p /etc/minio
+```
+
+创建环境变量：
+
+```
+cat > /etc/minio/minio.conf <<'EOF'
+MINIO_ROOT_USER=minioadmin
+MINIO_ROOT_PASSWORD=你的密码
+EOF
+
+chmod 600 /etc/minio/minio.conf
+```
+
+service：
+
+```
+cat > /etc/systemd/system/minio.service <<'EOF'
+[Unit]
+Description=MinIO Object Storage
+Documentation=https://min.io/docs/
+Wants=network-online.target
+After=network-online.target local-fs.target
+
+[Service]
+Type=simple
+EnvironmentFile=/etc/minio/minio.conf
+WorkingDirectory=/data/minio
+
+ExecStart=/data/minio/bin/minio server --console-address=:9001 http://ecs-minio-000{1...4}/data/minio/mnt/data{1...4}
+
+Restart=on-failure
+RestartSec=5
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target
+EOF
+```
+
+然后：
+
+```
+systemctl daemon-reload
+systemctl enable --now minio
+```
+
+检查：
+
+```
+systemctl status minio -l
+```
+
+然后：
+
+```
+journalctl -u minio -n 100 --no-pager
+```
+
+以及：
+
+```
+ps -ef | grep '[m]inio'
+```
+
+如果正常，你应该看到：
+
+```
+Active: active (running)
+```
+
+最后再从 Windows 确认：
+
+```
+mc.exe admin info minio
+```
+
+恢复：
+
+```
+ecs-minio-0001  Drives: 4/4 OK
+ecs-minio-0002  Drives: 4/4 OK
+ecs-minio-0003  Drives: 4/4 OK
+ecs-minio-0004  Drives: 4/4 OK
+
+16 drives online, 0 drives offline
+```
+
+之后把同样的 systemd 配置部署到其余三台即可。
 
 
 

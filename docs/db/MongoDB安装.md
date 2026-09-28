@@ -12,8 +12,11 @@
 # 直接下载安装包 官方下载地址：https://www.mongodb.com/download-center/community
 
 # linux 下载
-  #x86
+  #x86 rhel70
   #wget https://fastdl.mongodb.org/linux/mongodb-linux-x86_64-rhel70-4.4.1
+  
+  #x86 rhel80
+  #wget https://fastdl.mongodb.org/linux/mongodb-linux-x86_64-rhel80-4.4.30.tgz
   
   #arm64
   #wget https://fastdl.mongodb.org/linux/mongodb-linux-aarch64-rhel82-4.4.29.tgz
@@ -235,10 +238,17 @@ systemctl status mongodb.service
 #官网
 #https://www.mongodb.com/try/download/database-tools/releases/archive
 
-#查找rhel82-aarch64
+#注意不同的架构对应不同的文件
 
 ```bash
+#查找rhel82-aarch64
 wget https://fastdl.mongodb.org/tools/db/mongodb-database-tools-rhel82-aarch64-100.9.4.tgz
+
+#rhel88-x86_64
+#wget https://fastdl.mongodb.org/tools/db/mongodb-database-tools-rhel88-x86_64-100.19.0.tgz
+
+#rhel70-x86_64
+#wget https://fastdl.mongodb.org/tools/db/mongodb-database-tools-rhel70-x86_64-100.12.2.tgz
 ```
 
 #解压缩
